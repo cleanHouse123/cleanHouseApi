@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  dev-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./nest-cli.json:/app/nest-cli.json
+      # Убираем монтирование node_modules для решения проблемы с bcrypt
+      # - ./node_modules:/app/node_modules
+    depends_on:
+      - dev-db
+    networks:
+      - dev-app-network
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - ./.env.development
+    restart: unless-stopped
+  dev-db:
+    image: postgres
+    env_file:
+      - ./.env.development
+    ports:
+      - '5488:5432'
+    volumes:
+      - pg_dev_data:/var/lib/postgresql/data
+    networks:
+      - dev-app-network
+
+networks:
+  dev-app-network:
+    driver: bridge
+
+volumes:
+  pg_dev_data:
