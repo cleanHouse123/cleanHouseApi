@@ -10,8 +10,8 @@ COPY . .
 
 RUN yarn build
 
-ARG NODE_ENV=development
-COPY .env.$NODE_ENV .env
+ARG NODE_ENV=production
+# COPY .env.$NODE_ENV .env
 
 EXPOSE 3000
 
