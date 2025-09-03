@@ -12,6 +12,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "deploy:init": "./config/deploy/first-deploy.sh",
+    "deploy:app": "./config/deploy/redeploy.sh",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
     "docker:dev:down": "docker-compose -f docker-compose.dev.yml down",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
