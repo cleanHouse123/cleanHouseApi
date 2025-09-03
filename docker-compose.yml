@@ -2,6 +2,10 @@ version: '3.8'
 
 services:
   app:
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env.production
     build:
       context: .
       dockerfile: Dockerfile
@@ -14,7 +18,7 @@ services:
   db:
     image: postgres
     env_file:
-      - ./.env.development
+      - ./.env.production
     ports:
       - '5488:5432'
     volumes:
