@@ -10,10 +10,13 @@ import { User } from '../../user/entities/user.entity';
 import { UserRole } from '../../shared/types/user.role';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { SmsService } from './sms.service';
+import { TelegramGatewayService } from './telegram-gateway.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailRegisterDto } from '../dto/email-register.dto';
 import { EmailLoginDto } from '../dto/email-login.dto';
 import { CreateUserDto } from '../../user/dto/create-user.dto';
+import { TelegramSendCodeDto } from '../dto/telegram-send-code.dto';
+import { TelegramVerifyCodeDto } from '../dto/telegram-verify-code.dto';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +24,7 @@ export class AuthService {
     private tokenService: TokenService,
     private userService: UserService,
     private smsService: SmsService,
+    private telegramGatewayService: TelegramGatewayService,
     private configService: ConfigService,
   ) {}
 
@@ -186,7 +190,7 @@ export class AuthService {
       hash_password: hashedPassword,
       phone: `email_${email}`,
       isEmailVerified: false,
-      role: UserRole.ADMIN
+      role: UserRole.ADMIN,
     };
 
     const user = await this.userService.create(createUserData);
@@ -208,7 +212,6 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Неверные учетные данные');
     }
-
 
     if (!user.hash_password) {
       throw new UnauthorizedException(
@@ -244,5 +247,161 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  // Telegram Gateway авторизация
+  async sendTelegramCode(sendCodeDto: TelegramSendCodeDto): Promise<{
+    success: boolean;
+    message: string;
+    requestId?: string;
+    cost?: number;
+  }> {
+    try {
+      // Форматируем номер телефона
+      const formattedPhone = this.telegramGatewayService.formatPhoneNumber(
+        sendCodeDto.phoneNumber,
+      );
+
+      // Проверяем валидность номера
+      if (!this.telegramGatewayService.validatePhoneNumber(formattedPhone)) {
+        return {
+          success: false,
+          message: 'Неверный формат номера телефона',
+        };
+      }
+
+      // Проверяем возможность отправки (опционально)
+      let requestId: string | undefined;
+      try {
+        const checkResult =
+          await this.telegramGatewayService.checkSendAbility(formattedPhone);
+        requestId = checkResult.request_id;
+      } catch (error) {
+        // Если проверка не удалась, продолжаем без requestId
+        console.warn('Не удалось проверить возможность отправки:', error);
+      }
+
+      // Отправляем код верификации
+      const result = await this.telegramGatewayService.sendVerificationMessage(
+        formattedPhone,
+        {
+          requestId,
+          code: sendCodeDto.code,
+          codeLength: sendCodeDto.codeLength || 6,
+          callbackUrl: sendCodeDto.callbackUrl,
+          ttl: sendCodeDto.ttl || 300, // 5 минут по умолчанию
+        },
+      );
+
+      return {
+        success: true,
+        message: 'Код отправлен через Telegram',
+        requestId: result.request_id,
+        cost: result.request_cost,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : 'Ошибка отправки кода',
+      };
+    }
+  }
+
+  async authenticateWithTelegram(
+    verifyCodeDto: TelegramVerifyCodeDto,
+    ipAddress?: string,
+  ): Promise<AuthResponseDto> {
+    try {
+      // Форматируем номер телефона
+      const formattedPhone = this.telegramGatewayService.formatPhoneNumber(
+        verifyCodeDto.phoneNumber,
+      );
+
+      // Проверяем код через Telegram Gateway API
+      if (verifyCodeDto.requestId) {
+        const verificationResult =
+          await this.telegramGatewayService.checkVerificationStatus(
+            verifyCodeDto.requestId,
+            verifyCodeDto.code,
+          );
+
+        if (verificationResult.verification_status?.status !== 'code_valid') {
+          throw new UnauthorizedException('Неверный код верификации');
+        }
+      } else {
+        // Если нет requestId, проверяем через локальную базу данных
+        const verificationResult = await this.smsService.verifyCode(
+          formattedPhone,
+          verifyCodeDto.code,
+        );
+        if (!verificationResult.success) {
+          throw new UnauthorizedException(verificationResult.message);
+        }
+      }
+
+      // Ищем или создаем пользователя
+      let user = await this.userService.findByPhone(formattedPhone);
+
+      if (!user) {
+        user = await this.userService.create({
+          phone: formattedPhone,
+          name: `User_${formattedPhone.slice(-4)}`,
+          isPhoneVerified: true,
+          role: UserRole.CUSTOMER,
+        });
+      } else {
+        // Обновляем статус верификации
+        await this.userService.updatePhoneVerification(user.id, true);
+      }
+
+      // Обновляем информацию о входе
+      if (ipAddress) {
+        await this.userService.updateLastLogin(user.id);
+      }
+
+      return this.generateAuthTokens(user);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException(
+        error instanceof Error ? error.message : 'Ошибка авторизации',
+      );
+    }
+  }
+
+  async checkTelegramSendAbility(phoneNumber: string): Promise<{
+    success: boolean;
+    message: string;
+    requestId?: string;
+    cost?: number;
+  }> {
+    try {
+      const formattedPhone =
+        this.telegramGatewayService.formatPhoneNumber(phoneNumber);
+
+      if (!this.telegramGatewayService.validatePhoneNumber(formattedPhone)) {
+        return {
+          success: false,
+          message: 'Неверный формат номера телефона',
+        };
+      }
+
+      const result =
+        await this.telegramGatewayService.checkSendAbility(formattedPhone);
+
+      return {
+        success: true,
+        message: 'Проверка возможности отправки выполнена',
+        requestId: result.request_id,
+        cost: result.request_cost,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Ошибка проверки',
+      };
+    }
   }
 }

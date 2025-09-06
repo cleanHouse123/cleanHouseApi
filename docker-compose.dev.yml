@@ -27,8 +27,11 @@ services:
     image: postgres
     env_file:
       - ./.env.development
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=cleanhouse_dev
     ports:
-      - '5488:5432'
+      - '5489:5432'
     volumes:
       - pg_dev_data:/var/lib/postgresql/data
     networks:

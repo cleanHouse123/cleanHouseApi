@@ -8,7 +8,7 @@ import {
   Post,
   Req,
   UnauthorizedException,
-  UseGuards
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -23,6 +23,8 @@ import { EmailRegisterDto } from './dto/email-register.dto';
 import { RefreshTokensDto } from './dto/refresh-tokens.dto';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { VerifySmsDto } from './dto/verify-sms.dto';
+import { TelegramSendCodeDto } from './dto/telegram-send-code.dto';
+import { TelegramVerifyCodeDto } from './dto/telegram-verify-code.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './services/auth.service';
 // import { SmsService } from './services/sms.service';
@@ -172,6 +174,54 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token недействителен');
     }
     return { valid: true };
+  }
+
+  @ApiTags('Telegram Authentication')
+  @Post('telegram/send')
+  @ApiOperation({
+    summary: 'Отправить код верификации через Telegram Gateway',
+    description:
+      'Отправляет код верификации через Telegram Gateway API. Стоимость: $0.01 за доставленный код.',
+  })
+  @ApiResponse({ status: 200, description: 'Код отправлен через Telegram' })
+  async sendTelegramCode(@Body() sendCodeDto: TelegramSendCodeDto) {
+    return this.authService.sendTelegramCode(sendCodeDto);
+  }
+
+  @ApiTags('Telegram Authentication')
+  @Post('telegram/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Проверить код верификации Telegram и авторизоваться',
+    description:
+      'Проверяет код верификации через Telegram Gateway API и выполняет авторизацию пользователя.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Успешная авторизация через Telegram',
+  })
+  async verifyTelegramCode(
+    @Body() verifyCodeDto: TelegramVerifyCodeDto,
+    @Req() req: Request,
+  ) {
+    const ipAddress =
+      req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    return this.authService.authenticateWithTelegram(verifyCodeDto, ipAddress);
+  }
+
+  @ApiTags('Telegram Authentication')
+  @Post('telegram/check-ability')
+  @ApiOperation({
+    summary: 'Проверить возможность отправки кода через Telegram',
+    description:
+      'Проверяет возможность отправки кода верификации на указанный номер через Telegram Gateway.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Проверка возможности отправки выполнена',
+  })
+  async checkTelegramSendAbility(@Body() body: { phoneNumber: string }) {
+    return this.authService.checkTelegramSendAbility(body.phoneNumber);
   }
 
   @ApiTags('User Profile')
