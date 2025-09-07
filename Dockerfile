@@ -1,19 +1,23 @@
-FROM node:22-alpine
+FROM node:22-slim
 
 WORKDIR /app
 
-COPY *.json ./
+# Копируем package.json и yarn.lock
+COPY package.json yarn.lock ./
 
-RUN yarn
+# Устанавливаем зависимости
+RUN yarn install --frozen-lockfile
 
+# Копируем исходный код
 COPY . .
 
+# Собираем приложение
 RUN yarn build
 
-ARG NODE_ENV=development
-# COPY .env.$NODE_ENV .env
+# Устанавливаем переменные окружения
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
-# CMD ["sh", "-c", "yarn migration:run && yarn start:prod"]   это уже на прод будет 
-CMD ["sh", "-c", "yarn start:prod"] 
+# Запускаем приложение
+CMD ["yarn", "start:prod"] 
