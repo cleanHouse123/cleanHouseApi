@@ -244,24 +244,33 @@ export class SubscriptionController {
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
   async simulatePayment(@Param('paymentId') paymentId: string) {
-    const payment = this.paymentService.simulateSuccessfulPayment(paymentId);
+    try {
+      const payment = this.paymentService.simulateSuccessfulPayment(paymentId);
 
-    if (!payment) {
-      throw new Error('Платеж не найден или уже обработан');
+      if (!payment) {
+        throw new Error('Платеж не найден или уже обработан');
+      }
+
+      // Активируем подписку (если она существует)
+      try {
+        await this.subscriptionService.updateStatus(payment.subscriptionId, {
+          status: SubscriptionStatus.ACTIVE,
+        });
+      } catch (error) {
+        console.log('Подписка не найдена, но платеж обработан:', error.message);
+      }
+
+      // Отправляем уведомление через WebSocket
+      this.paymentGateway.notifyPaymentSuccess(
+        payment.subscriptionId,
+        payment.subscriptionId,
+      );
+
+      return { message: 'Оплата симулирована успешно', payment };
+    } catch (error) {
+      console.error('Ошибка при симуляции платежа:', error);
+      throw error;
     }
-
-    // Активируем подписку
-    await this.subscriptionService.updateStatus(payment.subscriptionId, {
-      status: SubscriptionStatus.ACTIVE,
-    });
-
-    // Отправляем уведомление через WebSocket
-    this.paymentGateway.notifyPaymentSuccess(
-      payment.subscriptionId,
-      payment.subscriptionId,
-    );
-
-    return { message: 'Оплата симулирована успешно', payment };
   }
 
   @Get('payment/:paymentId')

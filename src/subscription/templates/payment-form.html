@@ -190,6 +190,7 @@
             display: none;
         }
     </style>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
     <div class="payment-container">
@@ -294,6 +295,25 @@
             type === 'monthly' ? 'Месячная' : 
             type === 'yearly' ? 'Годовая' : 'Разовая';
         document.getElementById('payment-amount').textContent = amount + ' ₽';
+
+        // Подключение к WebSocket
+        const socket = io('http://localhost:3000');
+        
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket server');
+            socket.emit('join_payment_room', { userId: 'test-user' });
+        });
+
+        socket.on('payment_success', (data) => {
+            console.log('Payment successful via WebSocket:', data);
+            alert('Оплата прошла успешно! Подписка активирована.');
+            window.close();
+        });
+
+        socket.on('payment_error', (data) => {
+            console.log('Payment error via WebSocket:', data);
+            alert('Ошибка оплаты: ' + data.error);
+        });
 
         // Форматирование номера карты
         document.getElementById('card-number').addEventListener('input', function(e) {
@@ -517,7 +537,7 @@
                 await new Promise(resolve => setTimeout(resolve, 2000));
 
                 // Отправляем запрос на симуляцию оплаты
-                const response = await fetch(`/api/subscriptions/payment/simulate/${paymentId}`, {
+                const response = await fetch(`/subscriptions/payment/simulate/${paymentId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
