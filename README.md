@@ -414,12 +414,13 @@ yarn docker:prod
 ### Типы подписок
 
 - **monthly** - месячная подписка
-- **yearly** - годовая подписка  
+- **yearly** - годовая подписка
 - **one_time** - разовая оплата
 
 ### API эндпоинты
 
 #### Создание подписки
+
 ```http
 POST /subscriptions
 Authorization: Bearer <jwt-token>
@@ -433,6 +434,7 @@ Content-Type: application/json
 ```
 
 #### Создание ссылки на оплату
+
 ```http
 POST /subscriptions/payment/create
 Authorization: Bearer <jwt-token>
@@ -446,6 +448,7 @@ Content-Type: application/json
 ```
 
 **Ответ:**
+
 ```json
 {
   "paymentUrl": "https://mock-payment.example.com/pay/123e4567-e89b-12d3-a456-426614174000",
@@ -455,12 +458,14 @@ Content-Type: application/json
 ```
 
 #### Симуляция успешной оплаты (для тестирования)
+
 ```http
 POST /subscriptions/payment/simulate/{paymentId}
 Authorization: Bearer <jwt-token>
 ```
 
 #### Получение информации о платеже
+
 ```http
 GET /subscriptions/payment/{paymentId}
 Authorization: Bearer <jwt-token>
@@ -483,12 +488,12 @@ import { io } from 'socket.io-client';
 
 // Подключение к WebSocket серверу
 const socket = io('ws://localhost:3000', {
-  transports: ['websocket']
+  transports: ['websocket'],
 });
 
 // Подключение к комнате оплаты пользователя
-socket.emit('join_payment_room', { 
-  userId: 'user-id-here' 
+socket.emit('join_payment_room', {
+  userId: 'user-id-here',
 });
 
 // Слушаем уведомления об успешной оплате
@@ -520,8 +525,8 @@ socket.on('payment_error', (data) => {
 });
 
 // Отключение от комнаты при выходе
-socket.emit('leave_payment_room', { 
-  userId: 'user-id-here' 
+socket.emit('leave_payment_room', {
+  userId: 'user-id-here',
 });
 ```
 
@@ -550,10 +555,10 @@ class SubscriptionService {
       const subscription = await fetch('/api/subscriptions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(subscriptionData)
+        body: JSON.stringify(subscriptionData),
       });
 
       const subscriptionResult = await subscription.json();
@@ -562,21 +567,21 @@ class SubscriptionService {
       const payment = await fetch('/api/subscriptions/payment/create', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           subscriptionId: subscriptionResult.id,
           subscriptionType: subscriptionData.type,
-          amount: subscriptionData.price
-        })
+          amount: subscriptionData.price,
+        }),
       });
 
       const paymentResult = await payment.json();
 
       // 3. Подключаемся к WebSocket комнате
-      this.socket.emit('join_payment_room', { 
-        userId: subscriptionData.userId 
+      this.socket.emit('join_payment_room', {
+        userId: subscriptionData.userId,
       });
 
       // 4. Переходим на страницу оплаты
@@ -592,10 +597,10 @@ class SubscriptionService {
   handlePaymentSuccess(data) {
     // Обновляем UI - показываем успешное сообщение
     this.showSuccessMessage('Подписка успешно оформлена!');
-    
+
     // Обновляем статус подписки в приложении
     this.updateSubscriptionStatus(data.subscriptionId, 'active');
-    
+
     // Перенаправляем на страницу успеха
     this.redirectToSuccessPage(data.subscriptionId);
   }
@@ -603,7 +608,7 @@ class SubscriptionService {
   handlePaymentError(data) {
     // Показываем ошибку пользователю
     this.showErrorMessage('Ошибка оплаты. Попробуйте еще раз.');
-    
+
     // Обновляем статус подписки
     this.updateSubscriptionStatus(data.subscriptionId, 'failed');
   }
@@ -611,12 +616,15 @@ class SubscriptionService {
   // Для тестирования - симуляция оплаты
   async simulatePayment(paymentId) {
     try {
-      const response = await fetch(`/api/subscriptions/payment/simulate/${paymentId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.token}`
-        }
-      });
+      const response = await fetch(
+        `/api/subscriptions/payment/simulate/${paymentId}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+          },
+        },
+      );
 
       const result = await response.json();
       console.log('Оплата симулирована:', result);
@@ -635,7 +643,7 @@ const subscriptionService = new SubscriptionService();
 subscriptionService.createSubscription({
   userId: 'user-id',
   type: 'monthly',
-  price: 1000
+  price: 1000,
 });
 ```
 

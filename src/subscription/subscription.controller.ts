@@ -25,7 +25,7 @@ import {
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import {
   CreatePaymentDto,
-  PaymentResponseDto,
+  SubscriptionPaymentResponseDto,
   PaymentCallbackDto,
 } from './dto/create-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -169,13 +169,13 @@ export class SubscriptionController {
   @ApiResponse({
     status: 201,
     description: 'Ссылка на оплату создана',
-    type: PaymentResponseDto,
+    type: SubscriptionPaymentResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Неверные данные' })
   @ApiResponse({ status: 404, description: 'Подписка не найдена' })
   async createPaymentLink(
     @Body() createPaymentDto: CreatePaymentDto,
-  ): Promise<PaymentResponseDto> {
+  ): Promise<SubscriptionPaymentResponseDto> {
     const subscription = await this.subscriptionService.findOne(
       createPaymentDto.subscriptionId,
     );
@@ -197,9 +197,7 @@ export class SubscriptionController {
     description: 'Callback обработан успешно',
   })
   @ApiResponse({ status: 400, description: 'Неверные данные' })
-  async handlePaymentCallback(
-    @Body() paymentCallbackDto: PaymentCallbackDto,
-  ) {
+  async handlePaymentCallback(@Body() paymentCallbackDto: PaymentCallbackDto) {
     const payment = this.paymentService.getPayment(
       paymentCallbackDto.paymentId,
     );

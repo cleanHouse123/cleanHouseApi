@@ -23,7 +23,7 @@ export class CreatePaymentDto {
   amount: number;
 }
 
-export class PaymentResponseDto {
+export class SubscriptionPaymentResponseDto {
   @ApiProperty({
     example: 'https://mock-payment.example.com/pay/123e4567-e89b-12d3-a456-426614174000',
     description: 'Ссылка на страницу оплаты',

@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { PaymentResponseDto } from '../dto/create-payment.dto';
+import { SubscriptionPaymentResponseDto } from '../dto/create-payment.dto';
 
 @Injectable()
 export class PaymentService {
   private payments = new Map<string, any>();
 
   // Создание ссылки на оплату
-  createPaymentLink(subscriptionId: string, amount: number): PaymentResponseDto {
+  createPaymentLink(subscriptionId: string, amount: number): SubscriptionPaymentResponseDto {
     const paymentId = uuidv4();
     const paymentUrl = `https://mock-payment.example.com/pay/${paymentId}`;
 
