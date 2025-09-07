@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оплата заказа - Clean House</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .payment-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .payment-info {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .payment-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .payment-amount {
+            font-size: 24px;
+            font-weight: bold;
+            color: #28a745;
+            margin-bottom: 5px;
+        }
+
+        .payment-type {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .card-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        .card-row .form-group {
+            flex: 1;
+        }
+
+        .pay-button {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .pay-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .pay-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .payment-status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+
+        .payment-status.success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .payment-status.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .spinner-small {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .security-note {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+
+        .security-icon {
+            margin-right: 5px;
+        }
+    </style>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="payment-container">
+        <div class="header">
+            <div class="logo">🏠 Clean House</div>
+            <div class="subtitle">Оплата заказа</div>
+        </div>
+
+        <div class="payment-info">
+            <h3>Детали платежа</h3>
+            <div class="payment-amount" id="payment-amount">500 ₽</div>
+            <div class="payment-type">Оплата заказа на вынос мусора</div>
+        </div>
+
+        <form id="payment-form">
+            <div class="form-group">
+                <label for="card-number">Номер карты</label>
+                <input type="text" id="card-number" placeholder="1234 5678 9012 3456" maxlength="19" required>
+            </div>
+
+            <div class="card-row">
+                <div class="form-group">
+                    <label for="expiry">Срок действия</label>
+                    <input type="text" id="expiry" placeholder="MM/YY" maxlength="5" required>
+                </div>
+                <div class="form-group">
+                    <label for="cvv">CVV</label>
+                    <input type="text" id="cvv" placeholder="123" maxlength="4" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cardholder">Имя держателя карты</label>
+                <input type="text" id="cardholder" placeholder="IVAN IVANOV" required>
+            </div>
+
+            <button type="submit" class="pay-button" id="pay-button">
+                Подтвердить данные карты
+            </button>
+
+            <div class="error-message" id="error-message"></div>
+            <div class="success-message" id="success-message"></div>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Обработка платежа...</p>
+        </div>
+
+        <div class="security-note">
+            <span class="security-icon">🔒</span>
+            Ваши данные защищены SSL-шифрованием
+        </div>
+    </div>
+
+    <script>
+        // Получаем параметры из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentId = urlParams.get('paymentId') || 'test-payment-id';
+        const amount = urlParams.get('amount') || '500';
+
+        // Обновляем информацию о платеже
+        document.getElementById('payment-amount').textContent = amount + ' ₽';
+
+        // Подключение к WebSocket
+        const socket = io('http://localhost:3000');
+        
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket server');
+            socket.emit('join_order_payment_room', { 
+                userId: 'test-user', 
+                paymentId: paymentId 
+            });
+        });
+
+        // Обработка обновлений статуса платежа
+        socket.on('order_payment_status_update', (data) => {
+            console.log('Order payment status update:', data);
+            updatePaymentStatus(data.status);
+        });
+
+        socket.on('order_payment_success', (data) => {
+            console.log('Order payment successful via WebSocket:', data);
+            showSuccessMessage('🎉 Заказ успешно оплачен!');
+            setTimeout(() => {
+                window.close();
+            }, 3000);
+        });
+
+        socket.on('order_payment_error', (data) => {
+            console.log('Order payment error via WebSocket:', data);
+            showErrorMessage('❌ Ошибка оплаты: ' + data.error);
+        });
+
+        // Функции для обновления UI
+        function updatePaymentStatus(status) {
+            let statusElement = document.getElementById('payment-status');
+            if (!statusElement) {
+                // Создаем элемент статуса, если его нет
+                const statusDiv = document.createElement('div');
+                statusDiv.id = 'payment-status';
+                statusDiv.className = 'payment-status';
+                statusDiv.innerHTML = `
+                    <div class="status-indicator">
+                        <div class="spinner-small"></div>
+                        <span>Проверка статуса платежа...</span>
+                    </div>
+                `;
+                document.querySelector('.payment-container').appendChild(statusDiv);
+                statusElement = statusDiv;
+            }
+
+            const statusText = statusElement.querySelector('span');
+            
+            switch(status) {
+                case 'pending':
+                    statusText.textContent = '⏳ Ожидание обработки платежа...';
+                    break;
+                case 'processing':
+                    statusText.textContent = '🔄 Обработка платежа...';
+                    break;
+                case 'success':
+                    statusText.textContent = '✅ Платеж успешно обработан!';
+                    statusElement.className = 'payment-status success';
+                    break;
+                case 'failed':
+                    statusText.textContent = '❌ Платеж не прошел';
+                    statusElement.className = 'payment-status error';
+                    break;
+                default:
+                    statusText.textContent = '🔍 Проверка статуса...';
+            }
+        }
+
+        function showSuccessMessage(message) {
+            const successElement = document.getElementById('success-message');
+            successElement.textContent = message;
+            successElement.style.display = 'block';
+            
+            // Скрываем форму
+            document.getElementById('payment-form').style.display = 'none';
+        }
+
+        function showErrorMessage(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+
+        // Форматирование номера карты
+        document.getElementById('card-number').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\s/g, '').replace(/[^0-9]/gi, '');
+            let formattedValue = value.match(/.{1,4}/g)?.join(' ') || value;
+            e.target.value = formattedValue;
+        });
+
+        // Форматирование срока действия
+        document.getElementById('expiry').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length >= 2) {
+                value = value.substring(0, 2) + '/' + value.substring(2, 4);
+            }
+            e.target.value = value;
+        });
+
+        // CVV только цифры
+        document.getElementById('cvv').addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+        });
+
+        // Заглавные буквы для имени держателя
+        document.getElementById('cardholder').addEventListener('input', function(e) {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Обработка формы
+        document.getElementById('payment-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const payButton = document.getElementById('pay-button');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+
+            // Скрываем предыдущие сообщения
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+
+            // Проверяем заполненность полей
+            const cardNumber = document.getElementById('card-number').value;
+            const expiry = document.getElementById('expiry').value;
+            const cvv = document.getElementById('cvv').value;
+            const cardholder = document.getElementById('cardholder').value;
+
+            if (!cardNumber || !expiry || !cvv || !cardholder) {
+                errorMessage.textContent = 'Пожалуйста, заполните все поля';
+                errorMessage.style.display = 'block';
+                return;
+            }
+
+            // Показываем экран подтверждения оплаты
+            showPaymentConfirmation();
+        });
+
+        function showPaymentConfirmation() {
+            // Скрываем форму
+            document.getElementById('payment-form').style.display = 'none';
+            
+            // Создаем экран подтверждения
+            const confirmationHTML = `
+                <div class="payment-confirmation">
+                    <div class="confirmation-header">
+                        <div class="logo">🏠 Clean House</div>
+                        <div class="subtitle">Подтверждение оплаты</div>
+                    </div>
+                    
+                    <div class="confirmation-content">
+                        <div class="payment-summary">
+                            <h3>Детали платежа</h3>
+                            <div class="summary-row">
+                                <span>Тип:</span>
+                                <span>Оплата заказа</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Сумма:</span>
+                                <span id="conf-payment-amount">${amount} ₽</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Карта:</span>
+                                <span id="conf-card-number">**** **** **** 3456</span>
+                            </div>
+                        </div>
+                        
+                        <div class="confirmation-actions">
+                            <button class="confirm-button" id="confirm-payment">
+                                ✅ Подтвердить оплату
+                            </button>
+                            <button class="cancel-button" id="cancel-payment">
+                                ❌ Отменить
+                            </button>
+                        </div>
+                        
+                        <div class="security-note">
+                            🔒 Ваши данные защищены SSL-шифрованием
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Добавляем стили для экрана подтверждения
+            const confirmationStyles = `
+                <style>
+                    .payment-confirmation {
+                        text-align: center;
+                    }
+                    
+                    .confirmation-header {
+                        margin-bottom: 30px;
+                    }
+                    
+                    .confirmation-content {
+                        background: #f8f9fa;
+                        border-radius: 12px;
+                        padding: 30px;
+                    }
+                    
+                    .payment-summary {
+                        background: white;
+                        border-radius: 8px;
+                        padding: 20px;
+                        margin-bottom: 30px;
+                        text-align: left;
+                    }
+                    
+                    .payment-summary h3 {
+                        margin-bottom: 15px;
+                        color: #333;
+                    }
+                    
+                    .summary-row {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 10px;
+                        padding: 8px 0;
+                        border-bottom: 1px solid #eee;
+                    }
+                    
+                    .summary-row:last-child {
+                        border-bottom: none;
+                        font-weight: bold;
+                    }
+                    
+                    .confirmation-actions {
+                        display: flex;
+                        gap: 15px;
+                        justify-content: center;
+                        margin-bottom: 20px;
+                    }
+                    
+                    .confirm-button {
+                        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                        color: white;
+                        border: none;
+                        padding: 15px 30px;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: transform 0.2s ease;
+                    }
+                    
+                    .confirm-button:hover {
+                        transform: translateY(-2px);
+                    }
+                    
+                    .cancel-button {
+                        background: #6c757d;
+                        color: white;
+                        border: none;
+                        padding: 15px 30px;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: transform 0.2s ease;
+                    }
+                    
+                    .cancel-button:hover {
+                        transform: translateY(-2px);
+                    }
+                </style>
+            `;
+            
+            // Вставляем HTML и стили
+            document.head.insertAdjacentHTML('beforeend', confirmationStyles);
+            document.querySelector('.payment-container').insertAdjacentHTML('beforeend', confirmationHTML);
+            
+            // Обновляем данные в экране подтверждения
+            document.getElementById('conf-card-number').textContent = 
+                '**** **** **** ' + document.getElementById('card-number').value.slice(-4);
+            
+            // Обработчики кнопок
+            document.getElementById('confirm-payment').addEventListener('click', processPayment);
+            document.getElementById('cancel-payment').addEventListener('click', cancelPayment);
+        }
+
+        async function processPayment() {
+            const confirmButton = document.getElementById('confirm-payment');
+            const cancelButton = document.getElementById('cancel-payment');
+            const loading = document.getElementById('loading');
+
+            // Показываем загрузку
+            confirmButton.disabled = true;
+            cancelButton.disabled = true;
+            loading.style.display = 'block';
+
+            try {
+                // Симулируем обработку платежа
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Отправляем запрос на симуляцию оплаты
+                const response = await fetch(`/orders/payment/simulate/${paymentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    // Скрываем экран подтверждения
+                    document.querySelector('.payment-confirmation').style.display = 'none';
+                    
+                    // Показываем форму снова для отображения статуса
+                    document.getElementById('payment-form').style.display = 'block';
+                    
+                    // WebSocket будет автоматически уведомлять о статусе платежа
+                    console.log('Order payment simulation request sent, waiting for WebSocket updates...');
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Ошибка обработки платежа');
+                }
+            } catch (error) {
+                showErrorMessage('Произошла ошибка при обработке платежа: ' + error.message);
+                
+                // Возвращаемся к форме
+                document.querySelector('.payment-confirmation').style.display = 'none';
+                document.getElementById('payment-form').style.display = 'block';
+            } finally {
+                confirmButton.disabled = false;
+                cancelButton.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+
+        function cancelPayment() {
+            // Возвращаемся к форме
+            document.querySelector('.payment-confirmation').style.display = 'none';
+            document.getElementById('payment-form').style.display = 'block';
+        }
+
+        // Автозаполнение для демонстрации
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                document.getElementById('card-number').value = '1234 5678 9012 3456';
+                document.getElementById('expiry').value = '12/25';
+                document.getElementById('cvv').value = '123';
+                document.getElementById('cardholder').value = 'TEST USER';
+            }
+        });
+    </script>
+</body>
+</html>
