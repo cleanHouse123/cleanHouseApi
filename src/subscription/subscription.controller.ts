@@ -10,6 +10,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Public } from '../shared/decorators/public.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -237,6 +238,7 @@ export class SubscriptionController {
   }
 
   @Post('payment/simulate/:paymentId')
+  @Public()
   @ApiOperation({ summary: 'Симуляция успешной оплаты (для тестирования)' })
   @ApiResponse({
     status: 200,
