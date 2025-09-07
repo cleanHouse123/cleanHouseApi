@@ -3,7 +3,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Копируем package.json и yarn.lock
-COPY package*.json yarn.lock ./
+COPY package.json yarn.lock ./
 
 # Устанавливаем зависимости
 RUN yarn install --frozen-lockfile
