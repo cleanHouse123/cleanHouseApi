@@ -231,4 +231,127 @@ export class OrderService {
       updatedAt: order.updatedAt,
     };
   }
+
+  // ==================== COURIER METHODS ====================
+
+  async takeOrder(
+    orderId: string,
+    courierId: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+      relations: ['customer', 'currier'],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.status !== OrderStatus.NEW) {
+      throw new BadRequestException('Заказ уже взят или недоступен');
+    }
+
+    // Проверяем, что курьер существует и имеет правильную роль
+    const courier = await this.userRepository.findOne({
+      where: { id: courierId },
+    });
+
+    if (!courier) {
+      throw new NotFoundException('Курьер не найден');
+    }
+
+    if (courier.role !== UserRole.CURRIER) {
+      throw new BadRequestException('Пользователь не является курьером');
+    }
+
+    // Назначаем курьера и меняем статус
+    order.currierId = courierId;
+    order.status = OrderStatus.ASSIGNED;
+
+    await this.orderRepository.save(order);
+
+    return this.findOne(orderId);
+  }
+
+  async startOrder(
+    orderId: string,
+    courierId: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+      relations: ['customer', 'currier'],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.currierId !== courierId) {
+      throw new BadRequestException('Заказ назначен другому курьеру');
+    }
+
+    if (order.status !== OrderStatus.ASSIGNED) {
+      throw new BadRequestException('Заказ не может быть начат');
+    }
+
+    order.status = OrderStatus.IN_PROGRESS;
+    await this.orderRepository.save(order);
+
+    return this.findOne(orderId);
+  }
+
+  async completeOrder(
+    orderId: string,
+    courierId: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+      relations: ['customer', 'currier'],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.currierId !== courierId) {
+      throw new BadRequestException('Заказ назначен другому курьеру');
+    }
+
+    if (order.status !== OrderStatus.IN_PROGRESS) {
+      throw new BadRequestException('Заказ не может быть завершен');
+    }
+
+    order.status = OrderStatus.DONE;
+    await this.orderRepository.save(order);
+
+    return this.findOne(orderId);
+  }
+
+  async cancelOrder(
+    orderId: string,
+    courierId: string,
+    reason?: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+      relations: ['customer', 'currier'],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.currierId !== courierId) {
+      throw new BadRequestException('Заказ назначен другому курьеру');
+    }
+
+    if (order.status === OrderStatus.DONE) {
+      throw new BadRequestException('Завершенный заказ не может быть отменен');
+    }
+
+    order.status = OrderStatus.CANCELED;
+    await this.orderRepository.save(order);
+
+    return this.findOne(orderId);
+  }
 }

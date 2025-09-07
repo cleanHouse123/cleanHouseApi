@@ -11,6 +11,7 @@ import { UserRole } from '../../shared/types/user.role';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { MockAuthService } from './mock-auth.service';
 import { TelegramGatewayService } from './telegram-gateway.service';
+import { SmsRuService } from './smsru.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailRegisterDto } from '../dto/email-register.dto';
 import { EmailLoginDto } from '../dto/email-login.dto';
@@ -25,16 +26,17 @@ export class AuthService {
     private userService: UserService,
     private mockAuthService: MockAuthService,
     private telegramGatewayService: TelegramGatewayService,
+    private smsRuService: SmsRuService,
     private configService: ConfigService,
   ) {}
 
-  // Универсальная авторизация через моковую SMS
+  // Универсальная авторизация через SMS.RU
   async authenticateWithSms(
     phone: string,
     code: string,
     ipAddress?: string,
   ): Promise<AuthResponseDto> {
-    // Проверка мокового кода
+    // Проверка кода через SMS.RU
     const verificationResult = await this.mockAuthService.verifyCode(
       phone,
       code,
@@ -129,15 +131,34 @@ export class AuthService {
   }
 
   async sendSms(phone: string): Promise<{ message: string; code?: string }> {
-    const result = await this.mockAuthService.sendVerificationCode(phone);
-    return {
-      message: result.message,
-      code: result.code, // В моковой версии возвращаем код для тестирования
-    };
+    try {
+      // Генерируем код верификации
+      const code = this.generateVerificationCode();
+
+      // Отправляем SMS через SMS.RU
+      const result = await this.smsRuService.sendVerificationCode(phone, code);
+
+      if (result.status === 'OK' && result.sms[phone]?.status === 'OK') {
+        // Сохраняем код в базе данных для проверки
+        await this.mockAuthService.saveVerificationCode(phone, code);
+
+        return {
+          message: 'SMS с кодом верификации отправлена',
+        };
+      } else {
+        throw new Error('Не удалось отправить SMS');
+      }
+    } catch (error) {
+      throw new Error(`Ошибка отправки SMS: ${error.message}`);
+    }
   }
 
   async cleanupExpiredCodes(): Promise<void> {
     await this.mockAuthService.cleanupExpiredCodes();
+  }
+
+  async checkSmsBalance(): Promise<number> {
+    return this.smsRuService.checkBalance();
   }
 
   async getVerificationCode(phone: string): Promise<{ code: string } | null> {
@@ -433,5 +454,9 @@ export class AuthService {
         message: error instanceof Error ? error.message : 'Ошибка проверки',
       };
     }
+  }
+
+  private generateVerificationCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 }

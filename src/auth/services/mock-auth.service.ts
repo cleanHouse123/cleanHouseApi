@@ -191,4 +191,24 @@ export class MockAuthService {
       this.logger.error('Ошибка очистки истекших кодов:', error);
     }
   }
+
+  async saveVerificationCode(phone: string, code: string): Promise<void> {
+    try {
+      // Удаляем старые коды для этого номера
+      await this.verificationCodeRepository.delete({ phoneNumber: phone });
+
+      // Создаем новый код
+      const verificationCode = this.verificationCodeRepository.create({
+        phoneNumber: phone,
+        code,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 минут
+      });
+
+      await this.verificationCodeRepository.save(verificationCode);
+      this.logger.log(`Код верификации сохранен для номера: ${phone}`);
+    } catch (error) {
+      this.logger.error('Ошибка сохранения кода верификации:', error);
+      throw error;
+    }
+  }
 }

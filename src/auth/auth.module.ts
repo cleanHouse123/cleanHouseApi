@@ -10,6 +10,7 @@ import { AuthService } from './services/auth.service';
 import { TokenService } from './services/token.service';
 import { MockAuthService } from './services/mock-auth.service';
 import { TelegramGatewayService } from './services/telegram-gateway.service';
+import { SmsRuService } from './services/smsru.service';
 import { expiresAccessIn } from 'src/shared/constants';
 import { JwtRefreshTokenStrategy } from './strategies/jwt-refresh.strategy';
 import { UserModule } from '../user/user.module';
@@ -37,12 +38,19 @@ import { VerificationCode } from './entities/verification-code.entity';
     TokenService,
     MockAuthService,
     TelegramGatewayService,
+    SmsRuService,
     ConfigService,
     JwtStrategy,
     LocalStrategy,
     JwtRefreshTokenStrategy,
     LocalAuthGuard,
   ],
-  exports: [AuthService, TokenService, MockAuthService, TelegramGatewayService],
+  exports: [
+    AuthService,
+    TokenService,
+    MockAuthService,
+    TelegramGatewayService,
+    SmsRuService,
+  ],
 })
 export class AuthModule {}

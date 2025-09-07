@@ -173,4 +173,70 @@ export class OrderController {
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.orderService.remove(id);
   }
+
+  // ==================== COURIER METHODS ====================
+
+  @Patch(':id/take')
+  @ApiOperation({ summary: 'Курьер берет заказ' })
+  @ApiResponse({
+    status: 200,
+    description: 'Заказ успешно взят курьером',
+    type: OrderResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Заказ уже взят или недоступен' })
+  @ApiResponse({ status: 404, description: 'Заказ не найден' })
+  async takeOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { courierId: string },
+  ): Promise<OrderResponseDto> {
+    return this.orderService.takeOrder(id, body.courierId);
+  }
+
+  @Patch(':id/start')
+  @ApiOperation({ summary: 'Курьер начинает выполнение заказа' })
+  @ApiResponse({
+    status: 200,
+    description: 'Заказ начат к выполнению',
+    type: OrderResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Заказ не может быть начат' })
+  @ApiResponse({ status: 404, description: 'Заказ не найден' })
+  async startOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { courierId: string },
+  ): Promise<OrderResponseDto> {
+    return this.orderService.startOrder(id, body.courierId);
+  }
+
+  @Patch(':id/complete')
+  @ApiOperation({ summary: 'Курьер завершает заказ' })
+  @ApiResponse({
+    status: 200,
+    description: 'Заказ успешно завершен',
+    type: OrderResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Заказ не может быть завершен' })
+  @ApiResponse({ status: 404, description: 'Заказ не найден' })
+  async completeOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { courierId: string },
+  ): Promise<OrderResponseDto> {
+    return this.orderService.completeOrder(id, body.courierId);
+  }
+
+  @Patch(':id/cancel')
+  @ApiOperation({ summary: 'Курьер отменяет заказ' })
+  @ApiResponse({
+    status: 200,
+    description: 'Заказ отменен курьером',
+    type: OrderResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Заказ не может быть отменен' })
+  @ApiResponse({ status: 404, description: 'Заказ не найден' })
+  async cancelOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { courierId: string; reason?: string },
+  ): Promise<OrderResponseDto> {
+    return this.orderService.cancelOrder(id, body.courierId, body.reason);
+  }
 }

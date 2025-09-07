@@ -110,6 +110,32 @@ export class AuthController {
     return { message: 'Истекшие коды верификации очищены' };
   }
 
+  @Get('sms/balance')
+  @ApiOperation({ summary: 'Проверить баланс SMS.RU' })
+  @ApiResponse({
+    status: 200,
+    description: 'Баланс SMS.RU',
+    schema: {
+      type: 'object',
+      properties: {
+        balance: { type: 'number', example: 4122.56 },
+        message: { type: 'string', example: 'Баланс получен успешно' },
+      },
+    },
+  })
+  @ApiResponse({ status: 500, description: 'Ошибка получения баланса' })
+  async checkSmsBalance() {
+    try {
+      const balance = await this.authService.checkSmsBalance();
+      return {
+        balance,
+        message: 'Баланс получен успешно',
+      };
+    } catch (error) {
+      throw new Error(`Ошибка получения баланса: ${error.message}`);
+    }
+  }
+
   // ==================== TELEGRAM AUTHENTICATION ====================
 
   @Post('telegram/send')
