@@ -189,6 +189,48 @@
             margin-top: 10px;
             display: none;
         }
+
+        .payment-status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+
+        .payment-status.success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .payment-status.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
@@ -301,19 +343,89 @@
         
         socket.on('connect', () => {
             console.log('Connected to WebSocket server');
-            socket.emit('join_payment_room', { userId: 'test-user' });
+            socket.emit('join_payment_room', { 
+                userId: 'test-user', 
+                paymentId: paymentId 
+            });
+        });
+
+        // Обработка обновлений статуса платежа
+        socket.on('payment_status_update', (data) => {
+            console.log('Payment status update:', data);
+            updatePaymentStatus(data.status);
         });
 
         socket.on('payment_success', (data) => {
             console.log('Payment successful via WebSocket:', data);
-            alert('Оплата прошла успешно! Подписка активирована.');
-            window.close();
+            showSuccessMessage('🎉 Оплата прошла успешно! Подписка активирована.');
+            setTimeout(() => {
+                window.close();
+            }, 3000);
         });
 
         socket.on('payment_error', (data) => {
             console.log('Payment error via WebSocket:', data);
-            alert('Ошибка оплаты: ' + data.error);
+            showErrorMessage('❌ Ошибка оплаты: ' + data.error);
         });
+
+        // Функции для обновления UI
+        function updatePaymentStatus(status) {
+            const statusElement = document.getElementById('payment-status');
+            if (!statusElement) {
+                // Создаем элемент статуса, если его нет
+                const statusDiv = document.createElement('div');
+                statusDiv.id = 'payment-status';
+                statusDiv.className = 'payment-status';
+                statusDiv.innerHTML = `
+                    <div class="status-indicator">
+                        <div class="spinner"></div>
+                        <span>Проверка статуса платежа...</span>
+                    </div>
+                `;
+                document.querySelector('.payment-container').appendChild(statusDiv);
+            }
+
+            const statusElement = document.getElementById('payment-status');
+            const statusText = statusElement.querySelector('span');
+            
+            switch(status) {
+                case 'pending':
+                    statusText.textContent = '⏳ Ожидание обработки платежа...';
+                    break;
+                case 'processing':
+                    statusText.textContent = '🔄 Обработка платежа...';
+                    break;
+                case 'success':
+                    statusText.textContent = '✅ Платеж успешно обработан!';
+                    statusElement.className = 'payment-status success';
+                    break;
+                case 'failed':
+                    statusText.textContent = '❌ Платеж не прошел';
+                    statusElement.className = 'payment-status error';
+                    break;
+                default:
+                    statusText.textContent = '🔍 Проверка статуса...';
+            }
+        }
+
+        function showSuccessMessage(message) {
+            const successElement = document.getElementById('success-message');
+            successElement.textContent = message;
+            successElement.style.display = 'block';
+            
+            // Скрываем форму
+            document.getElementById('payment-form').style.display = 'none';
+            const confirmationElement = document.querySelector('.payment-confirmation');
+            if (confirmationElement) {
+                confirmationElement.style.display = 'none';
+            }
+        }
+
+        function showErrorMessage(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
 
         // Форматирование номера карты
         document.getElementById('card-number').addEventListener('input', function(e) {
@@ -524,8 +636,6 @@
             const confirmButton = document.getElementById('confirm-payment');
             const cancelButton = document.getElementById('cancel-payment');
             const loading = document.getElementById('loading');
-            const successMessage = document.getElementById('success-message');
-            const errorMessage = document.getElementById('error-message');
 
             // Показываем загрузку
             confirmButton.disabled = true;
@@ -548,22 +658,17 @@
                     // Скрываем экран подтверждения
                     document.querySelector('.payment-confirmation').style.display = 'none';
                     
-                    // Показываем форму снова для отображения успеха
+                    // Показываем форму снова для отображения статуса
                     document.getElementById('payment-form').style.display = 'block';
                     
-                    successMessage.textContent = '🎉 Оплата прошла успешно! Подписка активирована.';
-                    successMessage.style.display = 'block';
-                    
-                    // Закрываем окно через 3 секунды
-                    setTimeout(() => {
-                        window.close();
-                    }, 3000);
+                    // WebSocket будет автоматически уведомлять о статусе платежа
+                    console.log('Payment simulation request sent, waiting for WebSocket updates...');
                 } else {
-                    throw new Error('Ошибка обработки платежа');
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Ошибка обработки платежа');
                 }
             } catch (error) {
-                errorMessage.textContent = 'Произошла ошибка при обработке платежа. Попробуйте еще раз.';
-                errorMessage.style.display = 'block';
+                showErrorMessage('Произошла ошибка при обработке платежа: ' + error.message);
                 
                 // Возвращаемся к форме
                 document.querySelector('.payment-confirmation').style.display = 'none';
