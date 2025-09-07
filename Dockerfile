@@ -2,17 +2,17 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Копируем package.json и yarn.lock
-COPY package.json yarn.lock ./
+# Копируем package.json и package-lock.json
+COPY package*.json ./
 
 # Устанавливаем зависимости
-RUN yarn install --frozen-lockfile
+RUN npm ci
 
 # Копируем исходный код
 COPY . .
 
 # Собираем приложение
-RUN yarn build
+RUN npm run build
 
 # Устанавливаем переменные окружения
 ENV NODE_ENV=production
@@ -21,4 +21,4 @@ ENV NODE_ENV=production
 EXPOSE 3000
 
 # Запускаем приложение
-CMD ["yarn", "start:prod"] 
+CMD ["npm", "run", "start:prod"] 
