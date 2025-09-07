@@ -7,15 +7,16 @@ export class PaymentService {
   private payments = new Map<string, any>();
 
   // Создание ссылки на оплату
-  createPaymentLink(subscriptionId: string, amount: number): SubscriptionPaymentResponseDto {
+  createPaymentLink(subscriptionId: string, amount: number, subscriptionType?: string): SubscriptionPaymentResponseDto {
     const paymentId = uuidv4();
-    const paymentUrl = `https://mock-payment.example.com/pay/${paymentId}`;
+    const paymentUrl = `http://localhost:3000/payment/${paymentId}`;
 
     // Сохраняем информацию о платеже
     this.payments.set(paymentId, {
       id: paymentId,
       subscriptionId,
       amount,
+      subscriptionType,
       status: 'pending',
       createdAt: new Date(),
     });

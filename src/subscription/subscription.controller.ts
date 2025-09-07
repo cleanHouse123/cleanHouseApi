@@ -187,6 +187,7 @@ export class SubscriptionController {
     return this.paymentService.createPaymentLink(
       createPaymentDto.subscriptionId,
       createPaymentDto.amount,
+      createPaymentDto.subscriptionType,
     );
   }
 

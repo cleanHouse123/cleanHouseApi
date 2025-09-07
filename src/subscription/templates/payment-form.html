@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оплата подписки - Clean House</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .payment-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .payment-info {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .info-row:last-child {
+            margin-bottom: 0;
+            font-weight: bold;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .card-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 15px;
+        }
+
+        .card-icons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 25px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .pay-button {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 18px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .pay-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .pay-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .security-info {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .security-icon {
+            margin-right: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <div class="header">
+            <div class="logo">🏠 Clean House</div>
+            <div class="subtitle">Оплата подписки</div>
+        </div>
+
+        <div class="payment-info">
+            <div class="info-row">
+                <span>Тип подписки:</span>
+                <span id="subscription-type">Месячная</span>
+            </div>
+            <div class="info-row">
+                <span>Сумма к оплате:</span>
+                <span id="payment-amount">1000 ₽</span>
+            </div>
+        </div>
+
+        <form id="payment-form">
+            <div class="form-group">
+                <label class="form-label" for="card-number">Номер карты</label>
+                <input 
+                    type="text" 
+                    id="card-number" 
+                    class="form-input" 
+                    placeholder="1234 5678 9012 3456"
+                    maxlength="19"
+                    required
+                >
+                <div class="card-icons">
+                    <div class="card-icon">💳</div>
+                    <div class="card-icon">🔒</div>
+                    <div class="card-icon">✅</div>
+                </div>
+            </div>
+
+            <div class="card-row">
+                <div class="form-group">
+                    <label class="form-label" for="expiry">Срок действия</label>
+                    <input 
+                        type="text" 
+                        id="expiry" 
+                        class="form-input" 
+                        placeholder="MM/YY"
+                        maxlength="5"
+                        required
+                    >
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cvv">CVV</label>
+                    <input 
+                        type="text" 
+                        id="cvv" 
+                        class="form-input" 
+                        placeholder="123"
+                        maxlength="3"
+                        required
+                    >
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="cardholder">Имя держателя карты</label>
+                <input 
+                    type="text" 
+                    id="cardholder" 
+                    class="form-input" 
+                    placeholder="IVAN IVANOV"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="pay-button" id="pay-button">
+                Оплатить подписку
+            </button>
+
+            <div class="error-message" id="error-message"></div>
+            <div class="success-message" id="success-message"></div>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Обработка платежа...</div>
+        </div>
+
+        <div class="security-info">
+            <span class="security-icon">🔒</span>
+            Ваши данные защищены SSL-шифрованием
+        </div>
+    </div>
+
+    <script>
+        // Получаем параметры из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentId = urlParams.get('paymentId') || 'test-payment-id';
+        const amount = urlParams.get('amount') || '1000';
+        const type = urlParams.get('type') || 'monthly';
+
+        // Обновляем информацию о платеже
+        document.getElementById('subscription-type').textContent = 
+            type === 'monthly' ? 'Месячная' : 
+            type === 'yearly' ? 'Годовая' : 'Разовая';
+        document.getElementById('payment-amount').textContent = amount + ' ₽';
+
+        // Форматирование номера карты
+        document.getElementById('card-number').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\s/g, '').replace(/[^0-9]/gi, '');
+            let formattedValue = value.match(/.{1,4}/g)?.join(' ') || value;
+            e.target.value = formattedValue;
+        });
+
+        // Форматирование срока действия
+        document.getElementById('expiry').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length >= 2) {
+                value = value.substring(0, 2) + '/' + value.substring(2, 4);
+            }
+            e.target.value = value;
+        });
+
+        // Только цифры для CVV
+        document.getElementById('cvv').addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        });
+
+        // Заглавные буквы для имени держателя
+        document.getElementById('cardholder').addEventListener('input', function(e) {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Обработка формы
+        document.getElementById('payment-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const payButton = document.getElementById('pay-button');
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+
+            // Скрываем предыдущие сообщения
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+
+            // Показываем загрузку
+            payButton.disabled = true;
+            loading.style.display = 'block';
+
+            try {
+                // Симулируем обработку платежа
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Отправляем запрос на симуляцию оплаты
+                const response = await fetch(`/api/subscriptions/payment/simulate/${paymentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    successMessage.textContent = 'Оплата прошла успешно! Подписка активирована.';
+                    successMessage.style.display = 'block';
+                    
+                    // Закрываем окно через 3 секунды
+                    setTimeout(() => {
+                        window.close();
+                    }, 3000);
+                } else {
+                    throw new Error('Ошибка обработки платежа');
+                }
+            } catch (error) {
+                errorMessage.textContent = 'Произошла ошибка при обработке платежа. Попробуйте еще раз.';
+                errorMessage.style.display = 'block';
+            } finally {
+                payButton.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        // Автозаполнение для демонстрации
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                document.getElementById('card-number').value = '1234 5678 9012 3456';
+                document.getElementById('expiry').value = '12/25';
+                document.getElementById('cvv').value = '123';
+                document.getElementById('cardholder').value = 'IVAN IVANOV';
+            }
+        });
+    </script>
+</body>
+</html>

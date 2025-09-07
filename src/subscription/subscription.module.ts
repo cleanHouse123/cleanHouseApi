@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionController } from './subscription.controller';
+import { PaymentPageController } from './controllers/payment-page.controller';
 import { SubscriptionService } from './subscription.service';
 import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
@@ -10,7 +11,7 @@ import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Subscription, User]), UserModule],
-  controllers: [SubscriptionController],
+  controllers: [SubscriptionController, PaymentPageController],
   providers: [SubscriptionService, PaymentService, PaymentGateway],
   exports: [SubscriptionService, PaymentService, PaymentGateway],
 })
