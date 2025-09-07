@@ -158,9 +158,129 @@ curl -X POST "http://localhost:3000/auth/sms/verify" \
 
 ## API Эндпоинты
 
-### Система заказов
+### Система заказов (Orders)
 
-#### Создать заказ
+Система заказов упрощена - теперь каждый заказ представляет собой вынос одного пакета мусора по фиксированной цене.
+
+#### Сущности (Entities)
+
+**Order** - основная сущность заказа:
+
+```typescript
+{
+  id: string;                    // UUID заказа
+  customerId: string;            // ID клиента
+  currierId?: string;            // ID курьера (опционально)
+  address: string;               // Адрес для уборки
+  description?: string;          // Описание заказа
+  price: number;                 // Статичная цена заказа
+  status: OrderStatus;          // Статус заказа
+  scheduledAt?: Date;            // Запланированная дата/время
+  notes?: string;                // Дополнительные заметки
+  payments: Payment[];           // Связанные платежи
+  reviews: Review[];             // Отзывы о заказе
+  createdAt: Date;               // Дата создания
+  updatedAt: Date;               // Дата обновления
+}
+```
+
+**Payment** - платеж по заказу:
+
+```typescript
+{
+  id: string; // UUID платежа
+  orderId: string; // ID заказа
+  amount: number; // Сумма платежа
+  status: PaymentStatus; // Статус платежа
+  method: PaymentMethod; // Способ оплаты
+  createdAt: Date; // Дата создания
+}
+```
+
+**Review** - отзыв о заказе:
+
+```typescript
+{
+  id: string;                    // UUID отзыва
+  orderId: string;               // ID заказа
+  clientId: string;              // ID клиента
+  currierId: string;             // ID курьера
+  rating: number;                // Оценка (1-5)
+  comment?: string;              // Комментарий
+  createdAt: Date;               // Дата создания
+}
+```
+
+#### Enums (Перечисления)
+
+**OrderStatus** - статусы заказа:
+
+- `NEW` - новый заказ
+- `ASSIGNED` - назначен курьеру
+- `IN_PROGRESS` - выполняется
+- `DONE` - выполнен
+- `CANCELED` - отменен
+
+**PaymentStatus** - статусы платежа:
+
+- `PENDING` - ожидает оплаты
+- `PAID` - оплачен
+- `FAILED` - не прошел
+- `REFUNDED` - возвращен
+
+**PaymentMethod** - способы оплаты:
+
+- `CASH` - наличные
+- `CARD` - карта
+- `ONLINE` - онлайн
+
+#### DTO (Data Transfer Objects)
+
+**CreateOrderDto** - создание заказа:
+
+```typescript
+{
+  customerId: string;            // ID клиента (обязательно)
+  address: string;               // Адрес (обязательно, макс. 500 символов)
+  description?: string;          // Описание (опционально, макс. 1000 символов)
+  price: number;                 // Цена (обязательно, мин. 0)
+  scheduledAt?: string;          // Запланированная дата (опционально, ISO строка)
+  notes?: string;                // Заметки (опционально, макс. 500 символов)
+  paymentMethod: PaymentMethod;  // Способ оплаты (обязательно)
+}
+```
+
+**UpdateOrderStatusDto** - обновление статуса:
+
+```typescript
+{
+  status: OrderStatus;           // Новый статус (обязательно)
+  currierId?: string;            // ID курьера (опционально, требуется для ASSIGNED)
+}
+```
+
+**OrderResponseDto** - ответ с заказом:
+
+```typescript
+{
+  id: string;
+  customer: UserResponseDto;     // Данные клиента
+  currier?: UserResponseDto;     // Данные курьера (если назначен)
+  address: string;
+  description?: string;
+  price: number;
+  status: OrderStatus;
+  scheduledAt?: Date;
+  notes?: string;
+  payments: PaymentResponseDto[]; // Список платежей
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+#### API Эндпоинты
+
+**Создать заказ:**
 
 ```http
 POST /orders
@@ -168,30 +288,45 @@ Authorization: Bearer <access_token>
 Content-Type: application/json
 
 {
-  "customerId": "uuid",
+  "customerId": "123e4567-e89b-12d3-a456-426614174000",
   "address": "ул. Пушкина, д. 10, кв. 5",
-  "description": "Уборка квартиры после ремонта",
-  "price": 1500.00,
+  "description": "Вынос мусора после ремонта",
+  "price": 500.00,
   "scheduledAt": "2024-01-15T10:00:00Z",
-  "items": [
-    {
-      "type": "garbage",
-      "quantity": 2,
-      "notes": "Большие коробки"
-    }
-  ],
+  "notes": "Большие коробки",
   "paymentMethod": "card"
 }
 ```
 
-#### Получить список заказов
+**Получить список заказов:**
 
 ```http
 GET /orders?page=1&limit=10&status=new&customerId=uuid
 Authorization: Bearer <access_token>
 ```
 
-#### Обновить статус заказа
+**Получить заказ по ID:**
+
+```http
+GET /orders/:id
+Authorization: Bearer <access_token>
+```
+
+**Получить заказы клиента:**
+
+```http
+GET /orders/customer/:customerId
+Authorization: Bearer <access_token>
+```
+
+**Получить заказы курьера:**
+
+```http
+GET /orders/currier/:currierId
+Authorization: Bearer <access_token>
+```
+
+**Обновить статус заказа:**
 
 ```http
 PATCH /orders/:id/status
@@ -200,8 +335,43 @@ Content-Type: application/json
 
 {
   "status": "assigned",
-  "currierId": "uuid"
+  "currierId": "123e4567-e89b-12d3-a456-426614174000"
 }
+```
+
+**Курьер берет заказ:**
+
+```http
+PATCH /orders/:id/take
+Authorization: Bearer <access_token>
+```
+
+**Курьер начинает выполнение:**
+
+```http
+PATCH /orders/:id/start
+Authorization: Bearer <access_token>
+```
+
+**Курьер завершает заказ:**
+
+```http
+PATCH /orders/:id/complete
+Authorization: Bearer <access_token>
+```
+
+**Курьер отменяет заказ:**
+
+```http
+PATCH /orders/:id/cancel
+Authorization: Bearer <access_token>
+```
+
+**Удалить заказ:**
+
+```http
+DELETE /orders/:id
+Authorization: Bearer <access_token>
 ```
 
 ### Telegram авторизация
