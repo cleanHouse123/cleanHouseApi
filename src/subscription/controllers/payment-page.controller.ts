@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Res, Logger } from '@nestjs/common';
 import { Response } from 'express';
 import { PaymentService } from '../services/payment.service';
 import { readFileSync } from 'fs';
@@ -6,6 +6,8 @@ import { join } from 'path';
 
 @Controller('payment')
 export class PaymentPageController {
+  private readonly logger = new Logger(PaymentPageController.name);
+
   constructor(private readonly paymentService: PaymentService) {}
 
   @Get(':paymentId')
@@ -27,11 +29,14 @@ export class PaymentPageController {
 
       // Читаем HTML шаблон
       const templatePath = join(
-        __dirname,
-        '..',
+        process.cwd(),
+        'dist',
+        'subscription',
         'templates',
         'payment-form.html',
       );
+      
+      this.logger.log(`Пытаемся загрузить шаблон из: ${templatePath}`);
       
       let html = readFileSync(templatePath, 'utf8');
 
@@ -54,7 +59,8 @@ export class PaymentPageController {
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
     } catch (error) {
-      res.status(500).send('Ошибка загрузки формы оплаты');
+      this.logger.error(`Ошибка загрузки формы оплаты для paymentId: ${paymentId}`, error);
+      res.status(500).send(`Ошибка загрузки формы оплаты: ${error.message}`);
     }
   }
 }
