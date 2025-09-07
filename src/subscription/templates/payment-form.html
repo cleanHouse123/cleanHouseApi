@@ -264,7 +264,7 @@
             </div>
 
             <button type="submit" class="pay-button" id="pay-button">
-                Оплатить подписку
+                Подтвердить данные карты
             </button>
 
             <div class="error-message" id="error-message"></div>
@@ -326,7 +326,6 @@
             e.preventDefault();
             
             const payButton = document.getElementById('pay-button');
-            const loading = document.getElementById('loading');
             const errorMessage = document.getElementById('error-message');
             const successMessage = document.getElementById('success-message');
 
@@ -334,8 +333,183 @@
             errorMessage.style.display = 'none';
             successMessage.style.display = 'none';
 
+            // Проверяем заполненность полей
+            const cardNumber = document.getElementById('card-number').value;
+            const expiry = document.getElementById('expiry').value;
+            const cvv = document.getElementById('cvv').value;
+            const cardholder = document.getElementById('cardholder').value;
+
+            if (!cardNumber || !expiry || !cvv || !cardholder) {
+                errorMessage.textContent = 'Пожалуйста, заполните все поля';
+                errorMessage.style.display = 'block';
+                return;
+            }
+
+            // Показываем экран подтверждения оплаты
+            showPaymentConfirmation();
+        });
+
+        function showPaymentConfirmation() {
+            // Скрываем форму
+            document.getElementById('payment-form').style.display = 'none';
+            
+            // Создаем экран подтверждения
+            const confirmationHTML = `
+                <div class="payment-confirmation">
+                    <div class="confirmation-header">
+                        <div class="logo">🏠 Clean House</div>
+                        <div class="subtitle">Подтверждение оплаты</div>
+                    </div>
+                    
+                    <div class="confirmation-content">
+                        <div class="payment-summary">
+                            <h3>Детали платежа</h3>
+                            <div class="summary-row">
+                                <span>Тип подписки:</span>
+                                <span id="conf-subscription-type">Месячная</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Сумма:</span>
+                                <span id="conf-payment-amount">1000 ₽</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Карта:</span>
+                                <span id="conf-card-number">**** **** **** 3456</span>
+                            </div>
+                        </div>
+                        
+                        <div class="confirmation-actions">
+                            <button class="confirm-button" id="confirm-payment">
+                                ✅ Подтвердить оплату
+                            </button>
+                            <button class="cancel-button" id="cancel-payment">
+                                ❌ Отменить
+                            </button>
+                        </div>
+                        
+                        <div class="security-note">
+                            🔒 Ваши данные защищены SSL-шифрованием
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Добавляем стили для экрана подтверждения
+            const confirmationStyles = `
+                <style>
+                    .payment-confirmation {
+                        text-align: center;
+                    }
+                    
+                    .confirmation-header {
+                        margin-bottom: 30px;
+                    }
+                    
+                    .confirmation-content {
+                        background: #f8f9fa;
+                        border-radius: 12px;
+                        padding: 30px;
+                    }
+                    
+                    .payment-summary {
+                        background: white;
+                        border-radius: 8px;
+                        padding: 20px;
+                        margin-bottom: 30px;
+                        text-align: left;
+                    }
+                    
+                    .payment-summary h3 {
+                        margin-bottom: 15px;
+                        color: #333;
+                    }
+                    
+                    .summary-row {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 10px;
+                        padding: 8px 0;
+                        border-bottom: 1px solid #eee;
+                    }
+                    
+                    .summary-row:last-child {
+                        border-bottom: none;
+                        font-weight: bold;
+                    }
+                    
+                    .confirmation-actions {
+                        display: flex;
+                        gap: 15px;
+                        justify-content: center;
+                        margin-bottom: 20px;
+                    }
+                    
+                    .confirm-button {
+                        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                        color: white;
+                        border: none;
+                        padding: 15px 30px;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: transform 0.2s ease;
+                    }
+                    
+                    .confirm-button:hover {
+                        transform: translateY(-2px);
+                    }
+                    
+                    .cancel-button {
+                        background: #6c757d;
+                        color: white;
+                        border: none;
+                        padding: 15px 30px;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: transform 0.2s ease;
+                    }
+                    
+                    .cancel-button:hover {
+                        transform: translateY(-2px);
+                    }
+                    
+                    .security-note {
+                        color: #666;
+                        font-size: 14px;
+                    }
+                </style>
+            `;
+            
+            // Вставляем HTML и стили
+            document.head.insertAdjacentHTML('beforeend', confirmationStyles);
+            document.querySelector('.payment-container').insertAdjacentHTML('beforeend', confirmationHTML);
+            
+            // Обновляем данные в экране подтверждения
+            document.getElementById('conf-subscription-type').textContent = 
+                type === 'monthly' ? 'Месячная' : 
+                type === 'yearly' ? 'Годовая' : 'Разовая';
+            document.getElementById('conf-payment-amount').textContent = amount + ' ₽';
+            document.getElementById('conf-card-number').textContent = 
+                '**** **** **** ' + document.getElementById('card-number').value.slice(-4);
+            
+            // Обработчики кнопок
+            document.getElementById('confirm-payment').addEventListener('click', processPayment);
+            document.getElementById('cancel-payment').addEventListener('click', cancelPayment);
+        }
+
+        async function processPayment() {
+            const confirmButton = document.getElementById('confirm-payment');
+            const cancelButton = document.getElementById('cancel-payment');
+            const loading = document.getElementById('loading');
+            const successMessage = document.getElementById('success-message');
+            const errorMessage = document.getElementById('error-message');
+
             // Показываем загрузку
-            payButton.disabled = true;
+            confirmButton.disabled = true;
+            cancelButton.disabled = true;
             loading.style.display = 'block';
 
             try {
@@ -351,7 +525,13 @@
                 });
 
                 if (response.ok) {
-                    successMessage.textContent = 'Оплата прошла успешно! Подписка активирована.';
+                    // Скрываем экран подтверждения
+                    document.querySelector('.payment-confirmation').style.display = 'none';
+                    
+                    // Показываем форму снова для отображения успеха
+                    document.getElementById('payment-form').style.display = 'block';
+                    
+                    successMessage.textContent = '🎉 Оплата прошла успешно! Подписка активирована.';
                     successMessage.style.display = 'block';
                     
                     // Закрываем окно через 3 секунды
@@ -364,11 +544,22 @@
             } catch (error) {
                 errorMessage.textContent = 'Произошла ошибка при обработке платежа. Попробуйте еще раз.';
                 errorMessage.style.display = 'block';
+                
+                // Возвращаемся к форме
+                document.querySelector('.payment-confirmation').style.display = 'none';
+                document.getElementById('payment-form').style.display = 'block';
             } finally {
-                payButton.disabled = false;
+                confirmButton.disabled = false;
+                cancelButton.disabled = false;
                 loading.style.display = 'none';
             }
-        });
+        }
+
+        function cancelPayment() {
+            // Возвращаемся к форме
+            document.querySelector('.payment-confirmation').style.display = 'none';
+            document.getElementById('payment-form').style.display = 'block';
+        }
 
         // Автозаполнение для демонстрации
         document.addEventListener('DOMContentLoaded', function() {
