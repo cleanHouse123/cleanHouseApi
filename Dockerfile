@@ -2,23 +2,18 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Копируем package.json и package-lock.json
-COPY package*.json ./
+COPY *.json ./
 
-# Устанавливаем зависимости
-RUN npm ci
+RUN yarn
 
-# Копируем исходный код
 COPY . .
 
-# Собираем приложение
-RUN npm run build
+RUN yarn build
 
-# Устанавливаем переменные окружения
-ENV NODE_ENV=production
+ARG NODE_ENV=development
+# COPY .env.$NODE_ENV .env
 
-# Открываем порт
 EXPOSE 3000
 
-# Запускаем приложение
-CMD ["npm", "run", "start:prod"] 
+# CMD ["sh", "-c", "yarn migration:run && yarn start:prod"]   это уже на прод будет 
+CMD ["sh", "-c", "yarn start:prod"] 
