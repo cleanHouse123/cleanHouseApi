@@ -23,15 +23,26 @@ import {
   UpdateSubscriptionStatusDto,
 } from './dto/subscription.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
+import {
+  CreatePaymentDto,
+  PaymentResponseDto,
+  PaymentCallbackDto,
+} from './dto/create-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubscriptionStatus } from './entities/subscription.entity';
+import { PaymentService } from './services/payment.service';
+import { PaymentGateway } from './gateways/payment.gateway';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT')
 export class SubscriptionController {
-  constructor(private readonly subscriptionService: SubscriptionService) {}
+  constructor(
+    private readonly subscriptionService: SubscriptionService,
+    private readonly paymentService: PaymentService,
+    private readonly paymentGateway: PaymentGateway,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Создать новую подписку' })
@@ -149,5 +160,125 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Подписка не найдена' })
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.subscriptionService.remove(id);
+  }
+
+  // ==================== PAYMENT ENDPOINTS ====================
+
+  @Post('payment/create')
+  @ApiOperation({ summary: 'Создать ссылку на оплату подписки' })
+  @ApiResponse({
+    status: 201,
+    description: 'Ссылка на оплату создана',
+    type: PaymentResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Неверные данные' })
+  @ApiResponse({ status: 404, description: 'Подписка не найдена' })
+  async createPaymentLink(
+    @Body() createPaymentDto: CreatePaymentDto,
+  ): Promise<PaymentResponseDto> {
+    const subscription = await this.subscriptionService.findOne(
+      createPaymentDto.subscriptionId,
+    );
+
+    if (!subscription) {
+      throw new Error('Подписка не найдена');
+    }
+
+    return this.paymentService.createPaymentLink(
+      createPaymentDto.subscriptionId,
+      createPaymentDto.amount,
+    );
+  }
+
+  @Post('payment/callback')
+  @ApiOperation({ summary: 'Обработка callback от платежной системы' })
+  @ApiResponse({
+    status: 200,
+    description: 'Callback обработан успешно',
+  })
+  @ApiResponse({ status: 400, description: 'Неверные данные' })
+  async handlePaymentCallback(
+    @Body() paymentCallbackDto: PaymentCallbackDto,
+  ) {
+    const payment = this.paymentService.getPayment(
+      paymentCallbackDto.paymentId,
+    );
+
+    if (!payment) {
+      throw new Error('Платеж не найден');
+    }
+
+    // Обновляем статус платежа
+    this.paymentService.updatePaymentStatus(
+      paymentCallbackDto.paymentId,
+      paymentCallbackDto.status,
+    );
+
+    if (paymentCallbackDto.status === 'success') {
+      // Активируем подписку
+      await this.subscriptionService.updateStatus(payment.subscriptionId, {
+        status: SubscriptionStatus.ACTIVE,
+      });
+
+      // Отправляем уведомление через WebSocket
+      this.paymentGateway.notifyPaymentSuccess(
+        payment.subscriptionId,
+        payment.subscriptionId,
+      );
+    } else {
+      // Отправляем уведомление об ошибке
+      this.paymentGateway.notifyPaymentError(
+        payment.subscriptionId,
+        payment.subscriptionId,
+        'Ошибка оплаты',
+      );
+    }
+
+    return { message: 'Callback обработан успешно' };
+  }
+
+  @Post('payment/simulate/:paymentId')
+  @ApiOperation({ summary: 'Симуляция успешной оплаты (для тестирования)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Оплата симулирована успешно',
+  })
+  @ApiResponse({ status: 404, description: 'Платеж не найден' })
+  async simulatePayment(@Param('paymentId') paymentId: string) {
+    const payment = this.paymentService.simulateSuccessfulPayment(paymentId);
+
+    if (!payment) {
+      throw new Error('Платеж не найден или уже обработан');
+    }
+
+    // Активируем подписку
+    await this.subscriptionService.updateStatus(payment.subscriptionId, {
+      status: SubscriptionStatus.ACTIVE,
+    });
+
+    // Отправляем уведомление через WebSocket
+    this.paymentGateway.notifyPaymentSuccess(
+      payment.subscriptionId,
+      payment.subscriptionId,
+    );
+
+    return { message: 'Оплата симулирована успешно', payment };
+  }
+
+  @Get('payment/:paymentId')
+  @ApiOperation({ summary: 'Получить информацию о платеже' })
+  @ApiResponse({
+    status: 200,
+    description: 'Информация о платеже',
+  })
+  @ApiResponse({ status: 404, description: 'Платеж не найден' })
+  async getPayment(@Param('paymentId') paymentId: string) {
+    const payment = this.paymentService.getPayment(paymentId);
+
+    if (!payment) {
+      throw new Error('Платеж не найден');
+    }
+
+    return payment;
   }
 }
