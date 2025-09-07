@@ -3,13 +3,14 @@ import {
   UnauthorizedException,
   ConflictException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { compare, hash } from 'bcrypt';
 import { TokenService } from './token.service';
 import { UserService } from '../../user/user.service';
 import { User } from '../../user/entities/user.entity';
 import { UserRole } from '../../shared/types/user.role';
 import { AuthResponseDto } from '../dto/auth-response.dto';
-import { MockAuthService } from './mock-auth.service';
 import { TelegramGatewayService } from './telegram-gateway.service';
 import { SmsRuService } from './smsru.service';
 import { ConfigService } from '@nestjs/config';
@@ -18,16 +19,18 @@ import { EmailLoginDto } from '../dto/email-login.dto';
 import { CreateUserDto } from '../../user/dto/create-user.dto';
 import { TelegramSendCodeDto } from '../dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from '../dto/telegram-verify-code.dto';
+import { VerificationCode } from '../entities/verification-code.entity';
 
 @Injectable()
 export class AuthService {
   constructor(
     private tokenService: TokenService,
     private userService: UserService,
-    private mockAuthService: MockAuthService,
     private telegramGatewayService: TelegramGatewayService,
     private smsRuService: SmsRuService,
     private configService: ConfigService,
+    @InjectRepository(VerificationCode)
+    private verificationCodeRepository: Repository<VerificationCode>,
   ) {}
 
   // Универсальная авторизация через SMS.RU
@@ -37,10 +40,7 @@ export class AuthService {
     ipAddress?: string,
   ): Promise<AuthResponseDto> {
     // Проверка кода через SMS.RU
-    const verificationResult = await this.mockAuthService.verifyCode(
-      phone,
-      code,
-    );
+    const verificationResult = await this.verifyCode(phone, code);
     if (!verificationResult.success) {
       throw new UnauthorizedException(verificationResult.message);
     }
@@ -130,17 +130,30 @@ export class AuthService {
     }
   }
 
-  async sendSms(phone: string): Promise<{ message: string; code?: string }> {
+  async sendSms(
+    phone: string,
+    isDev?: boolean,
+  ): Promise<{ message: string; code?: string }> {
     try {
       // Генерируем код верификации
       const code = this.generateVerificationCode();
+
+      if (isDev) {
+        // В режиме разработки сохраняем код и возвращаем его
+        await this.saveVerificationCode(phone, code);
+
+        return {
+          message: 'Код верификации для разработки (SMS не отправлена)',
+          code: code, // Возвращаем код для разработки
+        };
+      }
 
       // Отправляем SMS через SMS.RU
       const result = await this.smsRuService.sendVerificationCode(phone, code);
 
       if (result.status === 'OK' && result.sms[phone]?.status === 'OK') {
         // Сохраняем код в базе данных для проверки
-        await this.mockAuthService.saveVerificationCode(phone, code);
+        await this.saveVerificationCode(phone, code);
 
         return {
           message: 'SMS с кодом верификации отправлена',
@@ -154,7 +167,7 @@ export class AuthService {
   }
 
   async cleanupExpiredCodes(): Promise<void> {
-    await this.mockAuthService.cleanupExpiredCodes();
+    await this.cleanupExpiredVerificationCodes();
   }
 
   async checkSmsBalance(): Promise<number> {
@@ -382,7 +395,7 @@ export class AuthService {
         }
       } else {
         // Если нет requestId, проверяем через моковую авторизацию
-        const verificationResult = await this.mockAuthService.verifyCode(
+        const verificationResult = await this.verifyCode(
           formattedPhone,
           verifyCodeDto.code,
         );
@@ -458,5 +471,68 @@ export class AuthService {
 
   private generateVerificationCode(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  private async verifyCode(
+    phone: string,
+    code: string,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const verificationCode = await this.verificationCodeRepository.findOne({
+        where: { phoneNumber: phone, code, isUsed: false },
+      });
+
+      if (!verificationCode) {
+        return { success: false, message: 'Неверный код верификации' };
+      }
+
+      if (verificationCode.expiresAt < new Date()) {
+        return { success: false, message: 'Код верификации истек' };
+      }
+
+      // Помечаем код как использованный
+      verificationCode.isUsed = true;
+      await this.verificationCodeRepository.save(verificationCode);
+
+      return { success: true, message: 'Код верификации подтвержден' };
+    } catch (error) {
+      return { success: false, message: 'Ошибка проверки кода' };
+    }
+  }
+
+  private async saveVerificationCode(
+    phone: string,
+    code: string,
+  ): Promise<void> {
+    try {
+      // Удаляем старые коды для этого номера
+      await this.verificationCodeRepository.delete({ phoneNumber: phone });
+
+      // Создаем новый код
+      const verificationCode = this.verificationCodeRepository.create({
+        phoneNumber: phone,
+        code,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 минут
+      });
+
+      await this.verificationCodeRepository.save(verificationCode);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private async cleanupExpiredVerificationCodes(): Promise<void> {
+    try {
+      const expiredCodes = await this.verificationCodeRepository
+        .createQueryBuilder('verificationCode')
+        .where('verificationCode.expiresAt < :now', { now: new Date() })
+        .getMany();
+
+      if (expiredCodes.length > 0) {
+        await this.verificationCodeRepository.remove(expiredCodes);
+      }
+    } catch (error) {
+      throw error;
+    }
   }
 }

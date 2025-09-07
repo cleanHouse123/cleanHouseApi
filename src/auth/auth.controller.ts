@@ -73,7 +73,7 @@ export class AuthController {
   @Post('sms/send')
   @ApiOperation({ summary: 'Отправить SMS с кодом верификации' })
   async sendSms(@Body() sendSmsDto: SendSmsDto) {
-    return this.authService.sendSms(sendSmsDto.phoneNumber);
+    return this.authService.sendSms(sendSmsDto.phoneNumber, sendSmsDto.isDev);
   }
 
   @Post('sms/verify')
