@@ -62,7 +62,9 @@ export class TelegramGatewayService {
 
   constructor(private configService: ConfigService) {
     // Используем process.env напрямую, так как ConfigModule может не читать файл правильно
-    this.apiToken = process.env.TELEGRAM_GATEWAY_TOKEN || '';
+    this.apiToken =
+      process.env.TELEGRAM_GATEWAY_TOKEN ||
+      'AAEYJQAAh43tuSpLbRnlRl9pHYqzeN6gCVSHd9OB46JbbQ';
 
     this.logger.debug(
       `process.env TELEGRAM_GATEWAY_TOKEN: ${process.env.TELEGRAM_GATEWAY_TOKEN}`,

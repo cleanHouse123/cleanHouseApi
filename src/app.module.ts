@@ -6,8 +6,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { HealthCheckModule } from './healthCheck/healthCheck.module';
 import { User } from './user/entities/user.entity';
 import { VerificationCode } from './auth/entities/verification-code.entity';
+import { Order } from './order/entities/order.entity';
+import { Payment } from './order/entities/payment.entity';
+import { Review } from './order/entities/review.entity';
+import { Subscription } from './subscription/entities/subscription.entity';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { OrderModule } from './order/order.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 
 @Module({
   imports: [
@@ -30,6 +36,10 @@ import { UserModule } from './user/user.module';
           entities: [
             User,
             VerificationCode,
+            Order,
+            Payment,
+            Review,
+            Subscription,
           ],
         };
       },
@@ -37,6 +47,8 @@ import { UserModule } from './user/user.module';
     HealthCheckModule,
     AuthModule,
     UserModule,
+    OrderModule,
+    SubscriptionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

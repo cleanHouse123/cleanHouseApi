@@ -24,6 +24,9 @@ export class VerificationCode {
   @Column()
   expiresAt: Date;
 
+  @Column({ default: 0 })
+  attempts: number;
+
   @CreateDateColumn()
   createdAt: Date;
 }

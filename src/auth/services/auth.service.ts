@@ -9,7 +9,7 @@ import { UserService } from '../../user/user.service';
 import { User } from '../../user/entities/user.entity';
 import { UserRole } from '../../shared/types/user.role';
 import { AuthResponseDto } from '../dto/auth-response.dto';
-import { SmsService } from './sms.service';
+import { MockAuthService } from './mock-auth.service';
 import { TelegramGatewayService } from './telegram-gateway.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailRegisterDto } from '../dto/email-register.dto';
@@ -23,25 +23,28 @@ export class AuthService {
   constructor(
     private tokenService: TokenService,
     private userService: UserService,
-    private smsService: SmsService,
+    private mockAuthService: MockAuthService,
     private telegramGatewayService: TelegramGatewayService,
     private configService: ConfigService,
   ) {}
 
-  // Универсальная авторизация через SMS
+  // Универсальная авторизация через моковую SMS
   async authenticateWithSms(
     phone: string,
     code: string,
     ipAddress?: string,
   ): Promise<AuthResponseDto> {
-    // Проверка SMS кода
-    const verificationResult = await this.smsService.verifyCode(phone, code);
+    // Проверка мокового кода
+    const verificationResult = await this.mockAuthService.verifyCode(
+      phone,
+      code,
+    );
     if (!verificationResult.success) {
       throw new UnauthorizedException(verificationResult.message);
     }
 
-    // Получаем отформатированный номер из SMS сервиса
-    const formattedPhone = this.smsService.formatPhoneNumber(phone);
+    // Форматируем номер телефона
+    const formattedPhone = this.formatPhoneNumber(phone);
 
     let user = await this.userService.findByPhone(formattedPhone);
 
@@ -125,17 +128,44 @@ export class AuthService {
     }
   }
 
-  async sendSms(phone: string): Promise<{ message: string }> {
-    const result = await this.smsService.sendVerificationCode(phone);
-    return { message: result.message };
+  async sendSms(phone: string): Promise<{ message: string; code?: string }> {
+    const result = await this.mockAuthService.sendVerificationCode(phone);
+    return {
+      message: result.message,
+      code: result.code, // В моковой версии возвращаем код для тестирования
+    };
   }
 
   async cleanupExpiredCodes(): Promise<void> {
-    await this.smsService.cleanupExpiredCodes();
+    await this.mockAuthService.cleanupExpiredCodes();
   }
 
   async getVerificationCode(phone: string): Promise<{ code: string } | null> {
-    return await this.smsService.getVerificationCode(phone);
+    // В моковой версии не возвращаем код из базы для безопасности
+    return null;
+  }
+
+  private formatPhoneNumber(phoneNumber: string): string {
+    // Убираем все символы кроме цифр
+    const digits = phoneNumber.replace(/\D/g, '');
+
+    // Если номер начинается с 8, заменяем на +7
+    if (digits.startsWith('8') && digits.length === 11) {
+      return '+7' + digits.substring(1);
+    }
+
+    // Если номер начинается с 7, добавляем +
+    if (digits.startsWith('7') && digits.length === 11) {
+      return '+' + digits;
+    }
+
+    // Если номер уже в международном формате
+    if (digits.startsWith('7') && digits.length === 10) {
+      return '+7' + digits;
+    }
+
+    // Возвращаем как есть, если уже в правильном формате
+    return phoneNumber.startsWith('+') ? phoneNumber : '+' + digits;
   }
 
   private async generateAuthTokens(user: User): Promise<AuthResponseDto> {
@@ -330,8 +360,8 @@ export class AuthService {
           throw new UnauthorizedException('Неверный код верификации');
         }
       } else {
-        // Если нет requestId, проверяем через локальную базу данных
-        const verificationResult = await this.smsService.verifyCode(
+        // Если нет requestId, проверяем через моковую авторизацию
+        const verificationResult = await this.mockAuthService.verifyCode(
           formattedPhone,
           verifyCodeDto.code,
         );

@@ -14,7 +14,6 @@ async function bootstrap() {
     .setTitle('Backend')
     .setDescription('The mussor app API description')
     .setVersion('1.0')
-    .addTag('Mussor')
     .addBearerAuth(
       {
         type: 'http',
