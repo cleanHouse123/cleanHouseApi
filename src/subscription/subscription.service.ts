@@ -35,28 +35,29 @@ export class SubscriptionService {
       throw new NotFoundException('Пользователь не найден');
     }
 
-    // Проверяем, нет ли активной подписки
-    const existingSubscription = await this.subscriptionRepository.findOne({
-      where: {
-        userId: createSubscriptionDto.userId,
-        status: SubscriptionStatus.ACTIVE,
-      },
-    });
+    // Проверяем, нет ли активной подписки (только ACTIVE, не PENDING)
+    const existingActiveSubscription =
+      await this.subscriptionRepository.findOne({
+        where: {
+          userId: createSubscriptionDto.userId,
+          status: SubscriptionStatus.ACTIVE,
+        },
+      });
 
-    if (existingSubscription) {
+    if (existingActiveSubscription) {
       throw new BadRequestException(
         'У пользователя уже есть активная подписка',
       );
     }
 
-    // Создаем подписку
+    // Создаем подписку со статусом PENDING (ожидает оплаты)
     const subscription = this.subscriptionRepository.create({
       userId: createSubscriptionDto.userId,
       type: createSubscriptionDto.type,
       price: createSubscriptionDto.price,
       startDate: new Date(createSubscriptionDto.startDate),
       endDate: new Date(createSubscriptionDto.endDate),
-      status: SubscriptionStatus.ACTIVE,
+      status: SubscriptionStatus.PENDING,
     });
 
     const savedSubscription =

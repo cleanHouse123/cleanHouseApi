@@ -649,8 +649,8 @@ subscriptionService.createSubscription({
 
 ### Статусы подписок
 
-- **PENDING** - ожидает оплаты
-- **ACTIVE** - активна
+- **PENDING** - ожидает оплаты (по умолчанию при создании)
+- **ACTIVE** - активна (после успешной оплаты)
 - **CANCELLED** - отменена
 - **EXPIRED** - истекла
 

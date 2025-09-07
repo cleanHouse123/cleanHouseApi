@@ -16,6 +16,7 @@ export enum SubscriptionType {
 }
 
 export enum SubscriptionStatus {
+  PENDING = 'pending',
   ACTIVE = 'active',
   EXPIRED = 'expired',
   CANCELED = 'canceled',
@@ -42,7 +43,7 @@ export class Subscription {
   @Column({
     type: 'enum',
     enum: SubscriptionStatus,
-    default: SubscriptionStatus.ACTIVE,
+    default: SubscriptionStatus.PENDING,
   })
   status: SubscriptionStatus;
 
