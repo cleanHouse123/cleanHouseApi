@@ -370,7 +370,7 @@
 
         // Функции для обновления UI
         function updatePaymentStatus(status) {
-            const statusElement = document.getElementById('payment-status');
+            let statusElement = document.getElementById('payment-status');
             if (!statusElement) {
                 // Создаем элемент статуса, если его нет
                 const statusDiv = document.createElement('div');
@@ -383,9 +383,9 @@
                     </div>
                 `;
                 document.querySelector('.payment-container').appendChild(statusDiv);
+                statusElement = statusDiv;
             }
 
-            const statusElement = document.getElementById('payment-status');
             const statusText = statusElement.querySelector('span');
             
             switch(status) {
