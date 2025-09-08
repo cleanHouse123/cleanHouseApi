@@ -308,13 +308,13 @@ export class OrderController {
 
       // Отправляем уведомление через WebSocket
       this.orderPaymentGateway.notifyPaymentSuccess(
-        payment.orderId,
+        paymentCallbackDto.paymentId,
         payment.orderId,
       );
     } else {
       // Отправляем уведомление об ошибке
       this.orderPaymentGateway.notifyPaymentError(
-        payment.orderId,
+        paymentCallbackDto.paymentId,
         payment.orderId,
         'Ошибка оплаты заказа',
       );

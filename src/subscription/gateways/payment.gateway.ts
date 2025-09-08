@@ -25,9 +25,10 @@ export class PaymentGateway {
   constructor(private readonly paymentService: PaymentService) {}
 
   // Отправка уведомления о успешной оплате
-  notifyPaymentSuccess(userId: string, subscriptionId: string) {
-    this.server.emit('payment_success', {
-      userId,
+  notifyPaymentSuccess(paymentId: string, subscriptionId: string) {
+    const roomName = `payment_${paymentId}`;
+    this.server.to(roomName).emit('payment_success', {
+      paymentId,
       subscriptionId,
       message: 'Подписка успешно оформлена!',
       timestamp: new Date().toISOString(),
@@ -35,9 +36,10 @@ export class PaymentGateway {
   }
 
   // Отправка уведомления об ошибке оплаты
-  notifyPaymentError(userId: string, subscriptionId: string, error: string) {
-    this.server.emit('payment_error', {
-      userId,
+  notifyPaymentError(paymentId: string, subscriptionId: string, error: string) {
+    const roomName = `payment_${paymentId}`;
+    this.server.to(roomName).emit('payment_error', {
+      paymentId,
       subscriptionId,
       error,
       timestamp: new Date().toISOString(),
@@ -52,12 +54,12 @@ export class PaymentGateway {
   ) {
     const roomName = `payment_${data.paymentId}`;
     client.join(roomName);
-    
+
     this.logger.log(`Client ${client.id} joined payment room: ${roomName}`);
-    
+
     // Запускаем периодическую проверку статуса платежа
     this.startPaymentStatusCheck(data.paymentId, roomName);
-    
+
     return { message: 'Подключен к комнате оплаты', room: roomName };
   }
 
@@ -69,12 +71,12 @@ export class PaymentGateway {
   ) {
     const roomName = `payment_${data.paymentId}`;
     client.leave(roomName);
-    
+
     this.logger.log(`Client ${client.id} left payment room: ${roomName}`);
-    
+
     // Останавливаем проверку статуса платежа
     this.stopPaymentStatusCheck(data.paymentId);
-    
+
     return { message: 'Отключен от комнаты оплаты' };
   }
 
@@ -86,14 +88,16 @@ export class PaymentGateway {
     const interval = setInterval(async () => {
       try {
         const payment = this.paymentService.getPayment(paymentId);
-        
+
         if (!payment) {
           this.logger.warn(`Payment ${paymentId} not found`);
           this.stopPaymentStatusCheck(paymentId);
           return;
         }
 
-        this.logger.log(`Checking payment ${paymentId} status: ${payment.status}`);
+        this.logger.log(
+          `Checking payment ${paymentId} status: ${payment.status}`,
+        );
 
         // Отправляем текущий статус платежа
         this.server.to(roomName).emit('payment_status_update', {
@@ -104,9 +108,11 @@ export class PaymentGateway {
 
         // Если платеж завершен (успешно или с ошибкой), останавливаем проверку
         if (payment.status === 'success' || payment.status === 'failed') {
-          this.logger.log(`Payment ${paymentId} completed with status: ${payment.status}`);
+          this.logger.log(
+            `Payment ${paymentId} completed with status: ${payment.status}`,
+          );
           this.stopPaymentStatusCheck(paymentId);
-          
+
           // Отправляем финальное уведомление
           if (payment.status === 'success') {
             this.server.to(roomName).emit('payment_success', {

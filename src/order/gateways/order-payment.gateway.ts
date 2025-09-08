@@ -25,9 +25,10 @@ export class OrderPaymentGateway {
   constructor(private readonly orderPaymentService: OrderPaymentService) {}
 
   // Отправка уведомления о успешной оплате
-  notifyPaymentSuccess(userId: string, orderId: string) {
-    this.server.emit('order_payment_success', {
-      userId,
+  notifyPaymentSuccess(paymentId: string, orderId: string) {
+    const roomName = `order_payment_${paymentId}`;
+    this.server.to(roomName).emit('order_payment_success', {
+      paymentId,
       orderId,
       message: 'Заказ успешно оплачен!',
       timestamp: new Date().toISOString(),
@@ -35,9 +36,10 @@ export class OrderPaymentGateway {
   }
 
   // Отправка уведомления об ошибке оплаты
-  notifyPaymentError(userId: string, orderId: string, error: string) {
-    this.server.emit('order_payment_error', {
-      userId,
+  notifyPaymentError(paymentId: string, orderId: string, error: string) {
+    const roomName = `order_payment_${paymentId}`;
+    this.server.to(roomName).emit('order_payment_error', {
+      paymentId,
       orderId,
       error,
       timestamp: new Date().toISOString(),

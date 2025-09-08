@@ -222,13 +222,13 @@ export class SubscriptionController {
 
       // Отправляем уведомление через WebSocket
       this.paymentGateway.notifyPaymentSuccess(
-        payment.subscriptionId,
+        paymentCallbackDto.paymentId,
         payment.subscriptionId,
       );
     } else {
       // Отправляем уведомление об ошибке
       this.paymentGateway.notifyPaymentError(
-        payment.subscriptionId,
+        paymentCallbackDto.paymentId,
         payment.subscriptionId,
         'Ошибка оплаты',
       );
