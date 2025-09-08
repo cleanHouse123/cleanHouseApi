@@ -13,7 +13,10 @@ import { OrderPaymentService } from '../services/order-payment.service';
 @WebSocketGateway({
   cors: {
     origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
+  namespace: '/order-payment',
 })
 export class OrderPaymentGateway {
   @WebSocketServer()
@@ -23,6 +26,16 @@ export class OrderPaymentGateway {
   private paymentCheckIntervals = new Map<string, NodeJS.Timeout>();
 
   constructor(private readonly orderPaymentService: OrderPaymentService) {}
+
+  // Обработка подключения клиента
+  handleConnection(client: Socket) {
+    this.logger.log(`Client connected: ${client.id}`);
+  }
+
+  // Обработка отключения клиента
+  handleDisconnect(client: Socket) {
+    this.logger.log(`Client disconnected: ${client.id}`);
+  }
 
   // Отправка уведомления о успешной оплате
   notifyPaymentSuccess(paymentId: string, orderId: string) {

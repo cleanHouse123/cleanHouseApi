@@ -13,7 +13,10 @@ import { PaymentService } from '../services/payment.service';
 @WebSocketGateway({
   cors: {
     origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
+  namespace: '/subscription-payment',
 })
 export class PaymentGateway {
   @WebSocketServer()
@@ -23,6 +26,16 @@ export class PaymentGateway {
   private paymentCheckIntervals = new Map<string, NodeJS.Timeout>();
 
   constructor(private readonly paymentService: PaymentService) {}
+
+  // Обработка подключения клиента
+  handleConnection(client: Socket) {
+    this.logger.log(`Client connected: ${client.id}`);
+  }
+
+  // Обработка отключения клиента
+  handleDisconnect(client: Socket) {
+    this.logger.log(`Client disconnected: ${client.id}`);
+  }
 
   // Отправка уведомления о успешной оплате
   notifyPaymentSuccess(paymentId: string, subscriptionId: string) {

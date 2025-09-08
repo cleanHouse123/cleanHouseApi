@@ -55,10 +55,12 @@ export class CreateOrderDto {
   notes?: string;
 
   @ApiProperty({
-    description: 'Способ оплаты',
+    description: 'Способ оплаты (не требуется если есть активная подписка)',
     enum: PaymentMethod,
     example: PaymentMethod.CARD,
+    required: false,
   })
+  @IsOptional()
   @IsEnum(PaymentMethod)
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod;
 }

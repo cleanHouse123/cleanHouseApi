@@ -6,12 +6,17 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
-import { Payment, PaymentStatus } from './entities/payment.entity';
+import {
+  Payment,
+  PaymentStatus,
+  PaymentMethod,
+} from './entities/payment.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
 import { User } from '../user/entities/user.entity';
 import { UserRole } from '../shared/types/user.role';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 @Injectable()
 export class OrderService {
@@ -22,6 +27,7 @@ export class OrderService {
     private paymentRepository: Repository<Payment>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private subscriptionService: SubscriptionService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -34,6 +40,25 @@ export class OrderService {
       throw new NotFoundException('Клиент не найден');
     }
 
+    // Проверяем активную подписку пользователя
+    const activeSubscription =
+      await this.subscriptionService.getUserActiveSubscription(
+        createOrderDto.customerId,
+      );
+
+    // Если нет активной подписки и не указан способ оплаты
+    if (!activeSubscription && !createOrderDto.paymentMethod) {
+      throw new BadRequestException(
+        'Необходимо указать способ оплаты или иметь активную подписку',
+      );
+    }
+
+    // Определяем статус заказа
+    let orderStatus = OrderStatus.NEW;
+    if (activeSubscription) {
+      orderStatus = OrderStatus.PAID; // Если есть подписка, заказ сразу оплачен
+    }
+
     // Создаем заказ
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
@@ -44,12 +69,22 @@ export class OrderService {
       scheduledAt: createOrderDto.scheduledAt
         ? new Date(createOrderDto.scheduledAt)
         : undefined,
-      status: OrderStatus.NEW,
+      status: orderStatus,
     });
 
     const savedOrder = await this.orderRepository.save(order);
 
-    // Платеж будет создан при создании ссылки на оплату
+    // Если есть активная подписка, создаем автоматический платеж
+    if (activeSubscription) {
+      const payment = this.paymentRepository.create({
+        orderId: savedOrder.id,
+        amount: 0, // Бесплатно для подписчиков
+        status: PaymentStatus.PAID,
+        method: PaymentMethod.ONLINE,
+      });
+      await this.paymentRepository.save(payment);
+    }
+
     return this.findOne(savedOrder.id);
   }
 
