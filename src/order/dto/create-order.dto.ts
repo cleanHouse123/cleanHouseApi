@@ -1,11 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
-  IsNumber,
   IsOptional,
   IsEnum,
   IsDateString,
-  Min,
   MaxLength,
   IsUUID,
 } from 'class-validator';
@@ -36,15 +34,6 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
-
-  @ApiProperty({
-    description: 'Цена заказа (статичная)',
-    example: 500.0,
-    minimum: 0,
-  })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  price: number;
 
   @ApiProperty({
     description: 'Запланированная дата и время',

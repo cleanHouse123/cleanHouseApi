@@ -14,6 +14,7 @@ import { Review } from './review.entity';
 
 export enum OrderStatus {
   NEW = 'new',
+  PAID = 'paid',
   ASSIGNED = 'assigned',
   IN_PROGRESS = 'in_progress',
   DONE = 'done',

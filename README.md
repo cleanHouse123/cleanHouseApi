@@ -243,10 +243,10 @@ curl -X POST "http://localhost:3000/auth/sms/verify" \
   customerId: string;            // ID клиента (обязательно)
   address: string;               // Адрес (обязательно, макс. 500 символов)
   description?: string;          // Описание (опционально, макс. 1000 символов)
-  price: number;                 // Цена (обязательно, мин. 0)
   scheduledAt?: string;          // Запланированная дата (опционально, ISO строка)
   notes?: string;                // Заметки (опционально, макс. 500 символов)
   paymentMethod: PaymentMethod;  // Способ оплаты (обязательно)
+  // Цена фиксированная: 200 рублей
 }
 ```
 

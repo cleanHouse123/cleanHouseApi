@@ -21,7 +21,11 @@ import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
-import { CreateOrderPaymentDto, OrderPaymentResponseDto, OrderPaymentCallbackDto } from './dto/create-order-payment.dto';
+import {
+  CreateOrderPaymentDto,
+  OrderPaymentResponseDto,
+  OrderPaymentCallbackDto,
+} from './dto/create-order-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderStatus } from './entities/order.entity';
 import { Public } from '../shared/decorators/public.decorator';
@@ -40,7 +44,7 @@ export class OrderController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Создать новый заказ' })
+  @ApiOperation({ summary: 'Создать новый заказ (фиксированная цена 200 руб)' })
   @ApiResponse({
     status: 201,
     description: 'Заказ успешно создан',
@@ -258,13 +262,17 @@ export class OrderController {
   })
   @ApiResponse({ status: 400, description: 'Неверные данные' })
   @ApiResponse({ status: 404, description: 'Заказ не найден' })
-  async createPaymentLink(@Body() createOrderPaymentDto: CreateOrderPaymentDto): Promise<OrderPaymentResponseDto> {
-    const order = await this.orderService.findOne(createOrderPaymentDto.orderId);
+  async createPaymentLink(
+    @Body() createOrderPaymentDto: CreateOrderPaymentDto,
+  ): Promise<OrderPaymentResponseDto> {
+    const order = await this.orderService.findOne(
+      createOrderPaymentDto.orderId,
+    );
     if (!order) {
       throw new Error('Заказ не найден');
     }
 
-    return this.orderPaymentService.createPaymentLink(
+    return await this.orderPaymentService.createPaymentLink(
       createOrderPaymentDto.orderId,
       createOrderPaymentDto.amount,
     );
@@ -275,15 +283,19 @@ export class OrderController {
   @ApiOperation({ summary: 'Callback для обработки платежа заказа' })
   @ApiResponse({ status: 200, description: 'Callback обработан успешно' })
   @ApiResponse({ status: 400, description: 'Неверные данные' })
-  async handlePaymentCallback(@Body() paymentCallbackDto: OrderPaymentCallbackDto) {
-    const payment = this.orderPaymentService.getPayment(paymentCallbackDto.paymentId);
+  async handlePaymentCallback(
+    @Body() paymentCallbackDto: OrderPaymentCallbackDto,
+  ) {
+    const payment = await this.orderPaymentService.getPayment(
+      paymentCallbackDto.paymentId,
+    );
 
     if (!payment) {
       throw new Error('Платеж не найден');
     }
 
     // Обновляем статус платежа
-    this.orderPaymentService.updatePaymentStatus(
+    await this.orderPaymentService.updatePaymentStatus(
       paymentCallbackDto.paymentId,
       paymentCallbackDto.status,
     );
@@ -291,7 +303,7 @@ export class OrderController {
     if (paymentCallbackDto.status === 'success') {
       // Обновляем статус заказа на "оплачен"
       await this.orderService.updateStatus(payment.orderId, {
-        status: OrderStatus.ASSIGNED,
+        status: OrderStatus.PAID,
       });
 
       // Отправляем уведомление через WebSocket
@@ -313,7 +325,9 @@ export class OrderController {
 
   @Post('payment/simulate/:paymentId')
   @Public()
-  @ApiOperation({ summary: 'Симуляция успешной оплаты заказа (для тестирования)' })
+  @ApiOperation({
+    summary: 'Симуляция успешной оплаты заказа (для тестирования)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Оплата заказа симулирована успешно',
@@ -321,7 +335,8 @@ export class OrderController {
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
   async simulateOrderPayment(@Param('paymentId') paymentId: string) {
     try {
-      const payment = this.orderPaymentService.simulateSuccessfulPayment(paymentId);
+      const payment =
+        await this.orderPaymentService.simulateSuccessfulPayment(paymentId);
 
       if (!payment) {
         throw new Error('Платеж не найден или уже обработан');
@@ -330,7 +345,7 @@ export class OrderController {
       // Обновляем статус заказа (если он существует)
       try {
         await this.orderService.updateStatus(payment.orderId, {
-          status: OrderStatus.ASSIGNED,
+          status: OrderStatus.PAID,
         });
       } catch (error) {
         console.log('Заказ не найден, но платеж обработан:', error.message);
@@ -354,7 +369,7 @@ export class OrderController {
   @ApiResponse({ status: 200, description: 'Информация о платеже' })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
   async getOrderPayment(@Param('paymentId') paymentId: string) {
-    const payment = this.orderPaymentService.getPayment(paymentId);
+    const payment = await this.orderPaymentService.getPayment(paymentId);
     if (!payment) {
       throw new Error('Платеж не найден');
     }

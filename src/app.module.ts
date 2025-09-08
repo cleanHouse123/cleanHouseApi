@@ -33,6 +33,8 @@ import { SubscriptionModule } from './subscription/subscription.module';
           password: configService.get<string>('DATABASE_PASSWORD'),
           database: configService.get<string>('DATABASE_NAME'),
           synchronize: true,
+          timezone: 'Europe/Moscow',
+          dateStrings: true,
           entities: [
             User,
             VerificationCode,

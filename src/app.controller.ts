@@ -9,4 +9,15 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('time')
+  getTime() {
+    const now = new Date();
+    return {
+      utc: now.toISOString(),
+      local: now.toString(),
+      timezone: process.env.TZ || 'not set',
+      timestamp: now.getTime(),
+    };
+  }
 }

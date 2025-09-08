@@ -17,8 +17,8 @@ export class OrderPaymentPageController {
   ) {
     try {
       // Проверяем существование платежа
-      const payment = this.orderPaymentService.getPayment(paymentId);
-      
+      const payment = await this.orderPaymentService.getPayment(paymentId);
+
       if (!payment) {
         return res.status(404).send('Платеж не найден');
       }
@@ -35,26 +35,29 @@ export class OrderPaymentPageController {
         'templates',
         'order-payment-form.html',
       );
-      
+
       this.logger.log(`Пытаемся загрузить шаблон из: ${templatePath}`);
-      
+
       let html = readFileSync(templatePath, 'utf8');
 
       // Заменяем параметры в HTML
       html = html.replace(
-        'const paymentId = urlParams.get(\'paymentId\') || \'test-payment-id\';',
+        "const paymentId = urlParams.get('paymentId') || 'test-payment-id';",
         `const paymentId = '${paymentId}';`,
       );
-      
+
       html = html.replace(
-        'const amount = urlParams.get(\'amount\') || \'1000\';',
+        "const amount = urlParams.get('amount') || '1000';",
         `const amount = '${payment.amount}';`,
       );
 
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
     } catch (error) {
-      this.logger.error(`Ошибка загрузки формы оплаты для paymentId: ${paymentId}`, error);
+      this.logger.error(
+        `Ошибка загрузки формы оплаты для paymentId: ${paymentId}`,
+        error,
+      );
       res.status(500).send(`Ошибка загрузки формы оплаты: ${error.message}`);
     }
   }

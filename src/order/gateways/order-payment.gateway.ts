@@ -52,12 +52,14 @@ export class OrderPaymentGateway {
   ) {
     const roomName = `order_payment_${data.paymentId}`;
     client.join(roomName);
-    
-    this.logger.log(`Client ${client.id} joined order payment room: ${roomName}`);
-    
+
+    this.logger.log(
+      `Client ${client.id} joined order payment room: ${roomName}`,
+    );
+
     // Запускаем периодическую проверку статуса платежа
     this.startPaymentStatusCheck(data.paymentId, roomName);
-    
+
     return { message: 'Подключен к комнате оплаты заказа', room: roomName };
   }
 
@@ -69,12 +71,12 @@ export class OrderPaymentGateway {
   ) {
     const roomName = `order_payment_${data.paymentId}`;
     client.leave(roomName);
-    
+
     this.logger.log(`Client ${client.id} left order payment room: ${roomName}`);
-    
+
     // Останавливаем проверку статуса платежа
     this.stopPaymentStatusCheck(data.paymentId);
-    
+
     return { message: 'Отключен от комнаты оплаты заказа' };
   }
 
@@ -83,17 +85,38 @@ export class OrderPaymentGateway {
     // Останавливаем предыдущую проверку, если она была
     this.stopPaymentStatusCheck(paymentId);
 
+    let lastStatus: string | null = null;
+    let checkCount = 0;
+    const maxChecks = 150; // Максимум 5 минут проверок (150 * 2 сек = 300 сек)
+
     const interval = setInterval(async () => {
       try {
-        const payment = this.orderPaymentService.getPayment(paymentId);
-        
+        const payment = await this.orderPaymentService.getPayment(paymentId);
+
         if (!payment) {
           this.logger.warn(`Order payment ${paymentId} not found`);
           this.stopPaymentStatusCheck(paymentId);
           return;
         }
 
-        this.logger.log(`Checking order payment ${paymentId} status: ${payment.status}`);
+        // Логируем только при изменении статуса или каждые 10 проверок
+        if (payment.status !== lastStatus || checkCount % 10 === 0) {
+          this.logger.log(
+            `Checking order payment ${paymentId} status: ${payment.status}`,
+          );
+          lastStatus = payment.status;
+        }
+
+        checkCount++;
+
+        // Если превышено максимальное количество проверок, останавливаем
+        if (checkCount >= maxChecks) {
+          this.logger.warn(
+            `Order payment ${paymentId} check timeout after ${maxChecks} checks`,
+          );
+          this.stopPaymentStatusCheck(paymentId);
+          return;
+        }
 
         // Отправляем текущий статус платежа
         this.server.to(roomName).emit('order_payment_status_update', {
@@ -104,9 +127,11 @@ export class OrderPaymentGateway {
 
         // Если платеж завершен (успешно или с ошибкой), останавливаем проверку
         if (payment.status === 'success' || payment.status === 'failed') {
-          this.logger.log(`Order payment ${paymentId} completed with status: ${payment.status}`);
+          this.logger.log(
+            `Order payment ${paymentId} completed with status: ${payment.status}`,
+          );
           this.stopPaymentStatusCheck(paymentId);
-          
+
           // Отправляем финальное уведомление
           if (payment.status === 'success') {
             this.server.to(roomName).emit('order_payment_success', {

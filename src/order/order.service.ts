@@ -39,7 +39,7 @@ export class OrderService {
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
       description: createOrderDto.description,
-      price: createOrderDto.price,
+      price: 200.0, // Фиксированная цена
       notes: createOrderDto.notes,
       scheduledAt: createOrderDto.scheduledAt
         ? new Date(createOrderDto.scheduledAt)
@@ -49,16 +49,7 @@ export class OrderService {
 
     const savedOrder = await this.orderRepository.save(order);
 
-    // Создаем платеж (замокаем)
-    const payment = this.paymentRepository.create({
-      orderId: savedOrder.id,
-      amount: createOrderDto.price,
-      status: PaymentStatus.PENDING,
-      method: createOrderDto.paymentMethod,
-    });
-
-    await this.paymentRepository.save(payment);
-
+    // Платеж будет создан при создании ссылки на оплату
     return this.findOne(savedOrder.id);
   }
 
@@ -201,7 +192,12 @@ export class OrderService {
     newStatus: OrderStatus,
   ): void {
     const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.NEW]: [OrderStatus.ASSIGNED, OrderStatus.CANCELED],
+      [OrderStatus.NEW]: [
+        OrderStatus.PAID,
+        OrderStatus.ASSIGNED,
+        OrderStatus.CANCELED,
+      ],
+      [OrderStatus.PAID]: [OrderStatus.ASSIGNED, OrderStatus.CANCELED],
       [OrderStatus.ASSIGNED]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED],
       [OrderStatus.IN_PROGRESS]: [OrderStatus.DONE, OrderStatus.CANCELED],
       [OrderStatus.DONE]: [],
@@ -353,5 +349,21 @@ export class OrderService {
     await this.orderRepository.save(order);
 
     return this.findOne(orderId);
+  }
+
+  async updatePaymentStatus(
+    paymentId: string,
+    status: PaymentStatus,
+  ): Promise<void> {
+    const payment = await this.paymentRepository.findOne({
+      where: { id: paymentId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Платеж не найден');
+    }
+
+    payment.status = status;
+    await this.paymentRepository.save(payment);
   }
 }
