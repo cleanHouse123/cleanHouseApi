@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { SubscriptionPaymentResponseDto } from '../dto/create-payment.dto';
 
@@ -6,10 +7,20 @@ import { SubscriptionPaymentResponseDto } from '../dto/create-payment.dto';
 export class PaymentService {
   private payments = new Map<string, any>();
 
+  constructor(private configService: ConfigService) {}
+
   // Создание ссылки на оплату
-  createPaymentLink(subscriptionId: string, amount: number, subscriptionType?: string): SubscriptionPaymentResponseDto {
+  createPaymentLink(
+    subscriptionId: string,
+    amount: number,
+    subscriptionType?: string,
+  ): SubscriptionPaymentResponseDto {
     const paymentId = uuidv4();
-    const paymentUrl = `http://localhost:3000/payment/${paymentId}`;
+    const baseUrl = this.configService.get<string>(
+      'BASE_URL',
+      'http://localhost:3000',
+    );
+    const paymentUrl = `${baseUrl}/payment/${paymentId}`;
 
     // Сохраняем информацию о платеже
     this.payments.set(paymentId, {

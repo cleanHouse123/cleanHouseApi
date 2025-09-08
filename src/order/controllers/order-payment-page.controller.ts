@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Res, Logger } from '@nestjs/common';
 import { Response } from 'express';
 import { OrderPaymentService } from '../services/order-payment.service';
+import { SharedConfigService } from '../../shared/services/config.service';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -8,7 +9,10 @@ import { join } from 'path';
 export class OrderPaymentPageController {
   private readonly logger = new Logger(OrderPaymentPageController.name);
 
-  constructor(private readonly orderPaymentService: OrderPaymentService) {}
+  constructor(
+    private readonly orderPaymentService: OrderPaymentService,
+    private readonly configService: SharedConfigService,
+  ) {}
 
   @Get(':paymentId')
   async showPaymentForm(
@@ -49,6 +53,13 @@ export class OrderPaymentPageController {
       html = html.replace(
         "const amount = urlParams.get('amount') || '1000';",
         `const amount = '${payment.amount}';`,
+      );
+
+      // Заменяем WebSocket URL
+      const wsUrl = this.configService.getWebSocketUrl();
+      html = html.replace(
+        "const socket = io('http://localhost:3000');",
+        `const socket = io('${wsUrl}');`,
       );
 
       res.setHeader('Content-Type', 'text/html');

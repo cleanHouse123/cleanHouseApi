@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { OrderPaymentResponseDto } from '../dto/create-order-payment.dto';
 import {
@@ -16,6 +17,7 @@ export class OrderPaymentService {
   constructor(
     @InjectRepository(Payment)
     private paymentRepository: Repository<Payment>,
+    private configService: ConfigService,
   ) {}
 
   // Создание ссылки на оплату заказа
@@ -28,9 +30,14 @@ export class OrderPaymentService {
       where: { orderId },
     });
 
+    const baseUrl = this.configService.get<string>(
+      'BASE_URL',
+      'http://localhost:3000',
+    );
+
     if (existingPayment) {
       // Если платеж уже существует, возвращаем его
-      const paymentUrl = `http://localhost:3000/order-payment/${existingPayment.id}`;
+      const paymentUrl = `${baseUrl}/order-payment/${existingPayment.id}`;
 
       // Сохраняем в памяти для быстрого доступа
       this.payments.set(existingPayment.id, {
@@ -50,7 +57,7 @@ export class OrderPaymentService {
 
     // Создаем новый платеж только если его нет
     const paymentId = uuidv4();
-    const paymentUrl = `http://localhost:3000/order-payment/${paymentId}`;
+    const paymentUrl = `${baseUrl}/order-payment/${paymentId}`;
 
     const payment = this.paymentRepository.create({
       id: paymentId,
