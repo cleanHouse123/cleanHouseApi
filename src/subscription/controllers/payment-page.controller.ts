@@ -62,10 +62,7 @@ export class PaymentPageController {
 
       // Заменяем WebSocket URL
       const wsUrl = this.configService.getWebSocketUrl();
-      html = html.replace(
-        "const socket = io('http://localhost:3000');",
-        `const socket = io('${wsUrl}');`,
-      );
+      html = html.replace('{{WEBSOCKET_URL}}', wsUrl);
 
       res.setHeader('Content-Type', 'text/html');
       res.send(html);

@@ -130,7 +130,7 @@ Content-Type: application/json
 При загрузке формы автоматически:
 
 ```javascript
-const socket = io('http://localhost:3000');
+const socket = io('ws://localhost:3000'); // или wss://yourdomain.com для HTTPS
 
 socket.on('connect', () => {
   socket.emit('join_order_payment_room', {
@@ -302,7 +302,7 @@ class OrderPaymentTracker {
   private socket: any;
 
   constructor(paymentId: string, userId: string) {
-    this.socket = io('http://localhost:3000');
+    this.socket = io('ws://localhost:3000'); // или wss://yourdomain.com для HTTPS
 
     this.socket.on('connect', () => {
       this.socket.emit('join_order_payment_room', {

@@ -17,43 +17,59 @@ export class TimezoneInterceptor implements NestInterceptor {
     );
   }
 
-  private transformDates(obj: any): any {
+  private transformDates(obj: any, visited = new WeakSet()): any {
     if (obj === null || obj === undefined) {
       return obj;
     }
 
+    // Пропускаем примитивные типы
+    if (typeof obj !== 'object') {
+      // Обрабатываем строки дат (ISO формат)
+      if (typeof obj === 'string' && this.isISODateString(obj)) {
+        const date = new Date(obj);
+        const moscowDate = new Date(
+          date.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }),
+        );
+        return moscowDate.toISOString();
+      }
+      return obj;
+    }
+
+    // Предотвращаем циклические ссылки
+    if (visited.has(obj)) {
+      return obj;
+    }
+
+    // Пропускаем специальные объекты
     if (obj instanceof Date) {
-      // Создаем новую дату в московском времени
       const moscowDate = new Date(
         obj.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }),
       );
       return moscowDate.toISOString();
     }
 
-    // Обрабатываем строки дат (ISO формат)
-    if (typeof obj === 'string' && this.isISODateString(obj)) {
-      const date = new Date(obj);
-      const moscowDate = new Date(
-        date.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }),
-      );
-      return moscowDate.toISOString();
+    // Пропускаем функции, Buffer, и другие специальные объекты
+    if (
+      typeof obj === 'function' ||
+      Buffer.isBuffer(obj) ||
+      obj.constructor?.name === 'Socket'
+    ) {
+      return obj;
     }
+
+    visited.add(obj);
 
     if (Array.isArray(obj)) {
-      return obj.map((item) => this.transformDates(item));
+      return obj.map((item) => this.transformDates(item, visited));
     }
 
-    if (typeof obj === 'object') {
-      const transformed: any = {};
-      for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          transformed[key] = this.transformDates(obj[key]);
-        }
+    const transformed: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        transformed[key] = this.transformDates(obj[key], visited);
       }
-      return transformed;
     }
-
-    return obj;
+    return transformed;
   }
 
   private isISODateString(str: string): boolean {

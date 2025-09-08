@@ -339,7 +339,7 @@
         document.getElementById('payment-amount').textContent = amount + ' ₽';
 
         // Подключение к WebSocket
-        const socket = io('http://localhost:3000');
+        const socket = io('{{WEBSOCKET_URL}}');
         
         socket.on('connect', () => {
             console.log('Connected to WebSocket server');

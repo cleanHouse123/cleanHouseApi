@@ -688,6 +688,7 @@ import { io } from 'socket.io-client';
 
 // Подключение к WebSocket серверу
 const socket = io('ws://localhost:3000', {
+  // или wss://yourdomain.com для HTTPS
   transports: ['websocket'],
 });
 
@@ -735,7 +736,7 @@ socket.emit('leave_payment_room', {
 ```javascript
 class SubscriptionService {
   constructor() {
-    this.socket = io('ws://localhost:3000');
+    this.socket = io('ws://localhost:3000'); // или wss://yourdomain.com для HTTPS
     this.setupSocketListeners();
   }
 
