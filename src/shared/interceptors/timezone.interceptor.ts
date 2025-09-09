@@ -22,6 +22,15 @@ export class TimezoneInterceptor implements NestInterceptor {
       return obj;
     }
 
+    // Обрабатываем ошибки
+    if (obj instanceof Error) {
+      return {
+        name: obj.name,
+        message: obj.message,
+        stack: obj.stack,
+      };
+    }
+
     // Пропускаем примитивные типы
     if (typeof obj !== 'object') {
       // Обрабатываем строки дат (ISO формат)
@@ -37,7 +46,7 @@ export class TimezoneInterceptor implements NestInterceptor {
 
     // Предотвращаем циклические ссылки
     if (visited.has(obj)) {
-      return obj;
+      return '[Circular]';
     }
 
     // Пропускаем специальные объекты
@@ -52,7 +61,18 @@ export class TimezoneInterceptor implements NestInterceptor {
     if (
       typeof obj === 'function' ||
       Buffer.isBuffer(obj) ||
-      obj.constructor?.name === 'Socket'
+      obj.constructor?.name === 'Socket' ||
+      obj.constructor?.name === 'Server' ||
+      obj.constructor?.name === 'EventEmitter' ||
+      obj.constructor?.name === 'WebSocket' ||
+      obj.constructor?.name === 'WebSocketServer' ||
+      obj.constructor?.name === 'Map' ||
+      obj.constructor?.name === 'Set' ||
+      obj.constructor?.name === 'WeakMap' ||
+      obj.constructor?.name === 'WeakSet' ||
+      obj.constructor?.name === 'Promise' ||
+      obj.constructor?.name === 'Generator' ||
+      obj.constructor?.name === 'AsyncGenerator'
     ) {
       return obj;
     }
@@ -60,13 +80,26 @@ export class TimezoneInterceptor implements NestInterceptor {
     visited.add(obj);
 
     if (Array.isArray(obj)) {
-      return obj.map((item) => this.transformDates(item, visited));
+      return obj.map((item) => {
+        try {
+          return this.transformDates(item, visited);
+        } catch (error) {
+          console.warn(`Failed to serialize array item:`, error.message);
+          return '[Non-serializable]';
+        }
+      });
     }
 
     const transformed: any = {};
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        transformed[key] = this.transformDates(obj[key], visited);
+        try {
+          transformed[key] = this.transformDates(obj[key], visited);
+        } catch (error) {
+          // Если не можем сериализовать свойство, пропускаем его
+          console.warn(`Failed to serialize property ${key}:`, error.message);
+          transformed[key] = '[Non-serializable]';
+        }
       }
     }
     return transformed;

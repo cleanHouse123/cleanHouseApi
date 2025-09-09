@@ -2,12 +2,12 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsOptional,
-  IsEnum,
   IsDateString,
   MaxLength,
   IsUUID,
 } from 'class-validator';
 import { PaymentMethod } from '../entities/payment.entity';
+import { IsOptionalEnum } from '../../shared/validators/optional-enum.validator';
 
 export class CreateOrderDto {
   @ApiProperty({
@@ -60,7 +60,6 @@ export class CreateOrderDto {
     example: PaymentMethod.CARD,
     required: false,
   })
-  @IsOptional()
-  @IsEnum(PaymentMethod)
+  @IsOptionalEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
 }

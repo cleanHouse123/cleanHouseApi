@@ -124,7 +124,7 @@ const orderWithSubscription = {
   customerId: 'user-uuid',
   address: 'ул. Пушкина, д. 10',
   description: 'Уборка квартиры',
-  // paymentMethod не требуется
+  // paymentMethod не требуется - заказ автоматически оплачивается
 };
 
 // Без активной подписки (paymentMethod обязательно)
@@ -132,6 +132,39 @@ const orderWithoutSubscription = {
   customerId: 'user-uuid',
   address: 'ул. Пушкина, д. 10',
   description: 'Уборка квартиры',
-  paymentMethod: 'card', // обязательно
+  paymentMethod: 'card', // обязательно - один из: 'cash', 'card', 'online'
+};
+
+// С активной подпиской и явным указанием способа оплаты
+const orderWithSubscriptionExplicit = {
+  customerId: 'user-uuid',
+  address: 'ул. Пушкина, д. 10',
+  description: 'Уборка квартиры',
+  paymentMethod: 'subscription', // требует активную подписку
+};
+
+// Также можно не передавать paymentMethod вообще (undefined)
+const orderWithoutPaymentMethod = {
+  customerId: 'user-uuid',
+  address: 'ул. Пушкина, д. 10',
+  description: 'Уборка квартиры',
+  // paymentMethod: undefined - валидация пройдет, но в сервисе будет проверка подписки
 };
 ```
+
+### Валидация
+
+- Поле `paymentMethod` теперь полностью опциональное
+- Если передано значение, оно должно быть одним из: `'cash'`, `'card'`, `'online'`, `'subscription'`
+- Если не передано (undefined/null), валидация проходит успешно
+- В сервисе проверяется наличие активной подписки:
+  - **Есть подписка**: заказ создается со статусом `PAID`
+  - **Нет подписки**: требуется `paymentMethod`, иначе ошибка
+  - **`paymentMethod: 'subscription'`**: требует активную подписку, иначе ошибка
+
+### Способы оплаты
+
+- `'cash'` - наличными
+- `'card'` - картой
+- `'online'` - онлайн платеж
+- `'subscription'` - через подписку (требует активную подписку)

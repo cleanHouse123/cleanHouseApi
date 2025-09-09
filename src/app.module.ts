@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { OrderModule } from './order/order.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { PaymentStatusModule } from './shared/modules/payment-status.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
     UserModule,
     OrderModule,
     SubscriptionModule,
+    PaymentStatusModule,
   ],
   controllers: [AppController],
   providers: [AppService],

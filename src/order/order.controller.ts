@@ -31,6 +31,7 @@ import { OrderStatus } from './entities/order.entity';
 import { Public } from '../shared/decorators/public.decorator';
 import { OrderPaymentService } from './services/order-payment.service';
 import { OrderPaymentGateway } from './gateways/order-payment.gateway';
+import { PaymentInfoDto } from '../shared/dto/payment-info.dto';
 
 @ApiTags('orders')
 @Controller('orders')
@@ -357,7 +358,18 @@ export class OrderController {
         payment.orderId,
       );
 
-      return { message: 'Оплата заказа симулирована успешно', payment };
+      return {
+        message: 'Оплата заказа симулирована успешно',
+        payment: {
+          id: payment.id,
+          orderId: payment.orderId,
+          amount: payment.amount,
+          status: payment.status,
+          createdAt: payment.createdAt,
+          updatedAt: payment.updatedAt,
+          paidAt: payment.paidAt,
+        },
+      };
     } catch (error) {
       console.error('Ошибка при симуляции платежа заказа:', error);
       throw error;
@@ -366,13 +378,27 @@ export class OrderController {
 
   @Get('payment/:paymentId')
   @ApiOperation({ summary: 'Получить информацию о платеже заказа' })
-  @ApiResponse({ status: 200, description: 'Информация о платеже' })
+  @ApiResponse({
+    status: 200,
+    description: 'Информация о платеже',
+    type: PaymentInfoDto,
+  })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async getOrderPayment(@Param('paymentId') paymentId: string) {
+  async getOrderPayment(
+    @Param('paymentId') paymentId: string,
+  ): Promise<PaymentInfoDto> {
     const payment = await this.orderPaymentService.getPayment(paymentId);
     if (!payment) {
       throw new Error('Платеж не найден');
     }
-    return payment;
+    return {
+      id: payment.id,
+      orderId: payment.orderId,
+      amount: payment.amount,
+      status: payment.status,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+      paidAt: payment.paidAt,
+    };
   }
 }

@@ -11,7 +11,10 @@ import {
 } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/subscription.dto';
 import { UpdateSubscriptionStatusDto } from './dto/subscription.dto';
-import { SubscriptionResponseDto } from './dto/subscription-response.dto';
+import {
+  SubscriptionResponseDto,
+  UserResponseDto,
+} from './dto/subscription-response.dto';
 import { User } from '../user/entities/user.entity';
 
 @Injectable()
@@ -200,7 +203,11 @@ export class SubscriptionService {
   ): SubscriptionResponseDto {
     return {
       id: subscription.id,
-      user: subscription.user,
+      user: {
+        id: subscription.user.id,
+        name: subscription.user.name,
+        phone: subscription.user.phone,
+      } as UserResponseDto,
       type: subscription.type,
       status: subscription.status,
       price: subscription.price,

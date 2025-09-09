@@ -33,6 +33,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubscriptionStatus } from './entities/subscription.entity';
 import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
+import { PaymentInfoDto } from '../shared/dto/payment-info.dto';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -268,7 +269,18 @@ export class SubscriptionController {
         payment.subscriptionId,
       );
 
-      return { message: 'Оплата симулирована успешно', payment };
+      return {
+        message: 'Оплата симулирована успешно',
+        payment: {
+          id: payment.id,
+          subscriptionId: payment.subscriptionId,
+          amount: payment.amount,
+          status: payment.status,
+          createdAt: payment.createdAt,
+          updatedAt: payment.updatedAt,
+          paidAt: payment.paidAt,
+        },
+      };
     } catch (error) {
       console.error('Ошибка при симуляции платежа:', error);
       throw error;
@@ -280,15 +292,26 @@ export class SubscriptionController {
   @ApiResponse({
     status: 200,
     description: 'Информация о платеже',
+    type: PaymentInfoDto,
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async getPayment(@Param('paymentId') paymentId: string) {
+  async getPayment(
+    @Param('paymentId') paymentId: string,
+  ): Promise<PaymentInfoDto> {
     const payment = this.paymentService.getPayment(paymentId);
 
     if (!payment) {
       throw new Error('Платеж не найден');
     }
 
-    return payment;
+    return {
+      id: payment.id,
+      subscriptionId: payment.subscriptionId,
+      amount: payment.amount,
+      status: payment.status,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+      paidAt: payment.paidAt,
+    };
   }
 }

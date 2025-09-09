@@ -46,17 +46,26 @@ export class OrderService {
         createOrderDto.customerId,
       );
 
-    // Если нет активной подписки и не указан способ оплаты
-    if (!activeSubscription && !createOrderDto.paymentMethod) {
+    // Определяем статус заказа и способ оплаты
+    let orderStatus = OrderStatus.NEW;
+    let paymentMethod = createOrderDto.paymentMethod;
+
+    // Если указан способ оплаты "subscription" или есть активная подписка
+    if (
+      createOrderDto.paymentMethod === PaymentMethod.SUBSCRIPTION ||
+      activeSubscription
+    ) {
+      if (!activeSubscription) {
+        throw new BadRequestException(
+          'У вас нет активной подписки для оплаты через подписку',
+        );
+      }
+      orderStatus = OrderStatus.PAID; // Заказ сразу оплачен
+      paymentMethod = PaymentMethod.SUBSCRIPTION;
+    } else if (!createOrderDto.paymentMethod) {
       throw new BadRequestException(
         'Необходимо указать способ оплаты или иметь активную подписку',
       );
-    }
-
-    // Определяем статус заказа
-    let orderStatus = OrderStatus.NEW;
-    if (activeSubscription) {
-      orderStatus = OrderStatus.PAID; // Если есть подписка, заказ сразу оплачен
     }
 
     // Создаем заказ
@@ -74,13 +83,16 @@ export class OrderService {
 
     const savedOrder = await this.orderRepository.save(order);
 
-    // Если есть активная подписка, создаем автоматический платеж
-    if (activeSubscription) {
+    // Если заказ оплачен через подписку, создаем автоматический платеж
+    if (
+      orderStatus === OrderStatus.PAID &&
+      paymentMethod === PaymentMethod.SUBSCRIPTION
+    ) {
       const payment = this.paymentRepository.create({
         orderId: savedOrder.id,
         amount: 0, // Бесплатно для подписчиков
         status: PaymentStatus.PAID,
-        method: PaymentMethod.ONLINE,
+        method: PaymentMethod.SUBSCRIPTION,
       });
       await this.paymentRepository.save(payment);
     }

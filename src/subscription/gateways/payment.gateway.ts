@@ -40,23 +40,39 @@ export class PaymentGateway {
   // Отправка уведомления о успешной оплате
   notifyPaymentSuccess(paymentId: string, subscriptionId: string) {
     const roomName = `payment_${paymentId}`;
+    this.logger.log(
+      `[SUBSCRIPTION PAYMENT SUCCESS] PaymentId: ${paymentId}, SubscriptionId: ${subscriptionId}, Room: ${roomName}`,
+    );
+
     this.server.to(roomName).emit('payment_success', {
       paymentId,
       subscriptionId,
       message: 'Подписка успешно оформлена!',
       timestamp: new Date().toISOString(),
     });
+
+    this.logger.log(
+      `[SUBSCRIPTION PAYMENT SUCCESS] Event sent to room: ${roomName}`,
+    );
   }
 
   // Отправка уведомления об ошибке оплаты
   notifyPaymentError(paymentId: string, subscriptionId: string, error: string) {
     const roomName = `payment_${paymentId}`;
+    this.logger.error(
+      `[SUBSCRIPTION PAYMENT ERROR] PaymentId: ${paymentId}, SubscriptionId: ${subscriptionId}, Error: ${error}, Room: ${roomName}`,
+    );
+
     this.server.to(roomName).emit('payment_error', {
       paymentId,
       subscriptionId,
       error,
       timestamp: new Date().toISOString(),
     });
+
+    this.logger.error(
+      `[SUBSCRIPTION PAYMENT ERROR] Event sent to room: ${roomName}`,
+    );
   }
 
   // Подключение клиента
@@ -66,11 +82,19 @@ export class PaymentGateway {
     @ConnectedSocket() client: Socket,
   ) {
     const roomName = `payment_${data.paymentId}`;
-    client.join(roomName);
+    this.logger.log(
+      `[SUBSCRIPTION JOIN ROOM] Client: ${client.id}, UserId: ${data.userId}, PaymentId: ${data.paymentId}, Room: ${roomName}`,
+    );
 
-    this.logger.log(`Client ${client.id} joined payment room: ${roomName}`);
+    client.join(roomName);
+    this.logger.log(
+      `[SUBSCRIPTION JOIN ROOM] Client ${client.id} successfully joined room: ${roomName}`,
+    );
 
     // Запускаем периодическую проверку статуса платежа
+    this.logger.log(
+      `[SUBSCRIPTION JOIN ROOM] Starting payment status check for PaymentId: ${data.paymentId}`,
+    );
     this.startPaymentStatusCheck(data.paymentId, roomName);
 
     return { message: 'Подключен к комнате оплаты', room: roomName };
@@ -83,11 +107,19 @@ export class PaymentGateway {
     @ConnectedSocket() client: Socket,
   ) {
     const roomName = `payment_${data.paymentId}`;
-    client.leave(roomName);
+    this.logger.log(
+      `[SUBSCRIPTION LEAVE ROOM] Client: ${client.id}, UserId: ${data.userId}, PaymentId: ${data.paymentId}, Room: ${roomName}`,
+    );
 
-    this.logger.log(`Client ${client.id} left payment room: ${roomName}`);
+    client.leave(roomName);
+    this.logger.log(
+      `[SUBSCRIPTION LEAVE ROOM] Client ${client.id} successfully left room: ${roomName}`,
+    );
 
     // Останавливаем проверку статуса платежа
+    this.logger.log(
+      `[SUBSCRIPTION LEAVE ROOM] Stopping payment status check for PaymentId: ${data.paymentId}`,
+    );
     this.stopPaymentStatusCheck(data.paymentId);
 
     return { message: 'Отключен от комнаты оплаты' };
@@ -97,19 +129,24 @@ export class PaymentGateway {
   private startPaymentStatusCheck(paymentId: string, roomName: string) {
     // Останавливаем предыдущую проверку, если она была
     this.stopPaymentStatusCheck(paymentId);
+    this.logger.log(
+      `[SUBSCRIPTION STATUS CHECK] Starting periodic check for PaymentId: ${paymentId}, Room: ${roomName}`,
+    );
 
     const interval = setInterval(async () => {
       try {
         const payment = this.paymentService.getPayment(paymentId);
 
         if (!payment) {
-          this.logger.warn(`Payment ${paymentId} not found`);
+          this.logger.warn(
+            `[SUBSCRIPTION STATUS CHECK] Payment ${paymentId} not found, stopping check`,
+          );
           this.stopPaymentStatusCheck(paymentId);
           return;
         }
 
         this.logger.log(
-          `Checking payment ${paymentId} status: ${payment.status}`,
+          `[SUBSCRIPTION STATUS CHECK] PaymentId: ${paymentId}, Status: ${payment.status}, Room: ${roomName}`,
         );
 
         // Отправляем текущий статус платежа
@@ -118,16 +155,22 @@ export class PaymentGateway {
           status: payment.status,
           timestamp: new Date().toISOString(),
         });
+        this.logger.log(
+          `[SUBSCRIPTION STATUS CHECK] Status update sent to room: ${roomName}`,
+        );
 
         // Если платеж завершен (успешно или с ошибкой), останавливаем проверку
         if (payment.status === 'success' || payment.status === 'failed') {
           this.logger.log(
-            `Payment ${paymentId} completed with status: ${payment.status}`,
+            `[SUBSCRIPTION STATUS CHECK] Payment ${paymentId} completed with status: ${payment.status}, stopping check`,
           );
           this.stopPaymentStatusCheck(paymentId);
 
           // Отправляем финальное уведомление
           if (payment.status === 'success') {
+            this.logger.log(
+              `[SUBSCRIPTION STATUS CHECK] Sending success notification for PaymentId: ${paymentId}`,
+            );
             this.server.to(roomName).emit('payment_success', {
               paymentId,
               subscriptionId: payment.subscriptionId,
@@ -135,6 +178,9 @@ export class PaymentGateway {
               timestamp: new Date().toISOString(),
             });
           } else {
+            this.logger.log(
+              `[SUBSCRIPTION STATUS CHECK] Sending error notification for PaymentId: ${paymentId}`,
+            );
             this.server.to(roomName).emit('payment_error', {
               paymentId,
               subscriptionId: payment.subscriptionId,
@@ -144,11 +190,17 @@ export class PaymentGateway {
           }
         }
       } catch (error) {
-        this.logger.error(`Error checking payment ${paymentId}:`, error);
+        this.logger.error(
+          `[SUBSCRIPTION STATUS CHECK] Error checking payment ${paymentId}:`,
+          error,
+        );
       }
     }, 2000); // Проверяем каждые 2 секунды
 
     this.paymentCheckIntervals.set(paymentId, interval);
+    this.logger.log(
+      `[SUBSCRIPTION STATUS CHECK] Interval set for PaymentId: ${paymentId}`,
+    );
   }
 
   // Остановка периодической проверки статуса платежа
@@ -157,7 +209,13 @@ export class PaymentGateway {
     if (interval) {
       clearInterval(interval);
       this.paymentCheckIntervals.delete(paymentId);
-      this.logger.log(`Stopped payment status check for ${paymentId}`);
+      this.logger.log(
+        `[SUBSCRIPTION STATUS CHECK] Stopped payment status check for PaymentId: ${paymentId}`,
+      );
+    } else {
+      this.logger.log(
+        `[SUBSCRIPTION STATUS CHECK] No active interval found for PaymentId: ${paymentId}`,
+      );
     }
   }
 }
