@@ -1,8 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { UserRole } from 'src/shared/types/user.role';
+import * as bcrypt from 'bcrypt';
+import { AdminResponseDto } from './dto/admin-response.dto';
 
 @Injectable()
 export class UserService {
@@ -69,6 +73,42 @@ export class UserService {
 
   async remove(id: string): Promise<void> {
     await this.userRepository.delete(id);
+  }
+
+  async createAdmin(createAdminDto: CreateAdminDto): Promise<User> {
+    const existingUserByEmail = await this.findByEmail(createAdminDto.email);
+    if (existingUserByEmail) {
+      throw new ConflictException('Пользователь с таким email уже существует');
+    }
+
+    const existingUserByPhone = await this.findByPhone(createAdminDto.phone);
+    if (existingUserByPhone) {
+      throw new ConflictException('Пользователь с таким номером телефона уже существует');
+    }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(createAdminDto.password, saltRounds);
+
+    const adminData = {
+      name: createAdminDto.name,
+      email: createAdminDto.email,
+      phone: createAdminDto.phone,
+      hash_password: hashedPassword,
+      role: UserRole.ADMIN,
+      isPhoneVerified: false,
+      isEmailVerified: false,
+    };
+
+    const admin = this.userRepository.create(adminData);
+    return this.userRepository.save(admin);
+  }
+
+
+  async getAdmins(): Promise<AdminResponseDto[]> {
+    const admins = await this.userRepository.find({ where: { role: UserRole.ADMIN } });
+    return admins.map((admin) => {
+      return new AdminResponseDto(admin);
+    });
   }
 
 }
