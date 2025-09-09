@@ -7,11 +7,15 @@ import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
 import { SharedConfigService } from '../shared/services/config.service';
 import { Subscription } from './entities/subscription.entity';
+import { SubscriptionPayment } from './entities/subscription-payment.entity';
 import { User } from '../user/entities/user.entity';
 import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Subscription, User]), UserModule],
+  imports: [
+    TypeOrmModule.forFeature([Subscription, SubscriptionPayment, User]),
+    UserModule,
+  ],
   controllers: [SubscriptionController, PaymentPageController],
   providers: [
     SubscriptionService,

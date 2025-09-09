@@ -186,7 +186,7 @@ export class SubscriptionController {
       throw new Error('Подписка не найдена');
     }
 
-    return this.paymentService.createPaymentLink(
+    return await this.paymentService.createPaymentLink(
       createPaymentDto.subscriptionId,
       createPaymentDto.amount,
       createPaymentDto.subscriptionType,
@@ -201,7 +201,7 @@ export class SubscriptionController {
   })
   @ApiResponse({ status: 400, description: 'Неверные данные' })
   async handlePaymentCallback(@Body() paymentCallbackDto: PaymentCallbackDto) {
-    const payment = this.paymentService.getPayment(
+    const payment = await this.paymentService.getPayment(
       paymentCallbackDto.paymentId,
     );
 
@@ -210,7 +210,7 @@ export class SubscriptionController {
     }
 
     // Обновляем статус платежа
-    this.paymentService.updatePaymentStatus(
+    await this.paymentService.updatePaymentStatus(
       paymentCallbackDto.paymentId,
       paymentCallbackDto.status,
     );
@@ -248,7 +248,8 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
   async simulatePayment(@Param('paymentId') paymentId: string) {
     try {
-      const payment = this.paymentService.simulateSuccessfulPayment(paymentId);
+      const payment =
+        await this.paymentService.simulateSuccessfulPayment(paymentId);
 
       if (!payment) {
         throw new Error('Платеж не найден или уже обработан');
@@ -298,7 +299,7 @@ export class SubscriptionController {
   async getPayment(
     @Param('paymentId') paymentId: string,
   ): Promise<PaymentInfoDto> {
-    const payment = this.paymentService.getPayment(paymentId);
+    const payment = await this.paymentService.getPayment(paymentId);
 
     if (!payment) {
       throw new Error('Платеж не найден');

@@ -135,7 +135,7 @@ export class PaymentGateway {
 
     const interval = setInterval(async () => {
       try {
-        const payment = this.paymentService.getPayment(paymentId);
+        const payment = await this.paymentService.getPayment(paymentId);
 
         if (!payment) {
           this.logger.warn(

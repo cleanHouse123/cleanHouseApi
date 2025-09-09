@@ -21,7 +21,7 @@ export class PaymentPageController {
   ) {
     try {
       // Проверяем существование платежа
-      const payment = this.paymentService.getPayment(paymentId);
+      const payment = await this.paymentService.getPayment(paymentId);
 
       if (!payment) {
         return res.status(404).send('Платеж не найден');

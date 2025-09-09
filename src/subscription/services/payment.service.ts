@@ -1,20 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { SubscriptionPaymentResponseDto } from '../dto/create-payment.dto';
+import {
+  SubscriptionPayment,
+  SubscriptionPaymentStatus,
+} from '../entities/subscription-payment.entity';
 
 @Injectable()
 export class PaymentService {
-  private payments = new Map<string, any>();
-
-  constructor(private configService: ConfigService) {}
+  constructor(
+    @InjectRepository(SubscriptionPayment)
+    private subscriptionPaymentRepository: Repository<SubscriptionPayment>,
+    private configService: ConfigService,
+  ) {}
 
   // Создание ссылки на оплату
-  createPaymentLink(
+  async createPaymentLink(
     subscriptionId: string,
     amount: number,
     subscriptionType?: string,
-  ): SubscriptionPaymentResponseDto {
+  ): Promise<SubscriptionPaymentResponseDto> {
     const paymentId = uuidv4();
     const baseUrl = this.configService.get<string>(
       'BASE_URL',
@@ -22,15 +30,17 @@ export class PaymentService {
     );
     const paymentUrl = `${baseUrl}/payment/${paymentId}`;
 
-    // Сохраняем информацию о платеже
-    this.payments.set(paymentId, {
+    // Создаем платеж в базе данных
+    const payment = this.subscriptionPaymentRepository.create({
       id: paymentId,
       subscriptionId,
       amount,
       subscriptionType,
-      status: 'pending',
-      createdAt: new Date(),
+      status: SubscriptionPaymentStatus.PENDING,
+      paymentUrl,
     });
+
+    await this.subscriptionPaymentRepository.save(payment);
 
     return {
       paymentUrl,
@@ -40,35 +50,62 @@ export class PaymentService {
   }
 
   // Получение информации о платеже
-  getPayment(paymentId: string) {
-    return this.payments.get(paymentId);
+  async getPayment(paymentId: string): Promise<SubscriptionPayment | null> {
+    return await this.subscriptionPaymentRepository.findOne({
+      where: { id: paymentId },
+    });
   }
 
   // Обновление статуса платежа
-  updatePaymentStatus(paymentId: string, status: string) {
-    const payment = this.payments.get(paymentId);
+  async updatePaymentStatus(
+    paymentId: string,
+    status: string,
+  ): Promise<SubscriptionPayment | null> {
+    const payment = await this.subscriptionPaymentRepository.findOne({
+      where: { id: paymentId },
+    });
+
     if (payment) {
-      payment.status = status;
-      payment.updatedAt = new Date();
-      this.payments.set(paymentId, payment);
+      payment.status = status as SubscriptionPaymentStatus;
+      if (status === 'success') {
+        payment.paidAt = new Date();
+      }
+      await this.subscriptionPaymentRepository.save(payment);
     }
+
     return payment;
   }
 
   // Симуляция успешной оплаты (для тестирования)
-  simulateSuccessfulPayment(paymentId: string) {
-    const payment = this.payments.get(paymentId);
-    if (payment && payment.status === 'pending') {
-      payment.status = 'success';
+  async simulateSuccessfulPayment(
+    paymentId: string,
+  ): Promise<SubscriptionPayment | null> {
+    const payment = await this.subscriptionPaymentRepository.findOne({
+      where: { id: paymentId },
+    });
+
+    if (payment && payment.status === SubscriptionPaymentStatus.PENDING) {
+      payment.status = SubscriptionPaymentStatus.SUCCESS;
       payment.paidAt = new Date();
-      this.payments.set(paymentId, payment);
+      await this.subscriptionPaymentRepository.save(payment);
       return payment;
     }
+
     return null;
   }
 
   // Получение всех платежей (для админки)
-  getAllPayments() {
-    return Array.from(this.payments.values());
+  async getAllPayments(): Promise<SubscriptionPayment[]> {
+    return await this.subscriptionPaymentRepository.find({
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  // Получение всех платежей (для отладки)
+  async getAllPaymentIds(): Promise<string[]> {
+    const payments = await this.subscriptionPaymentRepository.find({
+      select: ['id'],
+    });
+    return payments.map((p) => p.id);
   }
 }

@@ -55,10 +55,15 @@ export class PaymentStatusController {
     }
 
     try {
+      console.log(`🔍 Поиск платежа: ${paymentId}`);
+
       // Сначала проверяем в подписках
       const subscriptionPayment =
-        this.subscriptionPaymentService.getPayment(paymentId);
+        await this.subscriptionPaymentService.getPayment(paymentId);
+      console.log(`📋 Результат поиска в подписках:`, subscriptionPayment);
+
       if (subscriptionPayment) {
+        console.log(`✅ Платеж найден в подписках`);
         return {
           id: subscriptionPayment.id,
           subscriptionId: subscriptionPayment.subscriptionId,
@@ -72,7 +77,10 @@ export class PaymentStatusController {
 
       // Затем проверяем в заказах
       const orderPayment = await this.orderPaymentService.getPayment(paymentId);
+      console.log(`📦 Результат поиска в заказах:`, orderPayment);
+
       if (orderPayment) {
+        console.log(`✅ Платеж найден в заказах`);
         return {
           id: orderPayment.id,
           orderId: orderPayment.orderId,
@@ -85,6 +93,7 @@ export class PaymentStatusController {
       }
 
       // Если платеж не найден ни в подписках, ни в заказах
+      console.log(`❌ Платеж не найден ни в подписках, ни в заказах`);
       throw new NotFoundException('Платеж не найден');
     } catch (error) {
       if (
@@ -138,7 +147,7 @@ export class PaymentStatusController {
     try {
       // Проверяем в подписках
       const subscriptionPayment =
-        this.subscriptionPaymentService.getPayment(paymentId);
+        await this.subscriptionPaymentService.getPayment(paymentId);
       if (subscriptionPayment) {
         return {
           paymentId,
@@ -166,5 +175,22 @@ export class PaymentStatusController {
       console.error('Error checking payment type:', error);
       throw new NotFoundException('Ошибка при определении типа платежа');
     }
+  }
+
+  @Get('debug/all')
+  @ApiOperation({
+    summary: 'Получить все платежи (для отладки)',
+    description: 'Возвращает все платежи из подписок и заказов для отладки',
+  })
+  async getAllPayments() {
+    const subscriptionPayments =
+      await this.subscriptionPaymentService.getAllPaymentIds();
+    const orderPayments = await this.orderPaymentService.getAllPayments();
+
+    return {
+      subscriptionPayments: subscriptionPayments,
+      orderPayments: orderPayments.map((p) => p.id),
+      total: subscriptionPayments.length + orderPayments.length,
+    };
   }
 }
