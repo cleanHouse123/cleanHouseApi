@@ -102,4 +102,13 @@ export class SubscriptionResponseDto {
   })
   @Expose()
   updatedAt: Date;
+
+  @ApiProperty({
+    description: 'Ссылка на оплату (если есть неоплаченный платеж)',
+    example:
+      'http://localhost:3000/payment/123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @Expose()
+  paymentUrl?: string;
 }

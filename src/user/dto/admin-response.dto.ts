@@ -15,58 +15,58 @@ export class AdminResponseDto {
     this.updatedAt = admin.updatedAt;
   }
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID администратора',
-    example: '123e4567-e89b-12d3-a456-426614174000'
+    example: '123e4567-e89b-12d3-a456-426614174000',
   })
   id: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Роль пользователя',
     enum: UserRole,
-    example: UserRole.ADMIN
+    example: UserRole.ADMIN,
   })
   role: UserRole;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Имя администратора',
-    example: 'Иван Иванов'
+    example: 'Иван Иванов',
   })
   name: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Email администратора',
-    example: 'admin@example.com'
+    example: 'admin@example.com',
   })
   email: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Номер телефона администратора',
-    example: '+7 (999) 123-45-67'
+    example: '+7 (999) 123-45-67',
   })
   phone: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Статус верификации телефона',
-    example: false
+    example: false,
   })
   isPhoneVerified: boolean;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Статус верификации email',
-    example: false
+    example: false,
   })
   isEmailVerified: boolean;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Дата создания',
-    example: '2024-01-15T10:30:00.000Z'
+    example: '2024-01-15T10:30:00.000Z',
   })
   createdAt: Date;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Дата последнего обновления',
-    example: '2024-01-15T10:30:00.000Z'
+    example: '2024-01-15T10:30:00.000Z',
   })
   updatedAt: Date;
 }

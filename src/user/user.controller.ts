@@ -42,7 +42,6 @@ export class UserController {
     };
   }
 
-
   @Post('currier')
   @ApiBearerAuth()
   @ApiBody({

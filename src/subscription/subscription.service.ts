@@ -19,6 +19,10 @@ import {
 import { User } from '../user/entities/user.entity';
 import { AuditService } from './services/audit.service';
 import { PaymentAuditAction } from './entities/payment-audit.entity';
+import {
+  SubscriptionPayment,
+  SubscriptionPaymentStatus,
+} from './entities/subscription-payment.entity';
 
 @Injectable()
 export class SubscriptionService {
@@ -93,7 +97,7 @@ export class SubscriptionService {
         },
       );
 
-      return this.transformToResponseDto(savedSubscription, user);
+      return await this.transformToResponseDto(savedSubscription, user);
     });
   }
 
@@ -126,10 +130,14 @@ export class SubscriptionService {
         take: limit,
       });
 
-    return {
-      subscriptions: subscriptions.map((subscription) =>
+    const subscriptionDtos = await Promise.all(
+      subscriptions.map((subscription) =>
         this.transformToResponseDto(subscription),
       ),
+    );
+
+    return {
+      subscriptions: subscriptionDtos,
       total,
     };
   }
@@ -152,7 +160,7 @@ export class SubscriptionService {
       throw new ForbiddenException('Нет прав доступа к данной подписке');
     }
 
-    return this.transformToResponseDto(subscription);
+    return await this.transformToResponseDto(subscription);
   }
 
   async updateStatus(
@@ -240,7 +248,7 @@ export class SubscriptionService {
       return null;
     }
 
-    return this.transformToResponseDto(subscription);
+    return await this.transformToResponseDto(subscription);
   }
 
   async checkSubscriptionExpiry(): Promise<void> {
@@ -319,10 +327,10 @@ export class SubscriptionService {
     });
   }
 
-  private transformToResponseDto(
+  private async transformToResponseDto(
     subscription: Subscription,
     user?: User,
-  ): SubscriptionResponseDto {
+  ): Promise<SubscriptionResponseDto> {
     const userResponseDto: UserResponseDto = user
       ? {
           id: user.id,
@@ -341,6 +349,24 @@ export class SubscriptionService {
             phone: '',
           };
 
+    // Ищем неоплаченный платеж для подписки
+    let paymentUrl: string | undefined;
+    if (subscription.status === SubscriptionStatus.PENDING) {
+      const pendingPayment = await this.dataSource
+        .getRepository(SubscriptionPayment)
+        .findOne({
+          where: {
+            subscriptionId: subscription.id,
+            status: SubscriptionPaymentStatus.PENDING,
+          },
+          order: { createdAt: 'DESC' },
+        });
+
+      if (pendingPayment) {
+        paymentUrl = pendingPayment.paymentUrl;
+      }
+    }
+
     return {
       id: subscription.id,
       user: userResponseDto,
@@ -352,6 +378,7 @@ export class SubscriptionService {
       canceledAt: subscription.canceledAt,
       createdAt: subscription.createdAt,
       updatedAt: subscription.updatedAt,
+      paymentUrl,
     };
   }
 }

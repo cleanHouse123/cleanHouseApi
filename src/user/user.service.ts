@@ -153,16 +153,24 @@ export class UserService {
   }> {
     const queryBuilder = this.userRepository.createQueryBuilder('user');
 
-    queryBuilder.where('user.role != :adminRole', { adminRole: UserRole.ADMIN });
+    queryBuilder.where('user.role != :adminRole', {
+      adminRole: UserRole.ADMIN,
+    });
 
     if (query.name) {
-      queryBuilder.andWhere('user.name ILIKE :name', { name: `%${query.name}%` });
+      queryBuilder.andWhere('user.name ILIKE :name', {
+        name: `%${query.name}%`,
+      });
     }
     if (query.phone) {
-      queryBuilder.andWhere('user.phone ILIKE :phone', { phone: `%${query.phone}%` });
+      queryBuilder.andWhere('user.phone ILIKE :phone', {
+        phone: `%${query.phone}%`,
+      });
     }
     if (query.email) {
-      queryBuilder.andWhere('user.email ILIKE :email', { email: `%${query.email}%` });
+      queryBuilder.andWhere('user.email ILIKE :email', {
+        email: `%${query.email}%`,
+      });
     }
     if (query.role) {
       queryBuilder.andWhere('user.role = :role', { role: query.role });

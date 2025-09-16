@@ -2,16 +2,16 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 
 export class CreateCurrierDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Имя администратора',
-    example: 'Иван Иванов'
+    example: 'Иван Иванов',
   })
   @IsString()
   name: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Номер телефона администратора',
-    example: '+7(999)123-45-67'
+    example: '+7(999)123-45-67',
   })
   @IsString()
   phone: string;

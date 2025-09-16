@@ -196,10 +196,9 @@ export class PaymentService {
     });
   }
 
-  // Симуляция успешной оплаты (только для админов)
+  // Симуляция успешной оплаты
   async simulateSuccessfulPayment(
     paymentId: string,
-    adminUserId: string,
   ): Promise<SubscriptionPayment | null> {
     return await this.dataSource.transaction(async (manager) => {
       const payment = await manager.findOne(SubscriptionPayment, {
@@ -237,7 +236,6 @@ export class PaymentService {
           subscriptionId: payment.subscriptionId,
           amount: payment.amount,
           metadata: {
-            simulatedBy: adminUserId,
             isSimulation: true,
           },
         },
