@@ -11,6 +11,7 @@ import { Payment } from './order/entities/payment.entity';
 import { Review } from './order/entities/review.entity';
 import { Subscription } from './subscription/entities/subscription.entity';
 import { SubscriptionPayment } from './subscription/entities/subscription-payment.entity';
+import { PaymentAudit } from './subscription/entities/payment-audit.entity';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { OrderModule } from './order/order.module';
@@ -45,6 +46,7 @@ import { PaymentStatusModule } from './shared/modules/payment-status.module';
             Review,
             Subscription,
             SubscriptionPayment,
+            PaymentAudit,
           ],
         };
       },

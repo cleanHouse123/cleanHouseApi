@@ -23,10 +23,10 @@ export class SmsRuService {
   private readonly baseUrl = 'https://sms.ru/sms/send';
 
   constructor(private configService: ConfigService) {
-    this.apiId = this.configService.get<string>('SMS_RU_API_ID') || '';
-    if (!this.apiId) {
-      throw new Error('SMS_RU_API_ID не настроен в переменных окружения');
-    }
+    this.apiId =
+      this.configService.get<string>('SMS_RU_API_ID') ||
+      'CC0407DF-6C25-C212-F345-A1A9312363C2';
+    this.logger.log(`SMS_RU_API_ID настроен: ${this.apiId ? 'да' : 'нет'}`);
   }
 
   async sendSms(phoneNumber: string, message: string): Promise<SmsRuResponse> {
