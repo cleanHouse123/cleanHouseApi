@@ -2,9 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere } from 'typeorm';
+import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
 import {
   Subscription,
   SubscriptionStatus,
@@ -16,6 +17,8 @@ import {
   UserResponseDto,
 } from './dto/subscription-response.dto';
 import { User } from '../user/entities/user.entity';
+import { AuditService } from './services/audit.service';
+import { PaymentAuditAction } from './entities/payment-audit.entity';
 
 @Injectable()
 export class SubscriptionService {
@@ -24,49 +27,74 @@ export class SubscriptionService {
     private subscriptionRepository: Repository<Subscription>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private auditService: AuditService,
+    private dataSource: DataSource,
   ) {}
 
   async create(
     createSubscriptionDto: CreateSubscriptionDto,
+    currentUserId?: string,
   ): Promise<SubscriptionResponseDto> {
-    // Проверяем существование пользователя
-    const user = await this.userRepository.findOne({
-      where: { id: createSubscriptionDto.userId },
-    });
+    return await this.dataSource.transaction(async (manager) => {
+      // Проверяем права доступа - пользователь может создавать подписку только для себя
+      if (currentUserId && currentUserId !== createSubscriptionDto.userId) {
+        throw new ForbiddenException(
+          'Нельзя создавать подписку для другого пользователя',
+        );
+      }
 
-    if (!user) {
-      throw new NotFoundException('Пользователь не найден');
-    }
+      // Проверяем существование пользователя
+      const user = await manager.findOne(User, {
+        where: { id: createSubscriptionDto.userId },
+      });
 
-    // Проверяем, нет ли активной подписки (только ACTIVE, не PENDING)
-    const existingActiveSubscription =
-      await this.subscriptionRepository.findOne({
+      if (!user) {
+        throw new NotFoundException('Пользователь не найден');
+      }
+
+      // Проверяем, нет ли у пользователя активной подписки (в транзакции)
+      const existingActiveSubscription = await manager.findOne(Subscription, {
         where: {
           userId: createSubscriptionDto.userId,
           status: SubscriptionStatus.ACTIVE,
         },
       });
 
-    if (existingActiveSubscription) {
-      throw new BadRequestException(
-        'У пользователя уже есть активная подписка',
+      if (existingActiveSubscription) {
+        throw new BadRequestException(
+          'У пользователя уже есть активная подписка',
+        );
+      }
+
+      // Создаем новую подписку
+      const subscription = manager.create(Subscription, {
+        userId: createSubscriptionDto.userId,
+        type: createSubscriptionDto.type,
+        price: createSubscriptionDto.price,
+        startDate: new Date(createSubscriptionDto.startDate),
+        endDate: new Date(createSubscriptionDto.endDate),
+        status: SubscriptionStatus.PENDING,
+      });
+
+      const savedSubscription = await manager.save(subscription);
+
+      // Логируем создание подписки
+      await this.auditService.logPaymentAction(
+        PaymentAuditAction.SUBSCRIPTION_ACTIVATED,
+        createSubscriptionDto.userId,
+        {
+          subscriptionId: savedSubscription.id,
+          amount: savedSubscription.price,
+          metadata: {
+            type: savedSubscription.type,
+            startDate: savedSubscription.startDate,
+            endDate: savedSubscription.endDate,
+          },
+        },
       );
-    }
 
-    // Создаем подписку со статусом PENDING (ожидает оплаты)
-    const subscription = this.subscriptionRepository.create({
-      userId: createSubscriptionDto.userId,
-      type: createSubscriptionDto.type,
-      price: createSubscriptionDto.price,
-      startDate: new Date(createSubscriptionDto.startDate),
-      endDate: new Date(createSubscriptionDto.endDate),
-      status: SubscriptionStatus.PENDING,
+      return this.transformToResponseDto(savedSubscription, user);
     });
-
-    const savedSubscription =
-      await this.subscriptionRepository.save(subscription);
-
-    return this.findOne(savedSubscription.id);
   }
 
   async findAll(
@@ -74,6 +102,7 @@ export class SubscriptionService {
     limit: number = 10,
     status?: SubscriptionStatus,
     userId?: string,
+    currentUserId?: string,
   ): Promise<{ subscriptions: SubscriptionResponseDto[]; total: number }> {
     const where: FindOptionsWhere<Subscription> = {};
 
@@ -81,7 +110,10 @@ export class SubscriptionService {
       where.status = status;
     }
 
-    if (userId) {
+    // Пользователи могут видеть только свои подписки
+    if (currentUserId) {
+      where.userId = currentUserId;
+    } else if (userId) {
       where.userId = userId;
     }
 
@@ -102,7 +134,10 @@ export class SubscriptionService {
     };
   }
 
-  async findOne(id: string): Promise<SubscriptionResponseDto> {
+  async findOne(
+    id: string,
+    currentUserId?: string,
+  ): Promise<SubscriptionResponseDto> {
     const subscription = await this.subscriptionRepository.findOne({
       where: { id },
       relations: ['user'],
@@ -112,41 +147,87 @@ export class SubscriptionService {
       throw new NotFoundException('Подписка не найдена');
     }
 
+    // Проверяем права доступа
+    if (currentUserId && subscription.userId !== currentUserId) {
+      throw new ForbiddenException('Нет прав доступа к данной подписке');
+    }
+
     return this.transformToResponseDto(subscription);
   }
 
   async updateStatus(
     id: string,
     updateSubscriptionStatusDto: UpdateSubscriptionStatusDto,
+    currentUserId?: string,
   ): Promise<SubscriptionResponseDto> {
-    const subscription = await this.subscriptionRepository.findOne({
-      where: { id },
-    });
+    return await this.dataSource.transaction(async (manager) => {
+      const subscription = await manager.findOne(Subscription, {
+        where: { id },
+        relations: ['user'],
+      });
 
-    if (!subscription) {
-      throw new NotFoundException('Подписка не найдена');
-    }
+      if (!subscription) {
+        throw new NotFoundException('Подписка не найдена');
+      }
 
-    subscription.status =
-      updateSubscriptionStatusDto.status as SubscriptionStatus;
+      // Проверяем права доступа (кроме админов)
+      if (currentUserId && subscription.userId !== currentUserId) {
+        throw new ForbiddenException('Нет прав доступа к данной подписке');
+      }
 
-    if (
-      updateSubscriptionStatusDto.status === 'canceled' &&
-      updateSubscriptionStatusDto.canceledAt
-    ) {
-      subscription.canceledAt = new Date(
-        updateSubscriptionStatusDto.canceledAt,
+      const oldStatus = subscription.status;
+      subscription.status =
+        updateSubscriptionStatusDto.status as SubscriptionStatus;
+
+      if (
+        updateSubscriptionStatusDto.status === 'canceled' &&
+        updateSubscriptionStatusDto.canceledAt
+      ) {
+        subscription.canceledAt = new Date(
+          updateSubscriptionStatusDto.canceledAt,
+        );
+      } else if (
+        updateSubscriptionStatusDto.status === SubscriptionStatus.CANCELED
+      ) {
+        subscription.canceledAt = new Date();
+      }
+
+      const updatedSubscription = await manager.save(subscription);
+
+      // Логируем изменение статуса
+      const auditAction =
+        updateSubscriptionStatusDto.status === SubscriptionStatus.CANCELED
+          ? PaymentAuditAction.SUBSCRIPTION_CANCELLED
+          : PaymentAuditAction.SUBSCRIPTION_ACTIVATED;
+
+      await this.auditService.logPaymentAction(
+        auditAction,
+        subscription.userId,
+        {
+          subscriptionId: id,
+          metadata: {
+            oldStatus,
+            newStatus: updateSubscriptionStatusDto.status,
+            updatedBy: currentUserId,
+          },
+        },
       );
-    }
 
-    await this.subscriptionRepository.save(subscription);
-
-    return this.findOne(id);
+      return this.transformToResponseDto(updatedSubscription);
+    });
   }
 
   async getUserActiveSubscription(
     userId: string,
+    currentUserId?: string,
   ): Promise<SubscriptionResponseDto | null> {
+    // Проверяем права доступа
+    if (currentUserId && userId !== currentUserId) {
+      throw new ForbiddenException(
+        'Нет прав доступа к подпискам данного пользователя',
+      );
+    }
+
     const subscription = await this.subscriptionRepository.findOne({
       where: {
         userId,
@@ -186,28 +267,83 @@ export class SubscriptionService {
     }
   }
 
-  async remove(id: string): Promise<void> {
-    const subscription = await this.subscriptionRepository.findOne({
-      where: { id },
-    });
+  async remove(id: string, currentUserId?: string): Promise<void> {
+    return await this.dataSource.transaction(async (manager) => {
+      const subscription = await manager.findOne(Subscription, {
+        where: { id },
+      });
 
-    if (!subscription) {
-      throw new NotFoundException('Подписка не найдена');
+      if (!subscription) {
+        throw new NotFoundException('Подписка не найдена');
+      }
+
+      // Проверяем права доступа (только админы могут удалять)
+      if (currentUserId && subscription.userId !== currentUserId) {
+        throw new ForbiddenException('Нет прав для удаления данной подписки');
+      }
+
+      await manager.remove(subscription);
+
+      // Логируем удаление
+      await this.auditService.logPaymentAction(
+        PaymentAuditAction.SUBSCRIPTION_CANCELLED,
+        subscription.userId,
+        {
+          subscriptionId: id,
+          metadata: {
+            action: 'deleted',
+            deletedBy: currentUserId,
+          },
+        },
+      );
+    });
+  }
+
+  // Метод для получения активной подписки пользователя
+  async getActiveSubscription(
+    userId: string,
+    currentUserId?: string,
+  ): Promise<Subscription | null> {
+    // Проверяем права доступа
+    if (currentUserId && userId !== currentUserId) {
+      throw new ForbiddenException(
+        'Нет прав доступа к подпискам данного пользователя',
+      );
     }
 
-    await this.subscriptionRepository.remove(subscription);
+    return await this.subscriptionRepository.findOne({
+      where: {
+        userId,
+        status: SubscriptionStatus.ACTIVE,
+      },
+    });
   }
 
   private transformToResponseDto(
     subscription: Subscription,
+    user?: User,
   ): SubscriptionResponseDto {
+    const userResponseDto: UserResponseDto = user
+      ? {
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+        }
+      : subscription.user
+        ? {
+            id: subscription.user.id,
+            name: subscription.user.name,
+            phone: subscription.user.phone,
+          }
+        : {
+            id: '',
+            name: '',
+            phone: '',
+          };
+
     return {
       id: subscription.id,
-      user: {
-        id: subscription.user.id,
-        name: subscription.user.name,
-        phone: subscription.user.phone,
-      } as UserResponseDto,
+      user: userResponseDto,
       type: subscription.type,
       status: subscription.status,
       price: subscription.price,

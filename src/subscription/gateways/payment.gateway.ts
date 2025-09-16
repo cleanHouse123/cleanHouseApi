@@ -6,8 +6,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { PaymentService } from '../services/payment.service';
+import { SubscriptionService } from '../subscription.service';
 
 @Injectable()
 @WebSocketGateway({
@@ -25,7 +26,10 @@ export class PaymentGateway {
   private readonly logger = new Logger(PaymentGateway.name);
   private paymentCheckIntervals = new Map<string, NodeJS.Timeout>();
 
-  constructor(private readonly paymentService: PaymentService) {}
+  constructor(
+    private readonly paymentService: PaymentService,
+    private readonly subscriptionService: SubscriptionService,
+  ) {}
 
   // Обработка подключения клиента
   handleConnection(client: Socket) {
@@ -75,58 +79,106 @@ export class PaymentGateway {
     );
   }
 
-  // Подключение клиента
+  // Подключение клиента с проверкой прав доступа
   @SubscribeMessage('join_payment_room')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { userId: string; paymentId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const roomName = `payment_${data.paymentId}`;
-    this.logger.log(
-      `[SUBSCRIPTION JOIN ROOM] Client: ${client.id}, UserId: ${data.userId}, PaymentId: ${data.paymentId}, Room: ${roomName}`,
-    );
+    try {
+      // Проверяем права доступа к платежу
+      const payment = await this.paymentService.getPayment(
+        data.paymentId,
+        data.userId,
+      );
 
-    client.join(roomName);
-    this.logger.log(
-      `[SUBSCRIPTION JOIN ROOM] Client ${client.id} successfully joined room: ${roomName}`,
-    );
+      if (!payment) {
+        this.logger.warn(
+          `[SUBSCRIPTION JOIN ROOM] Payment ${data.paymentId} not found or access denied for user ${data.userId}`,
+        );
+        client.disconnect();
+        return { error: 'Платеж не найден или нет прав доступа' };
+      }
 
-    // Запускаем периодическую проверку статуса платежа
-    this.logger.log(
-      `[SUBSCRIPTION JOIN ROOM] Starting payment status check for PaymentId: ${data.paymentId}`,
-    );
-    this.startPaymentStatusCheck(data.paymentId, roomName);
+      const roomName = `payment_${data.paymentId}`;
+      this.logger.log(
+        `[SUBSCRIPTION JOIN ROOM] Client: ${client.id}, UserId: ${data.userId}, PaymentId: ${data.paymentId}, Room: ${roomName}`,
+      );
 
-    return { message: 'Подключен к комнате оплаты', room: roomName };
+      client.join(roomName);
+      this.logger.log(
+        `[SUBSCRIPTION JOIN ROOM] Client ${client.id} successfully joined room: ${roomName}`,
+      );
+
+      // Запускаем периодическую проверку статуса платежа
+      this.logger.log(
+        `[SUBSCRIPTION JOIN ROOM] Starting payment status check for PaymentId: ${data.paymentId}`,
+      );
+      this.startPaymentStatusCheck(data.paymentId, roomName, data.userId);
+
+      return { message: 'Подключен к комнате оплаты', room: roomName };
+    } catch (error) {
+      this.logger.error(
+        `[SUBSCRIPTION JOIN ROOM] Error joining room for PaymentId: ${data.paymentId}, UserId: ${data.userId}`,
+        error,
+      );
+      client.disconnect();
+      return { error: 'Ошибка подключения к комнате оплаты' };
+    }
   }
 
-  // Отключение клиента
+  // Отключение клиента с проверкой прав доступа
   @SubscribeMessage('leave_payment_room')
-  handleLeaveRoom(
+  async handleLeaveRoom(
     @MessageBody() data: { userId: string; paymentId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const roomName = `payment_${data.paymentId}`;
-    this.logger.log(
-      `[SUBSCRIPTION LEAVE ROOM] Client: ${client.id}, UserId: ${data.userId}, PaymentId: ${data.paymentId}, Room: ${roomName}`,
-    );
+    try {
+      // Проверяем права доступа к платежу
+      const payment = await this.paymentService.getPayment(
+        data.paymentId,
+        data.userId,
+      );
 
-    client.leave(roomName);
-    this.logger.log(
-      `[SUBSCRIPTION LEAVE ROOM] Client ${client.id} successfully left room: ${roomName}`,
-    );
+      if (!payment) {
+        this.logger.warn(
+          `[SUBSCRIPTION LEAVE ROOM] Payment ${data.paymentId} not found or access denied for user ${data.userId}`,
+        );
+        return { error: 'Платеж не найден или нет прав доступа' };
+      }
 
-    // Останавливаем проверку статуса платежа
-    this.logger.log(
-      `[SUBSCRIPTION LEAVE ROOM] Stopping payment status check for PaymentId: ${data.paymentId}`,
-    );
-    this.stopPaymentStatusCheck(data.paymentId);
+      const roomName = `payment_${data.paymentId}`;
+      this.logger.log(
+        `[SUBSCRIPTION LEAVE ROOM] Client: ${client.id}, UserId: ${data.userId}, PaymentId: ${data.paymentId}, Room: ${roomName}`,
+      );
 
-    return { message: 'Отключен от комнаты оплаты' };
+      client.leave(roomName);
+      this.logger.log(
+        `[SUBSCRIPTION LEAVE ROOM] Client ${client.id} successfully left room: ${roomName}`,
+      );
+
+      // Останавливаем проверку статуса платежа
+      this.logger.log(
+        `[SUBSCRIPTION LEAVE ROOM] Stopping payment status check for PaymentId: ${data.paymentId}`,
+      );
+      this.stopPaymentStatusCheck(data.paymentId);
+
+      return { message: 'Отключен от комнаты оплаты' };
+    } catch (error) {
+      this.logger.error(
+        `[SUBSCRIPTION LEAVE ROOM] Error leaving room for PaymentId: ${data.paymentId}, UserId: ${data.userId}`,
+        error,
+      );
+      return { error: 'Ошибка отключения от комнаты оплаты' };
+    }
   }
 
   // Запуск периодической проверки статуса платежа
-  private startPaymentStatusCheck(paymentId: string, roomName: string) {
+  private startPaymentStatusCheck(
+    paymentId: string,
+    roomName: string,
+    userId?: string,
+  ) {
     // Останавливаем предыдущую проверку, если она была
     this.stopPaymentStatusCheck(paymentId);
     this.logger.log(
@@ -135,7 +187,7 @@ export class PaymentGateway {
 
     const interval = setInterval(async () => {
       try {
-        const payment = await this.paymentService.getPayment(paymentId);
+        const payment = await this.paymentService.getPayment(paymentId, userId);
 
         if (!payment) {
           this.logger.warn(

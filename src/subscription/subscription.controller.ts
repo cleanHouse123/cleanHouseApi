@@ -9,6 +9,9 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  Request,
+  Ip,
+  Headers,
 } from '@nestjs/common';
 import { Public } from '../shared/decorators/public.decorator';
 import {
@@ -30,6 +33,7 @@ import {
   PaymentCallbackDto,
 } from './dto/create-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { SubscriptionStatus } from './entities/subscription.entity';
 import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
@@ -177,9 +181,20 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Подписка не найдена' })
   async createPaymentLink(
     @Body() createPaymentDto: CreatePaymentDto,
+    @Request() req,
+    @Ip() ipAddress: string,
+    @Headers('user-agent') userAgent: string,
   ): Promise<SubscriptionPaymentResponseDto> {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error('Пользователь не авторизован');
+    }
+
+    // Проверяем существование подписки и права доступа
     const subscription = await this.subscriptionService.findOne(
       createPaymentDto.subscriptionId,
+      userId,
     );
 
     if (!subscription) {
@@ -190,6 +205,9 @@ export class SubscriptionController {
       createPaymentDto.subscriptionId,
       createPaymentDto.amount,
       createPaymentDto.subscriptionType,
+      userId,
+      ipAddress,
+      userAgent,
     );
   }
 
@@ -239,17 +257,24 @@ export class SubscriptionController {
   }
 
   @Post('payment/simulate/:paymentId')
-  @Public()
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiOperation({ summary: 'Симуляция успешной оплаты (для тестирования)' })
   @ApiResponse({
     status: 200,
     description: 'Оплата симулирована успешно',
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async simulatePayment(@Param('paymentId') paymentId: string) {
+  async simulatePayment(@Param('paymentId') paymentId: string, @Request() req) {
     try {
-      const payment =
-        await this.paymentService.simulateSuccessfulPayment(paymentId);
+      const adminUserId = req.user?.id;
+      if (!adminUserId) {
+        throw new Error('Пользователь не авторизован');
+      }
+
+      const payment = await this.paymentService.simulateSuccessfulPayment(
+        paymentId,
+        adminUserId,
+      );
 
       if (!payment) {
         throw new Error('Платеж не найден или уже обработан');
