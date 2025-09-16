@@ -1,0 +1,18 @@
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Устанавливаем необходимые зависимости для компиляции нативных модулей
+RUN apk add --no-cache python3 make g++
+
+COPY package*.json yarn.lock ./
+
+# Устанавливаем зависимости и пересобираем нативные модули
+RUN yarn install --frozen-lockfile
+
+# Убираем COPY . . так как все файлы монтируются через volumes
+# COPY . .
+
+EXPOSE 3000
+
+CMD ["yarn", "start:dev"]

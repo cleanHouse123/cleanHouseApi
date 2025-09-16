@@ -1,8 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { UserRole } from 'src/shared/types/user.role';
+import * as bcrypt from 'bcrypt';
+import { AdminResponseDto } from './dto/admin-response.dto';
+import { FindUsersQueryDto } from './dto/filter-users.dto';
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/shared/constants';
+import { UsersListDto } from './dto/users-list.dto';
+import { CreateCurrierDto } from './dto/create-currier.dto';
 
 @Injectable()
 export class UserService {
@@ -71,4 +83,103 @@ export class UserService {
     await this.userRepository.delete(id);
   }
 
+  async createAdmin(createAdminDto: CreateAdminDto): Promise<User> {
+    const existingUserByEmail = await this.findByEmail(createAdminDto.email);
+    if (existingUserByEmail) {
+      throw new ConflictException('Пользователь с таким email уже существует');
+    }
+
+    const existingUserByPhone = await this.findByPhone(createAdminDto.phone);
+    if (existingUserByPhone) {
+      throw new ConflictException(
+        'Пользователь с таким номером телефона уже существует',
+      );
+    }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(
+      createAdminDto.password,
+      saltRounds,
+    );
+
+    const adminData = {
+      name: createAdminDto.name,
+      email: createAdminDto.email,
+      phone: createAdminDto.phone,
+      hash_password: hashedPassword,
+      role: UserRole.ADMIN,
+      isPhoneVerified: false,
+      isEmailVerified: false,
+    };
+
+    const admin = this.userRepository.create(adminData);
+    return this.userRepository.save(admin);
+  }
+
+  async createCurrier(createCurrierDto: CreateCurrierDto): Promise<User> {
+    const existingUserByPhone = await this.findByPhone(createCurrierDto.phone);
+    if (existingUserByPhone) {
+      throw new ConflictException(
+        'Пользователь с таким номером телефона уже существует',
+      );
+    }
+
+    const currierData = {
+      name: createCurrierDto.name,
+      phone: createCurrierDto.phone,
+      role: UserRole.CURRIER,
+      isPhoneVerified: false,
+      isEmailVerified: false,
+    };
+
+    const currier = this.userRepository.create(currierData);
+    return this.userRepository.save(currier);
+  }
+
+  async getAdmins(): Promise<AdminResponseDto[]> {
+    const admins = await this.userRepository.find({
+      where: { role: UserRole.ADMIN },
+    });
+    return admins.map((admin) => {
+      return new AdminResponseDto(admin);
+    });
+  }
+
+  async getAllUsers(query: FindUsersQueryDto): Promise<{
+    data: UsersListDto[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const queryBuilder = this.userRepository.createQueryBuilder('user');
+
+    queryBuilder.where('user.role != :adminRole', { adminRole: UserRole.ADMIN });
+
+    if (query.name) {
+      queryBuilder.andWhere('user.name ILIKE :name', { name: `%${query.name}%` });
+    }
+    if (query.phone) {
+      queryBuilder.andWhere('user.phone ILIKE :phone', { phone: `%${query.phone}%` });
+    }
+    if (query.email) {
+      queryBuilder.andWhere('user.email ILIKE :email', { email: `%${query.email}%` });
+    }
+    if (query.role) {
+      queryBuilder.andWhere('user.role = :role', { role: query.role });
+    }
+
+    const currentPage = query.page ?? DEFAULT_PAGE;
+    const limit = query.limit ?? DEFAULT_LIMIT;
+
+    queryBuilder.skip((currentPage - 1) * limit).take(limit);
+
+    const [users, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: users.map((user) => new UsersListDto(user)),
+      total,
+      page: currentPage,
+      limit,
+    };
+  }
 }
