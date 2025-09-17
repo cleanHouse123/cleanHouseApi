@@ -14,7 +14,13 @@ export class AddressService {
 
   async findAll(query: string): Promise<AddressResponseDto[]> {
     if (!query || query.trim().length < 2) {
-      return [];
+      let cacheEntry = await this.addressCacheRepository
+      .createQueryBuilder('cache')
+      .orderBy('cache.search_count', 'DESC')
+      .addOrderBy('cache.last_searched_at', 'DESC')
+      .limit(10)
+      .getMany();
+      return cacheEntry?.map(entry => entry.cached_results).flat() || [];
     }
 
     const normalizedQuery = this.normalizeQuery(query);
