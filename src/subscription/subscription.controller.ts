@@ -206,6 +206,7 @@ export class SubscriptionController {
       createPaymentDto.subscriptionId,
       createPaymentDto.amount,
       createPaymentDto.subscriptionType,
+      createPaymentDto.planId,
       userId,
       ipAddress,
       userAgent,

@@ -11,6 +11,13 @@ export class CreatePaymentDto {
   subscriptionId: string;
 
   @ApiProperty({
+    example: '456e7890-e89b-12d3-a456-426614174001',
+    description: 'ID плана подписки',
+  })
+  @IsUUID()
+  planId: string;
+
+  @ApiProperty({
     example: 'monthly',
     description: 'Тип подписки',
     enum: SubscriptionType,
@@ -19,7 +26,7 @@ export class CreatePaymentDto {
   subscriptionType: SubscriptionType;
 
   @ApiProperty({
-    example: 150000,
+    example: 100000,
     description:
       'Сумма к оплате в копейках (минимум 100 копеек, максимум 10000000 копеек)',
   })

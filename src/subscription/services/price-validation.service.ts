@@ -1,5 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { SubscriptionType } from '../entities/subscription.entity';
+import { SubscriptionPlan } from '../entities/subscription-plan.entity';
 
 export interface SubscriptionPriceConfig {
   [SubscriptionType.MONTHLY]: number;
@@ -9,31 +16,59 @@ export interface SubscriptionPriceConfig {
 
 @Injectable()
 export class PriceValidationService {
-  // Цены в копейках (можно вынести в конфигурацию)
-  private readonly subscriptionPrices: SubscriptionPriceConfig = {
-    [SubscriptionType.MONTHLY]: 150000, // 1500 рублей
-    [SubscriptionType.YEARLY]: 1500000, // 15000 рублей (10 месяцев по цене)
+  constructor(
+    @InjectRepository(SubscriptionPlan)
+    private readonly subscriptionPlanRepository: Repository<SubscriptionPlan>,
+  ) {}
+
+  // Fallback цены в копейках (если планы не найдены в БД)
+  private readonly fallbackPrices: SubscriptionPriceConfig = {
+    [SubscriptionType.MONTHLY]: 100000, // 1000 рублей
+    [SubscriptionType.YEARLY]: 960000, // 9600 рублей
     [SubscriptionType.ONE_TIME]: 300000, // 3000 рублей
   };
 
   /**
-   * Получает ожидаемую цену для типа подписки
+   * Получает план подписки из БД по типу
    */
-  getExpectedPrice(subscriptionType: SubscriptionType): number {
-    const price = this.subscriptionPrices[subscriptionType];
-    if (!price) {
+  async getSubscriptionPlan(
+    subscriptionType: SubscriptionType,
+  ): Promise<SubscriptionPlan | null> {
+    return await this.subscriptionPlanRepository.findOne({
+      where: { type: subscriptionType },
+    });
+  }
+
+  /**
+   * Получает ожидаемую цену для типа подписки из БД
+   */
+  async getExpectedPrice(subscriptionType: SubscriptionType): Promise<number> {
+    const plan = await this.getSubscriptionPlan(subscriptionType);
+
+    if (plan) {
+      // Цена уже в копейках
+      return plan.priceInKopecks;
+    }
+
+    // Используем fallback цены если план не найден в БД
+    const fallbackPrice = this.fallbackPrices[subscriptionType];
+    if (!fallbackPrice) {
       throw new BadRequestException(
         `Неподдерживаемый тип подписки: ${subscriptionType}`,
       );
     }
-    return price;
+
+    return fallbackPrice;
   }
 
   /**
    * Валидирует соответствие цены типу подписки
    */
-  validatePrice(subscriptionType: SubscriptionType, amount: number): void {
-    const expectedPrice = this.getExpectedPrice(subscriptionType);
+  async validatePrice(
+    subscriptionType: SubscriptionType,
+    amount: number,
+  ): Promise<void> {
+    const expectedPrice = await this.getExpectedPrice(subscriptionType);
 
     if (amount !== expectedPrice) {
       throw new BadRequestException(
@@ -45,10 +80,43 @@ export class PriceValidationService {
   }
 
   /**
-   * Получает все доступные цены
+   * Валидирует платеж по ID плана подписки
    */
-  getAllPrices(): SubscriptionPriceConfig {
-    return { ...this.subscriptionPrices };
+  async validatePaymentByPlanId(
+    planId: string,
+    amount: number,
+  ): Promise<SubscriptionPlan> {
+    const plan = await this.subscriptionPlanRepository.findOne({
+      where: { id: planId },
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`План подписки с ID ${planId} не найден`);
+    }
+
+    if (amount !== plan.priceInKopecks) {
+      throw new BadRequestException(
+        `Неверная сумма для плана "${plan.name}". ` +
+          `Ожидается: ${plan.priceInKopecks} копеек (${plan.priceInKopecks / 100} руб.), ` +
+          `получено: ${amount} копеек (${amount / 100} руб.)`,
+      );
+    }
+
+    return plan;
+  }
+
+  /**
+   * Получает все доступные цены из БД
+   */
+  async getAllPrices(): Promise<{
+    plans: SubscriptionPlan[];
+    fallback: SubscriptionPriceConfig;
+  }> {
+    const plans = await this.subscriptionPlanRepository.find();
+    return {
+      plans,
+      fallback: { ...this.fallbackPrices },
+    };
   }
 
   /**

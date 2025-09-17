@@ -35,6 +35,7 @@ export class PaymentService {
     subscriptionId: string,
     amount: number,
     subscriptionType: string,
+    planId: string,
     userId: string,
     ipAddress?: string,
     userAgent?: string,
@@ -53,12 +54,13 @@ export class PaymentService {
         throw new ForbiddenException('Нет прав доступа к данной подписке');
       }
 
-      // Валидируем цену
+      // Валидируем цену по плану подписки
       this.priceValidationService.validateAmountRange(amount);
-      this.priceValidationService.validatePrice(
-        subscriptionType as any,
-        amount,
-      );
+      const subscriptionPlan =
+        await this.priceValidationService.validatePaymentByPlanId(
+          planId,
+          amount,
+        );
 
       // Проверяем, нет ли активных платежей для этой подписки
       const existingPayment = await manager.findOne(SubscriptionPayment, {
@@ -101,7 +103,11 @@ export class PaymentService {
           paymentId,
           subscriptionId,
           amount,
-          metadata: { subscriptionType },
+          metadata: {
+            subscriptionType,
+            planId,
+            planName: subscriptionPlan.name,
+          },
           ipAddress,
           userAgent,
         },

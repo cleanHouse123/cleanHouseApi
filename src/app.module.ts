@@ -12,6 +12,7 @@ import { Review } from './order/entities/review.entity';
 import { Subscription } from './subscription/entities/subscription.entity';
 import { SubscriptionPayment } from './subscription/entities/subscription-payment.entity';
 import { PaymentAudit } from './subscription/entities/payment-audit.entity';
+import { SubscriptionPlan } from './subscription/entities/subscription-plan.entity';
 import { AddressCache } from './address/entities/address-cache.entity';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
@@ -38,6 +39,8 @@ import { AddressModule } from './address/address.module';
           password: configService.get<string>('DATABASE_PASSWORD'),
           database: configService.get<string>('DATABASE_NAME'),
           synchronize: true,
+          migrationsRun: true,
+          migrations: ['dist/migrations/*.js'],
           timezone: 'Europe/Moscow',
           dateStrings: true,
           entities: [
@@ -49,6 +52,7 @@ import { AddressModule } from './address/address.module';
             Subscription,
             SubscriptionPayment,
             PaymentAudit,
+            SubscriptionPlan,
             AddressCache,
           ],
         };
