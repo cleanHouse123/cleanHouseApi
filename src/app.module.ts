@@ -20,6 +20,7 @@ import { OrderModule } from './order/order.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { PaymentStatusModule } from './shared/modules/payment-status.module';
 import { AddressModule } from './address/address.module';
+import { Location } from './address/entities/location.entity';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AddressModule } from './address/address.module';
             PaymentAudit,
             SubscriptionPlan,
             AddressCache,
+            Location,
           ],
         };
       },

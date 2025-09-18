@@ -1,12 +1,48 @@
-import { Controller, Get, Query, Delete, Post } from '@nestjs/common';
+import { Controller, Get, Query, Delete, Post, Body, Param } from '@nestjs/common';
 import { AddressService } from './address.service';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AddressResponseDto } from './dto/address-response.dto';
+import { CreateLocationDto, LocationDto } from './dto/location.dto';
+import { Location } from './entities/location.entity';
 
 @ApiTags('address')
 @Controller('address')
 export class AddressController {
   constructor(private readonly addressService: AddressService) {}
+
+  @ApiOperation({ summary: 'Получить локации поиска адрессов' })
+  @ApiResponse({
+    status: 200,
+    description: 'Список всех локаций поиска адрессов',
+    type: [Location],
+  })
+  @Get('locations')
+  async getLocations(): Promise<LocationDto[]> {
+    return this.addressService.getLocations();
+  }
+
+  @ApiOperation({ summary: 'Создать локацию поиска адрессов' })
+  @ApiBody({ type: CreateLocationDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Локация поиска адрессов',
+    type: LocationDto,
+  })
+  @Post('locations')
+  async createLocation(@Body() location: CreateLocationDto): Promise<LocationDto> {
+    return this.addressService.createLocation(location);
+  }
+
+  @ApiOperation({ summary: 'Удалить локацию поиска адрессов' })
+  @ApiResponse({
+    status: 200,
+    description: 'Локация поиска адрессов',
+    type: LocationDto,
+  })
+  @Delete('locations/:id')
+  async deleteLocation(@Param('id') id: string): Promise<void> {
+    return this.addressService.deleteLocation(id);
+  }
 
   @ApiOperation({ summary: 'Поиск адресов с автокомплитом и кэшированием' })
   @ApiQuery({ name: 'query', type: String, description: 'Поисковый запрос (минимум 2 символа)' })

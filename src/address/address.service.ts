@@ -1,16 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Like, Repository } from 'typeorm';
 import { AddressResponseDto } from './dto/address-response.dto';
 import { AddressCache } from './entities/address-cache.entity';
 import { DaDataAddressResponse, DaDataAddressSuggestion } from './interfaces/address-data.interface';
+import { Location } from './entities/location.entity';
+import { CreateLocationDto, LocationDto } from './dto/location.dto';
 
 @Injectable()
 export class AddressService {
   constructor(
     @InjectRepository(AddressCache)
     private readonly addressCacheRepository: Repository<AddressCache>,
+    @InjectRepository(Location)  
+    private readonly locationRepository: Repository<Location>,
   ) {}
+
+  async getLocations(): Promise<LocationDto[]> {
+    return this.locationRepository.find();
+  }
+
+  async createLocation(location: CreateLocationDto): Promise<LocationDto> {
+    const newLocation = this.locationRepository.create(location);
+    return this.locationRepository.save(newLocation);
+  }
+
+  async deleteLocation(id: string): Promise<void> {
+    await this.locationRepository.delete(id);
+  }
 
   async findAll(query: string): Promise<AddressResponseDto[]> {
     if (!query || query.trim().length < 2) {
@@ -120,12 +137,21 @@ export class AddressService {
       const url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
       const token = '8c514de4553ad490a0c95f2c8a51385ecb1afd31'; // Замените на ваш API-ключ
 
-      const locations = [
-        { city: 'Кудрово' },
-        { city: 'Колтуши' },
-        { settlement: "Янино-1" },
-        { settlement: "Янино-2" },
-      ];
+      // const locations = [
+      //   { city: 'Кудрово' },
+      //   { city: 'Колтуши' },
+      //   { settlement: "Янино-1" },
+      //   { settlement: "Янино-2" },
+      // ];
+
+      const locations = await this.locationRepository.find();
+      const locationsData = locations.map(location => ({
+        city: location.city,
+        settlement: location.settlement,
+        area: location.area,
+        region: location.region,
+        street: location.street,
+      }));
 
       const options = {
         method: 'POST',
@@ -137,7 +163,7 @@ export class AddressService {
         },
         body: JSON.stringify({
           query: query,
-          locations: locations,
+          locations: locationsData,
           from_bound: { value: 'street' },
           to_bound: { value: 'house' },
           restrict_value: false,
