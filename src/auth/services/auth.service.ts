@@ -20,6 +20,7 @@ import { CreateUserDto } from '../../user/dto/create-user.dto';
 import { TelegramSendCodeDto } from '../dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from '../dto/telegram-verify-code.dto';
 import { VerificationCode } from '../entities/verification-code.entity';
+import { AdTokenService } from '../../ad-tokens/ad-token.service';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +30,7 @@ export class AuthService {
     private telegramGatewayService: TelegramGatewayService,
     private smsRuService: SmsRuService,
     private configService: ConfigService,
+    private adTokenService: AdTokenService,
     @InjectRepository(VerificationCode)
     private verificationCodeRepository: Repository<VerificationCode>,
   ) {}
@@ -38,6 +40,7 @@ export class AuthService {
     phone: string,
     code: string,
     ipAddress?: string,
+    adToken?: string,
   ): Promise<AuthResponseDto> {
     // Проверка кода через SMS.RU
     const verificationResult = await this.verifyCode(phone, code);
@@ -51,12 +54,18 @@ export class AuthService {
     let user = await this.userService.findByPhone(formattedPhone);
 
     if (!user) {
-      user = await this.userService.create({
+      const createUserData: CreateUserDto = {
         phone: formattedPhone,
         name: `User_${formattedPhone.slice(-4)}`,
         isPhoneVerified: true,
         role: UserRole.CUSTOMER,
-      });
+      };
+
+      if (adToken) {
+        createUserData.adToken = adToken;
+      }
+
+      user = await this.userService.create(createUserData);
     } else {
       // Обновляем статус верификации
       await this.userService.updatePhoneVerification(user.id, true);

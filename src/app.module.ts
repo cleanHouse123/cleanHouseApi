@@ -21,6 +21,8 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { PaymentStatusModule } from './shared/modules/payment-status.module';
 import { AddressModule } from './address/address.module';
 import { Location } from './address/entities/location.entity';
+import { AdTokenModule } from './ad-tokens/ad-token.module';
+import { AdToken } from './ad-tokens/ad-token.entity';
 
 @Module({
   imports: [
@@ -56,6 +58,7 @@ import { Location } from './address/entities/location.entity';
             SubscriptionPlan,
             AddressCache,
             Location,
+            AdToken,
           ],
         };
       },
@@ -67,6 +70,7 @@ import { Location } from './address/entities/location.entity';
     SubscriptionModule,
     PaymentStatusModule,
     AddressModule,
+    AdTokenModule,
   ],
   controllers: [AppController],
   providers: [AppService],

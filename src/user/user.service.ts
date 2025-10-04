@@ -15,17 +15,42 @@ import { FindUsersQueryDto } from './dto/filter-users.dto';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/shared/constants';
 import { UsersListDto } from './dto/users-list.dto';
 import { CreateCurrierDto } from './dto/create-currier.dto';
+import { AdTokenService } from '../ad-tokens/ad-token.service';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly adTokenService: AdTokenService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const user = this.userRepository.create(createUserDto);
-    return this.userRepository.save(user);
+    const { adToken, ...userData } = createUserDto;
+
+    const user = this.userRepository.create(userData);
+
+    if (adToken) {
+      console.log('Searching for adToken:', adToken);
+      const foundAdToken = await this.adTokenService.findByToken(adToken);
+      console.log('Found adToken:', foundAdToken);
+
+      if (foundAdToken) {
+        console.log('Binding token to user');
+        user.adToken = foundAdToken;
+        foundAdToken.clickCount += 1;
+        await this.adTokenService.save(foundAdToken);
+        console.log(
+          'Token bound successfully, new clickCount:',
+          foundAdToken.clickCount,
+        );
+      } else {
+        console.log('Token not found');
+      }
+    }
+
+    const savedUser = await this.userRepository.save(user);
+    return savedUser;
   }
 
   async findById(id: string): Promise<User | null> {

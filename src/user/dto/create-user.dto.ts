@@ -37,4 +37,9 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Верификация email', default: false })
   @IsOptional()
   isEmailVerified?: boolean;
+
+  @ApiProperty({ description: 'Рекламный токен', required: false })
+  @IsOptional()
+  @IsString()
+  adToken?: string;
 }

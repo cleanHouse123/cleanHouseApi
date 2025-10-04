@@ -15,12 +15,14 @@ import { JwtRefreshTokenStrategy } from './strategies/jwt-refresh.strategy';
 import { UserModule } from '../user/user.module';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { VerificationCode } from './entities/verification-code.entity';
+import { AdTokenModule } from '../ad-tokens/ad-token.module';
 
 @Module({
   imports: [
     ConfigModule,
     PassportModule,
     UserModule,
+    AdTokenModule,
     TypeOrmModule.forFeature([VerificationCode]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

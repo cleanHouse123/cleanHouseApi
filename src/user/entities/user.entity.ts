@@ -5,7 +5,9 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
 } from 'typeorm';
+import { AdToken } from '../../ad-tokens/ad-token.entity';
 
 @Entity()
 export class User {
@@ -48,4 +50,7 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @ManyToOne(() => AdToken, (adToken) => adToken.users, { nullable: true })
+  adToken: AdToken;
 }

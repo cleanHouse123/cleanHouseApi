@@ -86,6 +86,7 @@ export class AuthController {
       verifySmsDto.phoneNumber,
       verifySmsDto.code,
       ipAddress,
+      verifySmsDto.adToken,
     );
   }
 
