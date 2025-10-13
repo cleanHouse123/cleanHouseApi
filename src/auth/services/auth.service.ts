@@ -12,7 +12,8 @@ import { User } from '../../user/entities/user.entity';
 import { UserRole } from '../../shared/types/user.role';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { TelegramGatewayService } from './telegram-gateway.service';
-import { SmsRuService } from './smsru.service';
+import { SmsRuService } from '../../sms/services/smsru.service';
+import { SmsProviderService } from '../../sms/services/sms-provider.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailRegisterDto } from '../dto/email-register.dto';
 import { EmailLoginDto } from '../dto/email-login.dto';
@@ -29,6 +30,7 @@ export class AuthService {
     private userService: UserService,
     private telegramGatewayService: TelegramGatewayService,
     private smsRuService: SmsRuService,
+    private smsProviderService: SmsProviderService,
     private configService: ConfigService,
     private adTokenService: AdTokenService,
     @InjectRepository(VerificationCode)
@@ -142,7 +144,8 @@ export class AuthService {
   async sendSms(
     phone: string,
     isDev?: boolean,
-  ): Promise<{ message: string; code?: string }> {
+    channel: 'whatsapp' | 'sms' | 'auto' = 'auto',
+  ): Promise<{ message: string; code?: string; channel?: string }> {
     try {
       // Генерируем код верификации
       const code = this.generateVerificationCode();
@@ -152,26 +155,27 @@ export class AuthService {
         await this.saveVerificationCode(phone, code);
 
         return {
-          message: 'Код верификации для разработки (SMS не отправлена)',
+          message: 'Код верификации для разработки (сообщение не отправлено)',
           code: code, // Возвращаем код для разработки
         };
       }
 
-      // Отправляем SMS через SMS.RU
-      const result = await this.smsRuService.sendVerificationCode(phone, code);
+      // Отправляем через новый SMS провайдер (WhatsApp с fallback на SMS)
+      const result = await this.smsProviderService.sendVerificationCode(phone, code, channel);
 
-      if (result.status === 'OK' && result.sms[phone]?.status === 'OK') {
+      if (result.success) {
         // Сохраняем код в базе данных для проверки
         await this.saveVerificationCode(phone, code);
 
         return {
-          message: 'SMS с кодом верификации отправлена',
+          message: result.message,
+          channel: result.channel,
         };
       } else {
-        throw new Error('Не удалось отправить SMS');
+        throw new Error(result.error || 'Не удалось отправить сообщение');
       }
     } catch (error) {
-      throw new Error(`Ошибка отправки SMS: ${error.message}`);
+      throw new Error(`Ошибка отправки сообщения: ${error.message}`);
     }
   }
 

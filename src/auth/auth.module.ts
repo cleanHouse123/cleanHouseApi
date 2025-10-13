@@ -9,7 +9,7 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { AuthService } from './services/auth.service';
 import { TokenService } from './services/token.service';
 import { TelegramGatewayService } from './services/telegram-gateway.service';
-import { SmsRuService } from './services/smsru.service';
+import { SmsModule } from '../sms/sms.module';
 import { expiresAccessIn } from 'src/shared/constants';
 import { JwtRefreshTokenStrategy } from './strategies/jwt-refresh.strategy';
 import { UserModule } from '../user/user.module';
@@ -23,6 +23,7 @@ import { AdTokenModule } from '../ad-tokens/ad-token.module';
     PassportModule,
     UserModule,
     AdTokenModule,
+    SmsModule,
     TypeOrmModule.forFeature([VerificationCode]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -38,13 +39,12 @@ import { AdTokenModule } from '../ad-tokens/ad-token.module';
     AuthService,
     TokenService,
     TelegramGatewayService,
-    SmsRuService,
     ConfigService,
     JwtStrategy,
     LocalStrategy,
     JwtRefreshTokenStrategy,
     LocalAuthGuard,
   ],
-  exports: [AuthService, TokenService, TelegramGatewayService, SmsRuService],
+  exports: [AuthService, TokenService, TelegramGatewayService],
 })
 export class AuthModule {}
