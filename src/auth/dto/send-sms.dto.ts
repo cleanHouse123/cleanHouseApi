@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SendSmsDto {
@@ -15,4 +15,14 @@ export class SendSmsDto {
   @IsOptional()
   @IsBoolean()
   isDev?: boolean;
+
+  @ApiProperty({
+    example: 'auto',
+    description: 'Канал отправки: auto (WhatsApp с fallback на SMS), whatsapp, sms',
+    enum: ['auto', 'whatsapp', 'sms'],
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(['auto', 'whatsapp', 'sms'])
+  channel?: 'auto' | 'whatsapp' | 'sms';
 }
