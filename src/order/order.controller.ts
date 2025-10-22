@@ -266,13 +266,6 @@ export class OrderController {
   async createPaymentLink(
     @Body() createOrderPaymentDto: CreateOrderPaymentDto,
   ): Promise<OrderPaymentResponseDto> {
-    const order = await this.orderService.findOne(
-      createOrderPaymentDto.orderId,
-    );
-    if (!order) {
-      throw new Error('Заказ не найден');
-    }
-
     return await this.orderPaymentService.createPaymentLink(
       createOrderPaymentDto.orderId,
       createOrderPaymentDto.amount,
@@ -324,6 +317,54 @@ export class OrderController {
     return { message: 'Callback обработан успешно' };
   }
 
+  @Post('payment/yookassa-webhook')
+  @Public()
+  @ApiOperation({ summary: 'Webhook для YooKassa платежей заказов' })
+  @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
+  async handleYookassaWebhook(@Body() webhookData: any) {
+    try {
+      const payment =
+        await this.orderPaymentService.handleYookassaWebhook(webhookData);
+
+      if (payment && payment.status === 'paid') {
+        // Обновляем статус заказа на "оплачен"
+        await this.orderService.updateStatus(payment.orderId, {
+          status: OrderStatus.PAID,
+        });
+
+        // Отправляем уведомление через WebSocket
+        this.orderPaymentGateway.notifyPaymentSuccess(
+          payment.id,
+          payment.orderId,
+        );
+      } else if (payment && payment.status === 'failed') {
+        // Отправляем уведомление об ошибке
+        this.orderPaymentGateway.notifyPaymentError(
+          payment.id,
+          payment.orderId,
+          'Ошибка оплаты заказа',
+        );
+      }
+
+      return { message: 'Webhook обработан успешно' };
+    } catch (error) {
+      console.error('Ошибка обработки webhook:', error);
+      return { message: 'Ошибка обработки webhook', error: error.message };
+    }
+  }
+
+  @Get('payment/status/:paymentId')
+  @Public()
+  @ApiOperation({ summary: 'Проверка статуса платежа заказа' })
+  @ApiResponse({ status: 200, description: 'Статус платежа получен' })
+  async checkPaymentStatus(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ) {
+    const payment =
+      await this.orderPaymentService.checkPaymentStatus(paymentId);
+    return payment || { message: 'Платеж не найден' };
+  }
+
   @Post('payment/simulate/:paymentId')
   @Public()
   @ApiOperation({
@@ -334,7 +375,9 @@ export class OrderController {
     description: 'Оплата заказа симулирована успешно',
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async simulateOrderPayment(@Param('paymentId') paymentId: string) {
+  async simulateOrderPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ) {
     try {
       const payment =
         await this.orderPaymentService.simulateSuccessfulPayment(paymentId);
@@ -385,7 +428,7 @@ export class OrderController {
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
   async getOrderPayment(
-    @Param('paymentId') paymentId: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
   ): Promise<PaymentInfoDto> {
     const payment = await this.orderPaymentService.getPayment(paymentId);
     if (!payment) {

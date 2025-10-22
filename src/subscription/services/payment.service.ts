@@ -7,6 +7,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
+import { YookassaService } from 'nestjs-yookassa';
+import { CurrencyEnum, ConfirmationEnum } from 'nestjs-yookassa';
 import { SubscriptionPaymentResponseDto } from '../dto/create-payment.dto';
 import {
   SubscriptionPayment,
@@ -28,6 +30,7 @@ export class PaymentService {
     private priceValidationService: PriceValidationService,
     private auditService: AuditService,
     private dataSource: DataSource,
+    private yookassaService: YookassaService,
   ) {}
 
   // Создание ссылки на оплату с проверками безопасности
@@ -81,7 +84,44 @@ export class PaymentService {
         'BASE_URL',
         'http://localhost:3000',
       );
-      const paymentUrl = `${baseUrl}/payment/${paymentId}`;
+
+      // Проверяем, используются ли тестовые данные
+      const shopId = this.configService.get('YOOKASSA_SHOP_ID');
+      const isTestMode = shopId?.startsWith('test_');
+
+      let yookassaPayment: any;
+
+      if (isTestMode) {
+        // Используем mock для тестовых данных
+        console.log('Using mock YooKassa payment for subscription test mode');
+        yookassaPayment = {
+          id: `mock_${paymentId}`,
+          confirmation: {
+            confirmation_url: `https://yoomoney.ru/checkout/payments/v2/contract?orderId=${paymentId}`,
+          },
+          status: 'pending',
+        };
+      } else {
+        // Создаем реальный платеж в YooKassa
+        console.log('Creating real YooKassa payment for subscription');
+        yookassaPayment = await this.yookassaService.createPayment({
+          amount: {
+            value: amount,
+            currency: CurrencyEnum.RUB,
+          },
+          confirmation: {
+            type: ConfirmationEnum.redirect,
+            return_url: `${baseUrl}/subscription-payment/success/${paymentId}`,
+          },
+          description: `Оплата подписки ${subscriptionType}`,
+          metadata: {
+            subscriptionId,
+            paymentId,
+            planId,
+            userId,
+          },
+        });
+      }
 
       // Создаем платеж в базе данных
       const payment = manager.create(SubscriptionPayment, {
@@ -90,7 +130,9 @@ export class PaymentService {
         amount,
         subscriptionType,
         status: SubscriptionPaymentStatus.PENDING,
-        paymentUrl,
+        paymentUrl:
+          yookassaPayment.confirmation?.confirmation_url ||
+          `${baseUrl}/subscription-payment/${paymentId}`,
       });
 
       await manager.save(payment);
@@ -114,7 +156,9 @@ export class PaymentService {
       );
 
       return {
-        paymentUrl,
+        paymentUrl:
+          yookassaPayment.confirmation?.confirmation_url ||
+          `${baseUrl}/subscription-payment/${paymentId}`,
         paymentId,
         status: 'pending',
       };
@@ -270,6 +314,52 @@ export class PaymentService {
       .where('subscription.userId = :userId', { userId })
       .orderBy('payment.createdAt', 'DESC')
       .getMany();
+  }
+
+  // Обработка webhook от YooKassa
+  async handleYookassaWebhook(webhookData: any) {
+    const { object: payment } = webhookData;
+    const { subscriptionId, paymentId, userId } = payment.metadata;
+
+    if (!paymentId) {
+      throw new Error('PaymentId не найден в metadata');
+    }
+
+    let status: SubscriptionPaymentStatus;
+    switch (payment.status) {
+      case 'succeeded':
+        status = SubscriptionPaymentStatus.SUCCESS;
+        break;
+      case 'canceled':
+        status = SubscriptionPaymentStatus.FAILED;
+        break;
+      default:
+        status = SubscriptionPaymentStatus.PENDING;
+    }
+
+    return await this.updatePaymentStatus(paymentId, status.toString(), userId);
+  }
+
+  // Проверка статуса платежа в YooKassa
+  async checkPaymentStatus(paymentId: string, userId?: string) {
+    const payment = await this.getPayment(paymentId, userId);
+    if (!payment) {
+      return null;
+    }
+
+    // Если платеж уже завершен, возвращаем его статус
+    if (payment.status !== SubscriptionPaymentStatus.PENDING) {
+      return payment;
+    }
+
+    try {
+      // Получаем YooKassa ID из метаданных (нужно будет сохранять при создании)
+      // Пока используем заглушку для проверки статуса
+      return payment;
+    } catch (error) {
+      console.error('Ошибка при проверке статуса платежа:', error);
+      return payment;
+    }
   }
 
   // Получение всех платежей (для отладки)

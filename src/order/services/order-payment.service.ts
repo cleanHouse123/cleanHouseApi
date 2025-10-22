@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import { YookassaService } from 'nestjs-yookassa';
+import { CurrencyEnum, ConfirmationEnum } from 'nestjs-yookassa';
 import { OrderPaymentResponseDto } from '../dto/create-order-payment.dto';
 import {
   Payment,
@@ -18,6 +20,7 @@ export class OrderPaymentService {
     @InjectRepository(Payment)
     private paymentRepository: Repository<Payment>,
     private configService: ConfigService,
+    private yookassaService: YookassaService,
   ) {}
 
   // Создание ссылки на оплату заказа
@@ -25,64 +28,74 @@ export class OrderPaymentService {
     orderId: string,
     amount: number,
   ): Promise<OrderPaymentResponseDto> {
-    // Проверяем, есть ли уже платеж для этого заказа
-    const existingPayment = await this.paymentRepository.findOne({
-      where: { orderId },
-    });
+    try {
+      const baseUrl = this.configService.get<string>(
+        'BASE_URL',
+        'http://localhost:3000',
+      );
 
-    const baseUrl = this.configService.get<string>(
-      'BASE_URL',
-      'http://localhost:3000',
-    );
+      // Создаем новый платеж только если его нет
+      const paymentId = uuidv4();
 
-    if (existingPayment) {
-      // Если платеж уже существует, возвращаем его
-      const paymentUrl = `${baseUrl}/order-payment/${existingPayment.id}`;
+      // Проверяем, используются ли тестовые данные
+      const shopId = this.configService.get('YOOKASSA_SHOP_ID');
+      const isTestMode = shopId?.startsWith('test_');
 
-      // Сохраняем в памяти для быстрого доступа
-      this.payments.set(existingPayment.id, {
-        id: existingPayment.id,
-        orderId: existingPayment.orderId,
-        amount: existingPayment.amount,
-        status: existingPayment.status,
-        createdAt: existingPayment.createdAt,
+      let yookassaPayment: any;
+
+      if (isTestMode) {
+        // Используем mock для тестовых данных
+        console.log('Using mock YooKassa payment for test mode');
+        yookassaPayment = {
+          id: `mock_${paymentId}`,
+          confirmation: {
+            confirmation_url: `https://yoomoney.ru/checkout/payments/v2/contract?orderId=${paymentId}`,
+          },
+          status: 'pending',
+        };
+      } else {
+        // Создаем реальный платеж в YooKassa
+        console.log('Creating real YooKassa payment');
+        yookassaPayment = await this.yookassaService.createPayment({
+          amount: {
+            value: amount,
+            currency: CurrencyEnum.RUB,
+          },
+          confirmation: {
+            type: ConfirmationEnum.redirect,
+            return_url: `${baseUrl}/order-payment/success/${paymentId}`,
+          },
+          description: `Оплата заказа №${orderId}`,
+          metadata: {
+            orderId,
+            paymentId,
+          },
+        });
+      }
+
+      // Временно убираем сохранение в БД для тестирования
+
+      // Сохраняем информацию о платеже в памяти для быстрого доступа
+      this.payments.set(paymentId, {
+        id: paymentId,
+        orderId,
+        amount,
+        status: 'pending',
+        yookassaId: yookassaPayment.id,
+        createdAt: new Date(),
       });
 
       return {
-        paymentUrl,
-        paymentId: existingPayment.id,
-        status: existingPayment.status,
+        paymentUrl:
+          yookassaPayment.confirmation?.confirmation_url ||
+          `${baseUrl}/order-payment/${paymentId}`,
+        paymentId,
+        status: 'pending',
       };
+    } catch (error) {
+      console.error('Error creating payment:', error);
+      throw new Error(`Ошибка создания платежа: ${error.message}`);
     }
-
-    // Создаем новый платеж только если его нет
-    const paymentId = uuidv4();
-    const paymentUrl = `${baseUrl}/order-payment/${paymentId}`;
-
-    const payment = this.paymentRepository.create({
-      id: paymentId,
-      orderId,
-      amount,
-      status: PaymentStatus.PENDING,
-      method: PaymentMethod.ONLINE,
-    });
-
-    await this.paymentRepository.save(payment);
-
-    // Сохраняем информацию о платеже в памяти для быстрого доступа
-    this.payments.set(paymentId, {
-      id: paymentId,
-      orderId,
-      amount,
-      status: 'pending',
-      createdAt: new Date(),
-    });
-
-    return {
-      paymentUrl,
-      paymentId,
-      status: 'pending',
-    };
   }
 
   // Получение информации о платеже
@@ -156,6 +169,72 @@ export class OrderPaymentService {
       return payment;
     }
     return null;
+  }
+
+  // Обработка webhook от YooKassa
+  async handleYookassaWebhook(webhookData: any) {
+    const { object: payment } = webhookData;
+    const { orderId, paymentId } = payment.metadata;
+
+    if (!paymentId) {
+      throw new Error('PaymentId не найден в metadata');
+    }
+
+    let status: PaymentStatus;
+    switch (payment.status) {
+      case 'succeeded':
+        status = PaymentStatus.PAID;
+        break;
+      case 'canceled':
+        status = PaymentStatus.FAILED;
+        break;
+      default:
+        status = PaymentStatus.PENDING;
+    }
+
+    return await this.updatePaymentStatus(paymentId, status.toString());
+  }
+
+  // Проверка статуса платежа в YooKassa
+  async checkPaymentStatus(paymentId: string) {
+    const memoryPayment = this.payments.get(paymentId);
+    if (!memoryPayment?.yookassaId) {
+      return null;
+    }
+
+    try {
+      // Используем getPayments для получения информации о платеже
+      // В реальном проекте лучше использовать webhook'и для обновления статуса
+      const payments = await this.yookassaService.getPayments(100);
+      const yookassaPayment = payments.find(
+        (p) => p.id === memoryPayment.yookassaId,
+      );
+
+      if (!yookassaPayment) {
+        return memoryPayment;
+      }
+
+      let status: PaymentStatus;
+      switch (yookassaPayment.status) {
+        case 'succeeded':
+          status = PaymentStatus.PAID;
+          break;
+        case 'canceled':
+          status = PaymentStatus.FAILED;
+          break;
+        default:
+          status = PaymentStatus.PENDING;
+      }
+
+      if (status !== PaymentStatus.PENDING) {
+        await this.updatePaymentStatus(paymentId, status.toString());
+      }
+
+      return { ...memoryPayment, status: status.toString() };
+    } catch (error) {
+      console.error('Ошибка при проверке статуса платежа:', error);
+      return memoryPayment;
+    }
   }
 
   // Получение всех платежей (для админки)

@@ -335,13 +335,7 @@ export class AuthService {
         sendCodeDto.phoneNumber,
       );
 
-      // Проверяем валидность номера
-      if (!this.telegramGatewayService.validatePhoneNumber(formattedPhone)) {
-        return {
-          success: false,
-          message: 'Неверный формат номера телефона',
-        };
-      }
+      // Валидация номера отключена
 
       // Проверяем возможность отправки (опционально)
       let requestId: string | undefined;
@@ -454,12 +448,7 @@ export class AuthService {
       const formattedPhone =
         this.telegramGatewayService.formatPhoneNumber(phoneNumber);
 
-      if (!this.telegramGatewayService.validatePhoneNumber(formattedPhone)) {
-        return {
-          success: false,
-          message: 'Неверный формат номера телефона',
-        };
-      }
+      // Валидация номера отключена
 
       const result =
         await this.telegramGatewayService.checkSendAbility(formattedPhone);

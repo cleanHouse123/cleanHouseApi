@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { YookassaModule } from 'nestjs-yookassa';
 import { HealthCheckModule } from './healthCheck/healthCheck.module';
 import { User } from './user/entities/user.entity';
 import { VerificationCode } from './auth/entities/verification-code.entity';
@@ -23,6 +24,7 @@ import { AddressModule } from './address/address.module';
 import { Location } from './address/entities/location.entity';
 import { AdTokenModule } from './ad-tokens/ad-token.module';
 import { AdToken } from './ad-tokens/ad-token.entity';
+import { getYookassaConfig } from './shared/config/yookassa.config';
 
 @Module({
   imports: [
@@ -62,6 +64,11 @@ import { AdToken } from './ad-tokens/ad-token.entity';
           ],
         };
       },
+    }),
+    YookassaModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: getYookassaConfig,
+      inject: [ConfigService],
     }),
     HealthCheckModule,
     AuthModule,

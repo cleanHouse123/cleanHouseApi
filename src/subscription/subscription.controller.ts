@@ -258,6 +258,56 @@ export class SubscriptionController {
     return { message: 'Callback обработан успешно' };
   }
 
+  @Post('payment/yookassa-webhook')
+  @Public()
+  @ApiOperation({ summary: 'Webhook для YooKassa платежей подписок' })
+  @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
+  async handleYookassaWebhook(@Body() webhookData: any) {
+    try {
+      const payment =
+        await this.paymentService.handleYookassaWebhook(webhookData);
+
+      if (payment && payment.status === 'success') {
+        // Активируем подписку
+        await this.subscriptionService.updateStatus(payment.subscriptionId, {
+          status: SubscriptionStatus.ACTIVE,
+        });
+
+        // Отправляем уведомление через WebSocket
+        this.paymentGateway.notifyPaymentSuccess(
+          payment.id,
+          payment.subscriptionId,
+        );
+      } else if (payment && payment.status === 'failed') {
+        // Отправляем уведомление об ошибке
+        this.paymentGateway.notifyPaymentError(
+          payment.id,
+          payment.subscriptionId,
+          'Ошибка оплаты подписки',
+        );
+      }
+
+      return { message: 'Webhook обработан успешно' };
+    } catch (error) {
+      console.error('Ошибка обработки webhook:', error);
+      return { message: 'Ошибка обработки webhook', error: error.message };
+    }
+  }
+
+  @Get('payment/status/:paymentId')
+  @ApiOperation({ summary: 'Проверка статуса платежа подписки' })
+  @ApiResponse({ status: 200, description: 'Статус платежа получен' })
+  async checkPaymentStatus(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Request() req,
+  ) {
+    const payment = await this.paymentService.checkPaymentStatus(
+      paymentId,
+      req.user.id,
+    );
+    return payment || { message: 'Платеж не найден' };
+  }
+
   @Post('payment/simulate/:paymentId')
   @Public()
   @ApiOperation({ summary: 'Симуляция успешной оплаты (для тестирования)' })
@@ -266,7 +316,7 @@ export class SubscriptionController {
     description: 'Оплата симулирована успешно',
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async simulatePayment(@Param('paymentId') paymentId: string) {
+  async simulatePayment(@Param('paymentId', ParseUUIDPipe) paymentId: string) {
     try {
       const payment =
         await this.paymentService.simulateSuccessfulPayment(paymentId);
@@ -317,7 +367,7 @@ export class SubscriptionController {
   })
   @ApiResponse({ status: 404, description: 'Платеж не найден' })
   async getPayment(
-    @Param('paymentId') paymentId: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
   ): Promise<PaymentInfoDto> {
     const payment = await this.paymentService.getPayment(paymentId);
 
