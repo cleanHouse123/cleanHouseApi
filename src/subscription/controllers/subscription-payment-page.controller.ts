@@ -86,7 +86,7 @@ export class SubscriptionPaymentPageController {
           <p>Ваш платеж за подписку обрабатывается. Вы будете автоматически перенаправлены в приложение через несколько секунд.</p>
           <p><small>Статус платежа обновляется через webhook'и от YooKassa</small></p>
           
-          <a href="${frontendUrl}" class="return-button">
+          <a href="${frontendUrl}/dashboard" class="return-button">
             🏠 Вернуться в приложение сейчас
           </a>
         </div>
@@ -96,7 +96,7 @@ export class SubscriptionPaymentPageController {
           
           // Автоматическое перенаправление через 3 секунды
           setTimeout(() => {
-            window.location.href = '${frontendUrl}';
+            window.location.href = '${frontendUrl}/dashboard';
           }, 3000);
         </script>
       </body>

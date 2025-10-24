@@ -60,10 +60,11 @@ if (payment?.paymentUrl) {
 const createSubscriptionPayment = async (
   subscriptionId,
   subscriptionType,
+  planId,
   amount,
 ) => {
   try {
-    const response = await fetch('/subscription/payment/create', {
+    const response = await fetch('/subscriptions/payment/create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -72,6 +73,7 @@ const createSubscriptionPayment = async (
       body: JSON.stringify({
         subscriptionId,
         subscriptionType, // 'basic', 'premium', 'pro'
+        planId, // UUID плана подписки
         amount,
       }),
     });
@@ -87,6 +89,7 @@ const createSubscriptionPayment = async (
 const payment = await createSubscriptionPayment(
   subscriptionId,
   'premium',
+  planId, // UUID плана
   29900,
 );
 if (payment?.paymentUrl) {
@@ -150,6 +153,7 @@ const PaymentComponent = ({
   orderId,
   subscriptionId,
   subscriptionType,
+  planId, // для подписок
   amount,
   type = 'order', // 'order' или 'subscription'
   onSuccess,
@@ -174,12 +178,12 @@ const PaymentComponent = ({
     try {
       const endpoint =
         type === 'subscription'
-          ? '/subscription/payment/create'
+          ? '/subscriptions/payment/create'
           : '/orders/payment/create';
 
       const body =
         type === 'subscription'
-          ? { subscriptionId, subscriptionType, amount }
+          ? { subscriptionId, subscriptionType, planId, amount }
           : { orderId, amount };
 
       const response = await fetch(endpoint, {
@@ -332,6 +336,7 @@ const OrderComponent = ({ orderId, amount }) => {
 const SubscriptionComponent = ({
   subscriptionId,
   subscriptionType,
+  planId,
   amount,
 }) => {
   const { createPayment, isProcessing } = usePayment();
@@ -412,7 +417,7 @@ const PaymentReturn = () => {
     try {
       const endpoint =
         type === 'subscription'
-          ? `/subscription/payment/status/${paymentId}`
+          ? `/subscriptions/payment/status/${paymentId}`
           : `/orders/payment/status/${paymentId}`;
 
       const response = await fetch(endpoint, {
@@ -588,13 +593,14 @@ Response:
 ### Создание платежа для подписки
 
 ```
-POST /subscription/payment/create
+POST /subscriptions/payment/create
 Content-Type: application/json
 Authorization: Bearer <token>
 
 {
   "subscriptionId": "uuid-подписки",
   "subscriptionType": "premium",
+  "planId": "uuid-плана",
   "amount": 29900
 }
 
@@ -618,6 +624,23 @@ Response:
   "orderId": "uuid-заказа",
   "amount": 1500,
   "status": "paid", // pending, paid, failed, canceled
+  "createdAt": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Проверка статуса платежа подписки
+
+```
+GET /subscriptions/payment/status/:paymentId
+Authorization: Bearer <token>
+
+Response:
+{
+  "id": "uuid-платежа",
+  "subscriptionId": "uuid-подписки",
+  "amount": 29900,
+  "status": "success", // pending, success, failed, refunded
+  "subscriptionType": "premium",
   "createdAt": "2024-01-01T00:00:00.000Z"
 }
 ```
