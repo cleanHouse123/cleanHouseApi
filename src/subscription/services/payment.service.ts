@@ -84,10 +84,14 @@ export class PaymentService {
         'BASE_URL',
         'http://localhost:3000',
       );
+      const frontendUrl = this.configService.get<string>(
+        'FRONTEND_URL',
+        'http://localhost:5173',
+      );
 
       // Проверяем, используются ли тестовые данные
-      const shopId = this.configService.get('YOOKASSA_SHOP_ID');
-      const isTestMode = shopId?.startsWith('test_');
+      const secretKey = this.configService.get('YOOKASSA_SECRET_KEY');
+      const isTestMode = secretKey?.startsWith('test_');
 
       let yookassaPayment: any;
 
@@ -104,23 +108,42 @@ export class PaymentService {
       } else {
         // Создаем реальный платеж в YooKassa
         console.log('Creating real YooKassa payment for subscription');
-        yookassaPayment = await this.yookassaService.createPayment({
-          amount: {
-            value: amount,
-            currency: CurrencyEnum.RUB,
-          },
-          confirmation: {
-            type: ConfirmationEnum.redirect,
-            return_url: `${baseUrl}/subscription-payment/success/${paymentId}`,
-          },
-          description: `Оплата подписки ${subscriptionType}`,
-          metadata: {
-            subscriptionId,
-            paymentId,
-            planId,
-            userId,
-          },
-        });
+        try {
+          yookassaPayment = await this.yookassaService.createPayment({
+            amount: {
+              value: amount,
+              currency: CurrencyEnum.RUB,
+            },
+            confirmation: {
+              type: ConfirmationEnum.redirect,
+              return_url: `${baseUrl}/subscription-payment/yookassa-return`,
+            },
+            description: `Оплата подписки ${subscriptionType}`,
+            capture: true, // Автоматический захват средств
+            metadata: {
+              subscriptionId,
+              paymentId,
+              planId,
+              userId,
+            },
+          });
+        } catch (error) {
+          console.error(
+            'Ошибка создания платежа YooKassa для подписки:',
+            error,
+          );
+
+          // Обработка специфических ошибок согласно документации
+          if (error.message?.includes('Payment method is not available')) {
+            throw new Error('Выбранный метод оплаты недоступен');
+          }
+
+          if (error.message?.includes('Incorrect currency')) {
+            throw new Error('Некорректная валюта платежа');
+          }
+
+          throw new Error('Ошибка при создании платежа подписки');
+        }
       }
 
       // Создаем платеж в базе данных
@@ -130,6 +153,7 @@ export class PaymentService {
         amount,
         subscriptionType,
         status: SubscriptionPaymentStatus.PENDING,
+        yookassaId: yookassaPayment.id,
         paymentUrl:
           yookassaPayment.confirmation?.confirmation_url ||
           `${baseUrl}/subscription-payment/${paymentId}`,
@@ -190,6 +214,14 @@ export class PaymentService {
     }
 
     return payment;
+  }
+
+  async findByYookassaId(
+    yookassaId: string,
+  ): Promise<SubscriptionPayment | null> {
+    return await this.subscriptionPaymentRepository.findOne({
+      where: { yookassaId: yookassaId },
+    });
   }
 
   // Обновление статуса платежа с аудитом

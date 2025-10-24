@@ -50,6 +50,9 @@ export class Payment {
   })
   method: PaymentMethod;
 
+  @Column({ nullable: true })
+  yookassaId?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

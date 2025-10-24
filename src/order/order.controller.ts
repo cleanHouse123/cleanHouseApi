@@ -365,6 +365,104 @@ export class OrderController {
     return payment || { message: 'Платеж не найден' };
   }
 
+  @Get('payment/info/:paymentId')
+  @Public()
+  @ApiOperation({ summary: 'Получение подробной информации о платеже' })
+  @ApiResponse({ status: 200, description: 'Информация о платеже получена' })
+  async getPaymentInfo(@Param('paymentId', ParseUUIDPipe) paymentId: string) {
+    const paymentInfo =
+      await this.orderPaymentService.getPaymentInfo(paymentId);
+    return paymentInfo || { message: 'Платеж не найден' };
+  }
+
+  @Post('payment/return/:paymentId')
+  @Public()
+  @ApiOperation({ summary: 'Обработка возврата с фронтенда после оплаты' })
+  @ApiResponse({ status: 200, description: 'Возврат обработан успешно' })
+  async handlePaymentReturn(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ) {
+    try {
+      // Проверяем существование платежа
+      const payment = await this.orderPaymentService.getPayment(paymentId);
+
+      if (!payment) {
+        return { success: false, message: 'Платеж не найден' };
+      }
+
+      // Если платеж еще в статусе pending, помечаем как успешный
+      if (payment.status === 'pending') {
+        await this.orderPaymentService.simulateSuccessfulPayment(paymentId);
+
+        // Обновляем статус заказа
+        try {
+          await this.orderService.updateStatus(payment.orderId, {
+            status: OrderStatus.PAID,
+          });
+        } catch (error) {
+          console.log('Заказ не найден, но платеж обработан:', error.message);
+        }
+
+        // Отправляем WebSocket уведомление
+        this.orderPaymentGateway.notifyPaymentSuccess(
+          paymentId,
+          payment.orderId,
+        );
+      }
+
+      return {
+        success: true,
+        message: 'Платеж успешно обработан',
+        payment: {
+          id: paymentId,
+          status: 'paid',
+          orderId: payment.orderId,
+          amount: payment.amount,
+        },
+      };
+    } catch (error) {
+      console.error('Ошибка обработки возврата платежа:', error);
+      return {
+        success: false,
+        message: 'Ошибка обработки платежа',
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('payment/confirm/:paymentId')
+  @Public()
+  @ApiOperation({ summary: 'Подтверждение платежа (для отложенных платежей)' })
+  @ApiResponse({ status: 200, description: 'Платеж подтвержден' })
+  async confirmPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() body?: { amount?: number },
+  ) {
+    try {
+      const confirmedPayment = await this.orderPaymentService.confirmPayment(
+        paymentId,
+        body?.amount,
+      );
+      return confirmedPayment;
+    } catch (error) {
+      return { message: 'Ошибка подтверждения платежа', error: error.message };
+    }
+  }
+
+  @Post('payment/cancel/:paymentId')
+  @Public()
+  @ApiOperation({ summary: 'Отмена платежа' })
+  @ApiResponse({ status: 200, description: 'Платеж отменен' })
+  async cancelPayment(@Param('paymentId', ParseUUIDPipe) paymentId: string) {
+    try {
+      const canceledPayment =
+        await this.orderPaymentService.cancelPayment(paymentId);
+      return canceledPayment;
+    } catch (error) {
+      return { message: 'Ошибка отмены платежа', error: error.message };
+    }
+  }
+
   @Post('payment/simulate/:paymentId')
   @Public()
   @ApiOperation({

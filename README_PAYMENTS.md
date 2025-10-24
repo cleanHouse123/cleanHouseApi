@@ -2,6 +2,414 @@
 
 Документация по настройке и использованию платежной системы YooKassa в приложении Clean House.
 
+## 🚀 Быстрый старт для фронтенда
+
+### Важно! Не используйте iframe для оплаты
+
+**❌ Неправильно:**
+
+```javascript
+// НЕ ДЕЛАЙТЕ ТАК - iframe не поддерживается YooKassa
+const iframe = document.createElement('iframe');
+iframe.src = paymentUrl;
+```
+
+**✅ Правильно:**
+
+```javascript
+// Прямое перенаправление на страницу оплаты
+window.location.href = paymentUrl;
+// или
+window.open(paymentUrl, '_blank');
+```
+
+### Пример интеграции для React/React Native
+
+```javascript
+// 1. Создание платежа
+const createPayment = async (orderId, amount) => {
+  try {
+    const response = await fetch('/orders/payment/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ orderId, amount }),
+    });
+
+    const data = await response.json();
+    return data; // { paymentUrl, paymentId, status }
+  } catch (error) {
+    console.error('Ошибка создания платежа:', error);
+  }
+};
+
+// 2. Перенаправление на оплату
+const handlePayment = async () => {
+  const payment = await createPayment(orderId, 1500);
+
+  if (payment?.paymentUrl) {
+    // Прямое перенаправление - ЕДИНСТВЕННЫЙ правильный способ
+    window.location.href = payment.paymentUrl;
+  }
+};
+
+// 3. Проверка статуса после возврата
+const checkPaymentStatus = async (paymentId) => {
+  const response = await fetch(`/orders/payment/status/${paymentId}`);
+  const status = await response.json();
+  return status; // { status: 'paid|pending|failed' }
+};
+```
+
+### Flow оплаты
+
+1. **Создание платежа** → получение `paymentUrl`
+2. **Перенаправление** → `window.location.href = paymentUrl`
+3. **Оплата на YooKassa** → пользователь вводит данные карты
+4. **Возврат на сервер** → YooKassa перенаправляет на `/order-payment/success/:paymentId`
+5. **Обработка на сервере** → автоматическое обновление статуса платежа
+6. **Редирект на фронтенд** → `http://localhost:5173/payment-return?paymentId=xxx`
+
+### ⚠️ Особенности тестового режима
+
+В тестовом режиме YooKassa может не передавать параметры через return_url. В этом случае:
+
+1. После оплаты пользователь увидит страницу с кнопкой "Вернуться в приложение"
+2. При нажатии на кнопку произойдет переход на фронтенд без `paymentId`
+3. Фронтенд должен проверить статус последнего платежа через API или показать общее сообщение об успешной оплате
+
+### 🔗 Настройка webhook'ов в YooKassa
+
+В личном кабинете YooKassa → **Интеграция → HTTP-уведомления** указать **ОДИН URL**:
+
+```
+https://your-domain.com/webhooks/yookassa
+```
+
+**Универсальный endpoint автоматически определяет тип платежа:**
+
+- **Заказы** - если есть `orderId` и `paymentId` в metadata
+- **Подписки** - если есть `subscriptionId` и `paymentId` в metadata
+
+**Один URL для всех типов платежей!** 🎯
+
+### WebSocket уведомления (опционально)
+
+```javascript
+import io from 'socket.io-client';
+
+const socket = io('ws://localhost:4000/order-payment');
+
+// Подключение к комнате платежа
+socket.emit('join_order_payment_room', {
+  userId: 'user-id',
+  paymentId: 'payment-id',
+});
+
+// Обработка успешной оплаты
+socket.on('order_payment_success', (data) => {
+  console.log('Платеж успешен:', data);
+  // Обновить UI, показать успех
+});
+
+// Обработка ошибки оплаты
+socket.on('order_payment_error', (data) => {
+  console.log('Ошибка платежа:', data);
+  // Показать ошибку пользователю
+});
+```
+
+### Для React Native приложений
+
+```javascript
+import { Linking } from 'react-native';
+
+// Создание и обработка платежа
+const handlePayment = async () => {
+  try {
+    const payment = await createPayment(orderId, amount);
+
+    if (payment?.paymentUrl) {
+      // Открытие внешнего браузера для оплаты
+      const supported = await Linking.canOpenURL(payment.paymentUrl);
+
+      if (supported) {
+        await Linking.openURL(payment.paymentUrl);
+
+        // Сохраняем paymentId для проверки статуса
+        await AsyncStorage.setItem('pendingPaymentId', payment.paymentId);
+
+        // Запускаем периодическую проверку статуса
+        startPaymentStatusCheck(payment.paymentId);
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка оплаты:', error);
+  }
+};
+
+// Периодическая проверка статуса платежа
+const startPaymentStatusCheck = (paymentId) => {
+  const interval = setInterval(async () => {
+    try {
+      const status = await checkPaymentStatus(paymentId);
+
+      if (status.status === 'paid') {
+        clearInterval(interval);
+        await AsyncStorage.removeItem('pendingPaymentId');
+        // Показать успех и обновить UI
+        showPaymentSuccess();
+      } else if (status.status === 'failed') {
+        clearInterval(interval);
+        await AsyncStorage.removeItem('pendingPaymentId');
+        // Показать ошибку
+        showPaymentError();
+      }
+    } catch (error) {
+      console.error('Ошибка проверки статуса:', error);
+    }
+  }, 3000); // Проверяем каждые 3 секунды
+
+  // Останавливаем через 5 минут
+  setTimeout(() => clearInterval(interval), 300000);
+};
+
+// При возврате в приложение (AppState change)
+useEffect(() => {
+  const handleAppStateChange = async (nextAppState) => {
+    if (nextAppState === 'active') {
+      const pendingPaymentId = await AsyncStorage.getItem('pendingPaymentId');
+      if (pendingPaymentId) {
+        // Проверяем статус при возврате в приложение
+        const status = await checkPaymentStatus(pendingPaymentId);
+        if (status.status === 'paid') {
+          await AsyncStorage.removeItem('pendingPaymentId');
+          showPaymentSuccess();
+        }
+      }
+    }
+  };
+
+  const subscription = AppState.addEventListener(
+    'change',
+    handleAppStateChange,
+  );
+  return () => subscription?.remove();
+}, []);
+```
+
+### Для веб-приложений с SPA роутингом
+
+```javascript
+// Для Next.js, React Router и других SPA
+const handlePayment = async () => {
+  const payment = await createPayment(orderId, amount);
+
+  if (payment?.paymentUrl) {
+    // Сохраняем текущий URL для возврата
+    sessionStorage.setItem('returnUrl', window.location.pathname);
+    sessionStorage.setItem('pendingPaymentId', payment.paymentId);
+
+    // Перенаправляем на оплату
+    window.location.href = payment.paymentUrl;
+  }
+};
+
+// В компоненте success страницы или при загрузке приложения
+useEffect(() => {
+  const checkPendingPayment = async () => {
+    const pendingPaymentId = sessionStorage.getItem('pendingPaymentId');
+    const returnUrl = sessionStorage.getItem('returnUrl');
+
+    if (pendingPaymentId) {
+      const status = await checkPaymentStatus(pendingPaymentId);
+
+      if (status.status === 'paid') {
+        sessionStorage.removeItem('pendingPaymentId');
+        sessionStorage.removeItem('returnUrl');
+
+        // Показываем успех и возвращаемся
+        showPaymentSuccess();
+        if (returnUrl) {
+          router.push(returnUrl);
+        }
+      }
+    }
+  };
+
+  checkPendingPayment();
+}, []);
+```
+
+### Обработка возврата без paymentId (тестовый режим)
+
+```javascript
+// Компонент страницы возврата
+const PaymentReturn = () => {
+  const [status, setStatus] = useState('checking');
+  const searchParams = new URLSearchParams(window.location.search);
+  const paymentId = searchParams.get('paymentId');
+  const error = searchParams.get('error');
+  const type = searchParams.get('type'); // 'subscription' для подписок
+
+  useEffect(() => {
+    const handleReturn = async () => {
+      if (error) {
+        setStatus('error');
+        return;
+      }
+
+      if (paymentId) {
+        // Есть paymentId - проверяем конкретный платеж
+        try {
+          const endpoint =
+            type === 'subscription'
+              ? `/subscription-payment/status/${paymentId}`
+              : `/order-payment/status/${paymentId}`;
+
+          const response = await fetch(endpoint);
+          const result = await response.json();
+
+          setStatus(result.status === 'paid' ? 'success' : 'pending');
+        } catch (error) {
+          console.error('Ошибка проверки статуса:', error);
+          setStatus('error');
+        }
+      } else {
+        // Нет paymentId - проверяем последний платеж или показываем общее сообщение
+        const pendingPaymentId = sessionStorage.getItem('pendingPaymentId');
+
+        if (pendingPaymentId) {
+          try {
+            const endpoint =
+              type === 'subscription'
+                ? `/subscription-payment/status/${pendingPaymentId}`
+                : `/order-payment/status/${pendingPaymentId}`;
+
+            const response = await fetch(endpoint);
+            const result = await response.json();
+
+            if (result.status === 'paid') {
+              sessionStorage.removeItem('pendingPaymentId');
+              setStatus('success');
+            } else {
+              setStatus('pending');
+            }
+          } catch (error) {
+            console.error('Ошибка проверки статуса:', error);
+            setStatus('success'); // Показываем успех, так как пользователь вернулся
+          }
+        } else {
+          // Нет сохраненного paymentId - показываем общее сообщение
+          setStatus('success');
+        }
+      }
+    };
+
+    handleReturn();
+  }, [paymentId, error, type]);
+
+  if (status === 'checking') {
+    return <div>Проверяем статус оплаты...</div>;
+  }
+
+  if (status === 'error') {
+    return (
+      <div>
+        <h2>Ошибка оплаты</h2>
+        <p>Произошла ошибка при обработке платежа. Попробуйте еще раз.</p>
+        <button onClick={() => window.history.back()}>Вернуться назад</button>
+      </div>
+    );
+  }
+
+  if (status === 'success') {
+    return (
+      <div>
+        <h2>Оплата успешна!</h2>
+        <p>
+          {type === 'subscription'
+            ? 'Подписка успешно оформлена.'
+            : 'Заказ успешно оплачен.'}
+        </p>
+        <button onClick={() => (window.location.href = '/')}>
+          Вернуться на главную
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2>Оплата в обработке</h2>
+      <p>Платеж обрабатывается. Статус будет обновлен автоматически.</p>
+    </div>
+  );
+};
+```
+
+### Обработка ошибок и edge cases
+
+```javascript
+const createPaymentWithRetry = async (orderId, amount, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const payment = await createPayment(orderId, amount);
+      return payment;
+    } catch (error) {
+      console.error(`Попытка ${i + 1} неудачна:`, error);
+
+      if (i === retries - 1) {
+        throw new Error('Не удалось создать платеж после нескольких попыток');
+      }
+
+      // Ждем перед повторной попыткой
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
+    }
+  }
+};
+
+// Проверка доступности платежной системы
+const isPaymentAvailable = async () => {
+  try {
+    const response = await fetch('/orders/payment/health');
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+// Полный пример с обработкой ошибок
+const handlePaymentWithErrorHandling = async () => {
+  try {
+    // Проверяем доступность
+    const available = await isPaymentAvailable();
+    if (!available) {
+      throw new Error('Платежная система временно недоступна');
+    }
+
+    // Создаем платеж с повторными попытками
+    const payment = await createPaymentWithRetry(orderId, amount);
+
+    if (!payment?.paymentUrl) {
+      throw new Error('Не удалось получить ссылку на оплату');
+    }
+
+    // Перенаправляем
+    window.location.href = payment.paymentUrl;
+  } catch (error) {
+    console.error('Ошибка оплаты:', error);
+
+    // Показываем пользователю понятную ошибку
+    showErrorMessage(
+      'Не удалось перейти к оплате. Попробуйте позже или обратитесь в поддержку.',
+    );
+  }
+};
+```
+
 ## Настройка
 
 ### Переменные окружения
@@ -310,14 +718,14 @@ subscriptionSocket.on('payment_success', (data) => {
 #### 5. Полный пример компонента оплаты
 
 ```typescript
-import React, { useState, useEffect } from 'react';
-import io from 'socket.io-client';
+import React, { useState, useEffect } from "react";
+import io from "socket.io-client";
 
 interface PaymentComponentProps {
   orderId?: string;
   subscriptionId?: string;
   amount: number;
-  type: 'order' | 'subscription';
+  type: "order" | "subscription";
   subscriptionType?: string;
   planId?: string;
   onSuccess?: () => void;
@@ -334,13 +742,15 @@ const PaymentComponent: React.FC<PaymentComponentProps> = ({
   onSuccess,
   onError,
 }) => {
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'loading' | 'redirecting' | 'waiting' | 'success' | 'error'>('idle');
+  const [paymentStatus, setPaymentStatus] = useState<
+    "idle" | "loading" | "redirecting" | "waiting" | "success" | "error"
+  >("idle");
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // WebSocket подключение для отслеживания статуса
   useEffect(() => {
-    if (paymentId && paymentStatus === 'waiting') {
+    if (paymentId && paymentStatus === "waiting") {
       const socket = io(`/${type}-payment`, {
         auth: { token: getAuthToken() },
       });
@@ -348,18 +758,18 @@ const PaymentComponent: React.FC<PaymentComponentProps> = ({
       // Присоединяемся к комнате для получения уведомлений
       socket.emit(`join_${type}_payment_room`, { paymentId });
 
-      socket.on('payment_success', (data) => {
+      socket.on("payment_success", (data) => {
         if (data.paymentId === paymentId) {
-          setPaymentStatus('success');
+          setPaymentStatus("success");
           onSuccess?.();
         }
       });
 
-      socket.on('payment_error', (data) => {
+      socket.on("payment_error", (data) => {
         if (data.paymentId === paymentId) {
-          setPaymentStatus('error');
-          setError(data.message || 'Ошибка оплаты');
-          onError?.(data.message || 'Ошибка оплаты');
+          setPaymentStatus("error");
+          setError(data.message || "Ошибка оплаты");
+          onError?.(data.message || "Ошибка оплаты");
         }
       });
 
@@ -372,33 +782,33 @@ const PaymentComponent: React.FC<PaymentComponentProps> = ({
 
   // Polling как резервный способ отслеживания
   useEffect(() => {
-    if (paymentId && paymentStatus === 'waiting') {
+    if (paymentId && paymentStatus === "waiting") {
       const interval = setInterval(async () => {
         try {
           const status = await checkPaymentStatus(paymentId, type);
 
-          if (status.status === 'paid' || status.status === 'success') {
-            setPaymentStatus('success');
+          if (status.status === "paid" || status.status === "success") {
+            setPaymentStatus("success");
             onSuccess?.();
             clearInterval(interval);
-          } else if (status.status === 'failed') {
-            setPaymentStatus('error');
-            setError('Платеж отклонен');
-            onError?.('Платеж отклонен');
+          } else if (status.status === "failed") {
+            setPaymentStatus("error");
+            setError("Платеж отклонен");
+            onError?.("Платеж отклонен");
             clearInterval(interval);
           }
         } catch (error) {
-          console.error('Ошибка проверки статуса:', error);
+          console.error("Ошибка проверки статуса:", error);
         }
       }, 3000);
 
       // Останавливаем через 10 минут
       const timeout = setTimeout(() => {
         clearInterval(interval);
-        if (paymentStatus === 'waiting') {
-          setPaymentStatus('error');
-          setError('Время ожидания истекло');
-          onError?.('Время ожидания истекло');
+        if (paymentStatus === "waiting") {
+          setPaymentStatus("error");
+          setError("Время ожидания истекло");
+          onError?.("Время ожидания истекло");
         }
       }, 600000);
 
@@ -410,70 +820,79 @@ const PaymentComponent: React.FC<PaymentComponentProps> = ({
   }, [paymentId, paymentStatus, type, onSuccess, onError]);
 
   const handlePayment = async () => {
-    setPaymentStatus('loading');
+    setPaymentStatus("loading");
     setError(null);
 
     try {
       let payment: PaymentResponse;
 
-      if (type === 'order' && orderId) {
+      if (type === "order" && orderId) {
         payment = await createOrderPayment(orderId, amount);
-      } else if (type === 'subscription' && subscriptionId && subscriptionType && planId) {
-        payment = await createSubscriptionPayment(subscriptionId, amount, subscriptionType, planId);
+      } else if (
+        type === "subscription" &&
+        subscriptionId &&
+        subscriptionType &&
+        planId
+      ) {
+        payment = await createSubscriptionPayment(
+          subscriptionId,
+          amount,
+          subscriptionType,
+          planId
+        );
       } else {
-        throw new Error('Недостаточно данных для создания платежа');
+        throw new Error("Недостаточно данных для создания платежа");
       }
 
       setPaymentId(payment.paymentId);
-      setPaymentStatus('redirecting');
+      setPaymentStatus("redirecting");
 
       // Сохраняем ID платежа для возврата
-      localStorage.setItem('currentPaymentId', payment.paymentId);
-      localStorage.setItem('currentPaymentType', type);
+      localStorage.setItem("currentPaymentId", payment.paymentId);
+      localStorage.setItem("currentPaymentType", type);
 
       // Перенаправляем на страницу оплаты
       window.location.href = payment.paymentUrl;
-
     } catch (error) {
-      console.error('Ошибка создания платежа:', error);
-      setPaymentStatus('error');
-      setError(error.message || 'Ошибка создания платежа');
-      onError?.(error.message || 'Ошибка создания платежа');
+      console.error("Ошибка создания платежа:", error);
+      setPaymentStatus("error");
+      setError(error.message || "Ошибка создания платежа");
+      onError?.(error.message || "Ошибка создания платежа");
     }
   };
 
   // Обработка возврата с страницы оплаты
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const returnedPaymentId = urlParams.get('paymentId');
+    const returnedPaymentId = urlParams.get("paymentId");
 
     if (returnedPaymentId) {
-      const savedPaymentId = localStorage.getItem('currentPaymentId');
-      const savedPaymentType = localStorage.getItem('currentPaymentType');
+      const savedPaymentId = localStorage.getItem("currentPaymentId");
+      const savedPaymentType = localStorage.getItem("currentPaymentType");
 
       if (returnedPaymentId === savedPaymentId && savedPaymentType === type) {
         setPaymentId(returnedPaymentId);
-        setPaymentStatus('waiting');
+        setPaymentStatus("waiting");
 
         // Очищаем localStorage
-        localStorage.removeItem('currentPaymentId');
-        localStorage.removeItem('currentPaymentType');
+        localStorage.removeItem("currentPaymentId");
+        localStorage.removeItem("currentPaymentType");
       }
     }
   }, [type]);
 
   const getStatusMessage = () => {
     switch (paymentStatus) {
-      case 'loading':
-        return 'Создание платежа...';
-      case 'redirecting':
-        return 'Перенаправление на страницу оплаты...';
-      case 'waiting':
-        return 'Ожидание подтверждения оплаты...';
-      case 'success':
-        return 'Платеж успешно завершен!';
-      case 'error':
-        return error || 'Ошибка при оплате';
+      case "loading":
+        return "Создание платежа...";
+      case "redirecting":
+        return "Перенаправление на страницу оплаты...";
+      case "waiting":
+        return "Ожидание подтверждения оплаты...";
+      case "success":
+        return "Платеж успешно завершен!";
+      case "error":
+        return error || "Ошибка при оплате";
       default:
         return null;
     }
@@ -481,70 +900,76 @@ const PaymentComponent: React.FC<PaymentComponentProps> = ({
 
   const getStatusColor = () => {
     switch (paymentStatus) {
-      case 'success':
-        return 'green';
-      case 'error':
-        return 'red';
-      case 'loading':
-      case 'redirecting':
-      case 'waiting':
-        return 'orange';
+      case "success":
+        return "green";
+      case "error":
+        return "red";
+      case "loading":
+      case "redirecting":
+      case "waiting":
+        return "orange";
       default:
-        return 'black';
+        return "black";
     }
   };
 
   return (
-    <div style={{ padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-      <h3>Оплата {type === 'order' ? 'заказа' : 'подписки'}</h3>
-      <p><strong>Сумма: {amount} ₽</strong></p>
+    <div
+      style={{ padding: "20px", border: "1px solid #ddd", borderRadius: "8px" }}
+    >
+      <h3>Оплата {type === "order" ? "заказа" : "подписки"}</h3>
+      <p>
+        <strong>Сумма: {amount} ₽</strong>
+      </p>
 
-      {paymentStatus === 'idle' && (
+      {paymentStatus === "idle" && (
         <button
           onClick={handlePayment}
           style={{
-            padding: '12px 24px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '16px'
+            padding: "12px 24px",
+            backgroundColor: "#007bff",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "16px",
           }}
         >
           Оплатить
         </button>
       )}
 
-      {paymentStatus !== 'idle' && (
+      {paymentStatus !== "idle" && (
         <div>
-          <p style={{ color: getStatusColor(), fontWeight: 'bold' }}>
+          <p style={{ color: getStatusColor(), fontWeight: "bold" }}>
             {getStatusMessage()}
           </p>
 
-          {(paymentStatus === 'loading' || paymentStatus === 'waiting') && (
-            <div style={{
-              width: '20px',
-              height: '20px',
-              border: '2px solid #f3f3f3',
-              borderTop: '2px solid #3498db',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '10px auto'
-            }} />
+          {(paymentStatus === "loading" || paymentStatus === "waiting") && (
+            <div
+              style={{
+                width: "20px",
+                height: "20px",
+                border: "2px solid #f3f3f3",
+                borderTop: "2px solid #3498db",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+                margin: "10px auto",
+              }}
+            />
           )}
 
-          {paymentStatus === 'error' && (
+          {paymentStatus === "error" && (
             <button
-              onClick={() => setPaymentStatus('idle')}
+              onClick={() => setPaymentStatus("idle")}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                marginTop: '10px'
+                padding: "8px 16px",
+                backgroundColor: "#dc3545",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                marginTop: "10px",
               }}
             >
               Попробовать снова
@@ -555,8 +980,12 @@ const PaymentComponent: React.FC<PaymentComponentProps> = ({
 
       <style jsx>{`
         @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          0% {
+            transform: rotate(0deg);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
         }
       `}</style>
     </div>
@@ -648,13 +1077,15 @@ export const usePayment = (options: UsePaymentOptions = {}) => {
 
 ```typescript
 // Компонент для обработки возврата с YooKassa
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 
 const PaymentReturnPage: React.FC = () => {
   const { paymentId } = useParams<{ paymentId: string }>();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'checking' | 'success' | 'error'>('checking');
+  const [status, setStatus] = useState<"checking" | "success" | "error">(
+    "checking"
+  );
 
   useEffect(() => {
     if (paymentId) {
@@ -665,56 +1096,57 @@ const PaymentReturnPage: React.FC = () => {
   const checkPaymentResult = async (paymentId: string) => {
     try {
       // Определяем тип платежа из localStorage или URL
-      const paymentType = localStorage.getItem('currentPaymentType') || 'order';
+      const paymentType = localStorage.getItem("currentPaymentType") || "order";
 
-      const payment = await checkPaymentStatus(paymentId, paymentType as 'order' | 'subscription');
+      const payment = await checkPaymentStatus(
+        paymentId,
+        paymentType as "order" | "subscription"
+      );
 
-      if (payment.status === 'paid' || payment.status === 'success') {
-        setStatus('success');
+      if (payment.status === "paid" || payment.status === "success") {
+        setStatus("success");
 
         // Перенаправляем на страницу успеха через 3 секунды
         setTimeout(() => {
-          if (paymentType === 'order') {
-            navigate('/orders/success');
+          if (paymentType === "order") {
+            navigate("/orders/success");
           } else {
-            navigate('/subscriptions/success');
+            navigate("/subscriptions/success");
           }
         }, 3000);
-      } else if (payment.status === 'failed') {
-        setStatus('error');
+      } else if (payment.status === "failed") {
+        setStatus("error");
       } else {
         // Если статус еще pending, ждем
         setTimeout(() => checkPaymentResult(paymentId), 2000);
       }
     } catch (error) {
-      console.error('Ошибка проверки платежа:', error);
-      setStatus('error');
+      console.error("Ошибка проверки платежа:", error);
+      setStatus("error");
     }
   };
 
   return (
-    <div style={{ textAlign: 'center', padding: '50px' }}>
-      {status === 'checking' && (
+    <div style={{ textAlign: "center", padding: "50px" }}>
+      {status === "checking" && (
         <div>
           <h2>Проверяем статус платежа...</h2>
           <div className="spinner" />
         </div>
       )}
 
-      {status === 'success' && (
+      {status === "success" && (
         <div>
-          <h2 style={{ color: 'green' }}>✅ Платеж успешно завершен!</h2>
+          <h2 style={{ color: "green" }}>✅ Платеж успешно завершен!</h2>
           <p>Вы будете перенаправлены автоматически...</p>
         </div>
       )}
 
-      {status === 'error' && (
+      {status === "error" && (
         <div>
-          <h2 style={{ color: 'red' }}>❌ Ошибка оплаты</h2>
+          <h2 style={{ color: "red" }}>❌ Ошибка оплаты</h2>
           <p>Платеж не был завершен. Попробуйте еще раз.</p>
-          <button onClick={() => navigate(-1)}>
-            Вернуться назад
-          </button>
+          <button onClick={() => navigate(-1)}>Вернуться назад</button>
         </div>
       )}
     </div>
@@ -905,7 +1337,7 @@ const CheckoutPage: React.FC = () => {
     // Очищаем корзину
     clearCart();
     // Перенаправляем на страницу успеха
-    navigate('/order-success');
+    navigate("/order-success");
   };
 
   return (
@@ -914,16 +1346,14 @@ const CheckoutPage: React.FC = () => {
       <p>Сумма: {totalAmount} ₽</p>
 
       {!isPaymentVisible ? (
-        <button onClick={handleCheckout}>
-          Перейти к оплате
-        </button>
+        <button onClick={handleCheckout}>Перейти к оплате</button>
       ) : (
         <PaymentComponent
           type="order"
           orderId={orderId}
           amount={totalAmount}
           onSuccess={handlePaymentSuccess}
-          onError={(error) => console.error('Payment failed:', error)}
+          onError={(error) => console.error("Payment failed:", error)}
         />
       )}
     </div>
@@ -935,7 +1365,9 @@ const CheckoutPage: React.FC = () => {
 
 ```typescript
 const SubscriptionPlans: React.FC = () => {
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
+    null
+  );
   const { user } = useAuth();
 
   const handleSelectPlan = async (plan: SubscriptionPlan) => {
@@ -944,12 +1376,12 @@ const SubscriptionPlans: React.FC = () => {
       const subscription = await createSubscription({
         userId: user.id,
         planId: plan.id,
-        type: plan.type
+        type: plan.type,
       });
 
       setSelectedPlan({ ...plan, subscriptionId: subscription.id });
     } catch (error) {
-      console.error('Error creating subscription:', error);
+      console.error("Error creating subscription:", error);
     }
   };
 
@@ -957,21 +1389,19 @@ const SubscriptionPlans: React.FC = () => {
     // Обновляем статус пользователя
     refreshUserData();
     // Показываем успешное сообщение
-    toast.success('Подписка успешно активирована!');
-    navigate('/dashboard');
+    toast.success("Подписка успешно активирована!");
+    navigate("/dashboard");
   };
 
   return (
     <div>
       <h2>Выберите план подписки</h2>
 
-      {plans.map(plan => (
+      {plans.map((plan) => (
         <div key={plan.id} className="plan-card">
           <h3>{plan.name}</h3>
           <p>{plan.price} ₽/месяц</p>
-          <button onClick={() => handleSelectPlan(plan)}>
-            Выбрать план
-          </button>
+          <button onClick={() => handleSelectPlan(plan)}>Выбрать план</button>
         </div>
       ))}
 
@@ -993,15 +1423,15 @@ const SubscriptionPlans: React.FC = () => {
 ### 3. Мобильное приложение (React Native)
 
 ```typescript
-import { Linking, Alert } from 'react-native';
+import { Linking, Alert } from "react-native";
 
 const PaymentScreen: React.FC = ({ route }) => {
   const { orderId, amount } = route.params;
-  const [paymentStatus, setPaymentStatus] = useState('idle');
+  const [paymentStatus, setPaymentStatus] = useState("idle");
 
   const handlePayment = async () => {
     try {
-      setPaymentStatus('loading');
+      setPaymentStatus("loading");
 
       const payment = await createOrderPayment(orderId, amount);
 
@@ -1009,38 +1439,38 @@ const PaymentScreen: React.FC = ({ route }) => {
       const supported = await Linking.canOpenURL(payment.paymentUrl);
 
       if (supported) {
-        setPaymentStatus('redirecting');
+        setPaymentStatus("redirecting");
         await Linking.openURL(payment.paymentUrl);
 
         // Начинаем отслеживать статус
-        setPaymentStatus('waiting');
+        setPaymentStatus("waiting");
         startPaymentTracking(payment.paymentId);
       } else {
-        Alert.alert('Ошибка', 'Не удается открыть страницу оплаты');
-        setPaymentStatus('error');
+        Alert.alert("Ошибка", "Не удается открыть страницу оплаты");
+        setPaymentStatus("error");
       }
     } catch (error) {
-      Alert.alert('Ошибка', error.message);
-      setPaymentStatus('error');
+      Alert.alert("Ошибка", error.message);
+      setPaymentStatus("error");
     }
   };
 
   const startPaymentTracking = (paymentId: string) => {
     const interval = setInterval(async () => {
       try {
-        const status = await checkPaymentStatus(paymentId, 'order');
+        const status = await checkPaymentStatus(paymentId, "order");
 
-        if (status.status === 'paid') {
+        if (status.status === "paid") {
           clearInterval(interval);
-          setPaymentStatus('success');
-          Alert.alert('Успех', 'Платеж завершен успешно!');
-        } else if (status.status === 'failed') {
+          setPaymentStatus("success");
+          Alert.alert("Успех", "Платеж завершен успешно!");
+        } else if (status.status === "failed") {
           clearInterval(interval);
-          setPaymentStatus('error');
-          Alert.alert('Ошибка', 'Платеж не прошел');
+          setPaymentStatus("error");
+          Alert.alert("Ошибка", "Платеж не прошел");
         }
       } catch (error) {
-        console.error('Status check error:', error);
+        console.error("Status check error:", error);
       }
     }, 3000);
 
@@ -1053,31 +1483,31 @@ const PaymentScreen: React.FC = ({ route }) => {
       <Text style={styles.title}>Оплата заказа</Text>
       <Text style={styles.amount}>Сумма: {amount} ₽</Text>
 
-      {paymentStatus === 'idle' && (
+      {paymentStatus === "idle" && (
         <TouchableOpacity style={styles.payButton} onPress={handlePayment}>
           <Text style={styles.payButtonText}>Оплатить</Text>
         </TouchableOpacity>
       )}
 
-      {paymentStatus === 'loading' && (
+      {paymentStatus === "loading" && (
         <ActivityIndicator size="large" color="#007bff" />
       )}
 
-      {paymentStatus === 'waiting' && (
+      {paymentStatus === "waiting" && (
         <View>
           <ActivityIndicator size="large" color="#007bff" />
           <Text>Ожидание подтверждения оплаты...</Text>
         </View>
       )}
 
-      {paymentStatus === 'success' && (
+      {paymentStatus === "success" && (
         <Text style={styles.successText}>✅ Платеж успешно завершен!</Text>
       )}
 
-      {paymentStatus === 'error' && (
+      {paymentStatus === "error" && (
         <TouchableOpacity
           style={styles.retryButton}
-          onPress={() => setPaymentStatus('idle')}
+          onPress={() => setPaymentStatus("idle")}
         >
           <Text>Попробовать снова</Text>
         </TouchableOpacity>

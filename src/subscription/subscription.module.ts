@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionController } from './subscription.controller';
 import { PaymentPageController } from './controllers/payment-page.controller';
+import { SubscriptionPaymentPageController } from './controllers/subscription-payment-page.controller';
 import { SubscriptionPlansController } from './controllers/subscription-plans.controller';
 import { SubscriptionService } from './subscription.service';
 import { PaymentService } from './services/payment.service';
@@ -31,6 +32,7 @@ import { UserModule } from '../user/user.module';
   controllers: [
     SubscriptionController,
     PaymentPageController,
+    SubscriptionPaymentPageController,
     SubscriptionPlansController,
   ],
   providers: [

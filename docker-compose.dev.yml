@@ -35,6 +35,10 @@ services:
       - PORT=4000
       - WAHA_API_URL=http://dev-waha:3000
       - WAHA_API_TOKEN=0C85DAAA24374C408D0143B375233B6F
+      - YOOKASSA_SHOP_ID=1193587
+      - YOOKASSA_SECRET_KEY=test_qXKh3h-nMuuiZuKqowskhCczKnwEDCxlkix8Eo1wEJQ
+      - BASE_URL=http://localhost:4000
+      - FRONTEND_URL=http://localhost:5173
     restart: unless-stopped
   dev-db:
     image: postgres:17

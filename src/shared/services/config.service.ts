@@ -9,6 +9,13 @@ export class SharedConfigService {
     return this.configService.get<string>('BASE_URL', 'http://localhost:3000');
   }
 
+  getFrontendUrl(): string {
+    return this.configService.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:5173',
+    );
+  }
+
   getWebSocketUrl(): string {
     const baseUrl = this.getBaseUrl();
     // Если это HTTPS, используем WSS, иначе WS

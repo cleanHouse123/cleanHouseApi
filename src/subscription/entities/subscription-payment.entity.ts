@@ -39,6 +39,9 @@ export class SubscriptionPayment {
   paymentUrl?: string;
 
   @Column({ nullable: true })
+  yookassaId?: string;
+
+  @Column({ nullable: true })
   paidAt?: Date;
 
   @Column({ nullable: true })

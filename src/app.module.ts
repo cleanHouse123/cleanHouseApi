@@ -20,6 +20,7 @@ import { UserModule } from './user/user.module';
 import { OrderModule } from './order/order.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { PaymentStatusModule } from './shared/modules/payment-status.module';
+import { WebhookModule } from './shared/modules/webhook.module';
 import { AddressModule } from './address/address.module';
 import { Location } from './address/entities/location.entity';
 import { AdTokenModule } from './ad-tokens/ad-token.module';
@@ -76,6 +77,7 @@ import { getYookassaConfig } from './shared/config/yookassa.config';
     OrderModule,
     SubscriptionModule,
     PaymentStatusModule,
+    WebhookModule,
     AddressModule,
     AdTokenModule,
   ],
