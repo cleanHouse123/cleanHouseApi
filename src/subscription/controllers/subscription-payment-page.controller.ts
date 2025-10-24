@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query, Res, Logger } from '@nestjs/common';
 import { Response } from 'express';
 import { PaymentService } from '../services/payment.service';
 import { SharedConfigService } from '../../shared/services/config.service';
+import { SubscriptionPaymentStatus } from '../entities/subscription-payment.entity';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -133,18 +134,21 @@ export class SubscriptionPaymentPageController {
       );
 
       // Если платеж еще pending, симулируем успешную оплату (для тестового режима)
-      if (payment.status === 'pending') {
+      if (payment.status === SubscriptionPaymentStatus.PENDING) {
         this.logger.log(
-          'Платеж подписки в статусе pending, обновляем на paid (тестовый режим)',
+          'Платеж подписки в статусе pending, обновляем на success (тестовый режим)',
         );
-        await this.paymentService.updatePaymentStatus(paymentId, 'paid');
-        payment.status = 'paid';
+        await this.paymentService.updatePaymentStatus(
+          paymentId,
+          SubscriptionPaymentStatus.SUCCESS,
+        );
+        payment.status = SubscriptionPaymentStatus.SUCCESS;
       }
 
       // Перенаправляем на фронтенд с результатом
       const frontendUrl = this.configService.getFrontendUrl();
 
-      if (payment.status === 'paid') {
+      if (payment.status === SubscriptionPaymentStatus.SUCCESS) {
         this.logger.log(
           `Перенаправляем на фронт с успешным платежом подписки: ${paymentId}`,
         );
