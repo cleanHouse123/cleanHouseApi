@@ -9,6 +9,7 @@ import { OrderPaymentGateway } from '../../order/gateways/order-payment.gateway'
 import { PaymentGateway } from '../../subscription/gateways/payment.gateway';
 import { OrderStatus } from '../../order/entities/order.entity';
 import { SubscriptionStatus } from '../../subscription/entities/subscription.entity';
+import { SubscriptionPaymentStatus } from '../../subscription/entities/subscription-payment.entity';
 
 @ApiTags('Webhooks')
 @Controller('webhooks')
@@ -90,7 +91,7 @@ export class WebhookController {
     } else if (metadata.subscriptionId && metadata.paymentId) {
       await this.subscriptionPaymentService.updatePaymentStatus(
         metadata.paymentId,
-        'waiting_for_capture',
+        SubscriptionPaymentStatus.PROCESSING,
       );
 
       // Уведомляем через WebSocket (пока используем заглушку)
@@ -135,7 +136,7 @@ export class WebhookController {
     } else if (metadata.subscriptionId && metadata.paymentId) {
       await this.subscriptionPaymentService.updatePaymentStatus(
         metadata.paymentId,
-        'canceled',
+        SubscriptionPaymentStatus.FAILED,
       );
 
       // Уведомляем через WebSocket (пока используем заглушку)
@@ -183,7 +184,7 @@ export class WebhookController {
         if (subscriptionPayment) {
           await this.subscriptionPaymentService.updatePaymentStatus(
             subscriptionPayment.id,
-            'refunded',
+            SubscriptionPaymentStatus.REFUNDED,
           );
 
           // Уведомляем через WebSocket (пока используем заглушку)
@@ -291,24 +292,22 @@ export class WebhookController {
           webhookData,
         );
 
-      if (payment && payment.status === 'success') {
+      if (payment && payment.status === SubscriptionPaymentStatus.SUCCESS) {
         // Активируем подписку
         await this.subscriptionService.updateStatus(payment.subscriptionId, {
           status: SubscriptionStatus.ACTIVE,
         });
 
-        // Отправляем уведомление через WebSocket
-        this.paymentGateway.notifyPaymentSuccess(
-          payment.id,
-          payment.subscriptionId,
+        // Отправляем уведомление через WebSocket (пока используем заглушку)
+        this.logger.log(
+          `Подписка ${payment.subscriptionId} активирована успешно`,
         );
-      } else if (payment && payment.status === 'failed') {
-        // Отправляем уведомление об ошибке
-        this.paymentGateway.notifyPaymentError(
-          payment.id,
-          payment.subscriptionId,
-          'Ошибка оплаты подписки',
-        );
+      } else if (
+        payment &&
+        payment.status === SubscriptionPaymentStatus.FAILED
+      ) {
+        // Отправляем уведомление об ошибке (пока используем заглушку)
+        this.logger.log(`Ошибка оплаты подписки ${payment.subscriptionId}`);
       }
 
       return {

@@ -131,7 +131,9 @@ export class OrderPaymentPageController {
       if (!payment) {
         this.logger.error(`Платеж ${paymentId} не найден`);
         const frontendUrl = this.configService.getFrontendUrl();
-        res.redirect(`${frontendUrl}/payment-return?error=payment_not_found`);
+        res.redirect(
+          `${frontendUrl}/payment-return?type=order&error=payment_not_found`,
+        );
         return;
       }
 
@@ -156,20 +158,22 @@ export class OrderPaymentPageController {
           `Перенаправляем на фронт с успешным платежом: ${paymentId}`,
         );
         res.redirect(
-          `${frontendUrl}/payment-return?paymentId=${paymentId}&status=success`,
+          `${frontendUrl}/payment-return?paymentId=${paymentId}&type=order&status=success`,
         );
       } else {
         this.logger.log(
           `Перенаправляем на фронт с неуспешным платежом: ${paymentId}, статус: ${payment.status}`,
         );
         res.redirect(
-          `${frontendUrl}/payment-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`,
+          `${frontendUrl}/payment-return?paymentId=${paymentId}&type=order&status=${payment.status}&error=payment_failed`,
         );
       }
     } catch (error) {
       this.logger.error('Ошибка при обработке success страницы:', error);
       const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(`${frontendUrl}/payment-return?error=processing_error`);
+      res.redirect(
+        `${frontendUrl}/payment-return?type=order&error=processing_error`,
+      );
       return;
     }
   }

@@ -124,7 +124,7 @@ export class SubscriptionPaymentPageController {
         this.logger.error(`Платеж подписки ${paymentId} не найден`);
         const frontendUrl = this.configService.getFrontendUrl();
         res.redirect(
-          `${frontendUrl}/subscription-return?error=payment_not_found`,
+          `${frontendUrl}/payment-return?type=subscription&error=payment_not_found`,
         );
         return;
       }
@@ -153,14 +153,14 @@ export class SubscriptionPaymentPageController {
           `Перенаправляем на фронт с успешным платежом подписки: ${paymentId}`,
         );
         res.redirect(
-          `${frontendUrl}/subscription-return?paymentId=${paymentId}&status=success`,
+          `${frontendUrl}/payment-return?paymentId=${paymentId}&type=subscription&status=success`,
         );
       } else {
         this.logger.log(
           `Перенаправляем на фронт с неуспешным платежом подписки: ${paymentId}, статус: ${payment.status}`,
         );
         res.redirect(
-          `${frontendUrl}/subscription-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`,
+          `${frontendUrl}/payment-return?paymentId=${paymentId}&type=subscription&status=${payment.status}&error=payment_failed`,
         );
       }
     } catch (error) {
@@ -169,7 +169,9 @@ export class SubscriptionPaymentPageController {
         error,
       );
       const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(`${frontendUrl}/subscription-return?error=processing_error`);
+      res.redirect(
+        `${frontendUrl}/payment-return?type=subscription&error=processing_error`,
+      );
       return;
     }
   }
