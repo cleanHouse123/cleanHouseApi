@@ -14,10 +14,12 @@ COPY . .
 # Собираем приложение
 RUN yarn build
 
-# Устанавливаем переменные окружения
+# Устанавливаем переменные окружения (fallback значения)
 ENV NODE_ENV=production
 ENV YOOKASSA_SHOP_ID=1193587
 ENV YOOKASSA_SECRET_KEY=test_qXKh3h-nMuuiZuKqowskhCczKnwEDCxlkix8Eo1wEJQ
+ENV BASE_URL=https://cleanhouse123-cleanhouseapi-209c.twc1.net
+ENV FRONTEND_URL=https://xn--80ad4adfbofbt7f.xn--p1ai
 
 EXPOSE 3000
 
