@@ -29,7 +29,7 @@ export class OrderPaymentPageController {
     this.logger.log('Возврат с YooKassa. Query params:', query);
 
     const frontendUrl = this.configService.getFrontendUrl();
-    
+
     // Простая страница с автоматическим редиректом на фронт
     // Статус платежа обновляется через webhook'и
     const html = `
@@ -111,7 +111,7 @@ export class OrderPaymentPageController {
       </body>
       </html>
     `;
-    
+
     res.send(html);
     return;
   }
@@ -125,8 +125,9 @@ export class OrderPaymentPageController {
       this.logger.log(`Показываем success страницу для платежа: ${paymentId}`);
 
       // Получаем информацию о платеже
-      const payment = await this.orderPaymentService.checkPaymentStatus(paymentId);
-      
+      const payment =
+        await this.orderPaymentService.checkPaymentStatus(paymentId);
+
       if (!payment) {
         this.logger.error(`Платеж ${paymentId} не найден`);
         const frontendUrl = this.configService.getFrontendUrl();
@@ -134,24 +135,36 @@ export class OrderPaymentPageController {
         return;
       }
 
-      this.logger.log(`Платеж найден: ${payment.id}, статус: ${payment.status}`);
+      this.logger.log(
+        `Платеж найден: ${payment.id}, статус: ${payment.status}`,
+      );
 
       // Если платеж еще pending, симулируем успешную оплату (для тестового режима)
       if (payment.status === 'pending') {
-        this.logger.log('Платеж в статусе pending, обновляем на paid (тестовый режим)');
+        this.logger.log(
+          'Платеж в статусе pending, обновляем на paid (тестовый режим)',
+        );
         await this.orderPaymentService.updatePaymentStatus(paymentId, 'paid');
         payment.status = 'paid';
       }
 
       // Перенаправляем на фронтенд с результатом
       const frontendUrl = this.configService.getFrontendUrl();
-      
+
       if (payment.status === 'paid') {
-        this.logger.log(`Перенаправляем на фронт с успешным платежом: ${paymentId}`);
-        res.redirect(`${frontendUrl}/payment-return?paymentId=${paymentId}&status=success`);
+        this.logger.log(
+          `Перенаправляем на фронт с успешным платежом: ${paymentId}`,
+        );
+        res.redirect(
+          `${frontendUrl}/payment-return?paymentId=${paymentId}&status=success`,
+        );
       } else {
-        this.logger.log(`Перенаправляем на фронт с неуспешным платежом: ${paymentId}, статус: ${payment.status}`);
-        res.redirect(`${frontendUrl}/payment-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`);
+        this.logger.log(
+          `Перенаправляем на фронт с неуспешным платежом: ${paymentId}, статус: ${payment.status}`,
+        );
+        res.redirect(
+          `${frontendUrl}/payment-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`,
+        );
       }
     } catch (error) {
       this.logger.error('Ошибка при обработке success страницы:', error);
@@ -167,15 +180,22 @@ export class OrderPaymentPageController {
     @Res() res: Response,
   ): Promise<void> {
     try {
-      const payment = await this.orderPaymentService.checkPaymentStatus(paymentId);
-      
+      const payment =
+        await this.orderPaymentService.checkPaymentStatus(paymentId);
+
       if (!payment) {
         res.status(404).send('Платеж не найден');
         return;
       }
 
       // Читаем HTML шаблон
-      const templatePath = join(process.cwd(), 'src', 'order', 'templates', 'order-payment-form.html');
+      const templatePath = join(
+        process.cwd(),
+        'src',
+        'order',
+        'templates',
+        'order-payment-form.html',
+      );
       let html = readFileSync(templatePath, 'utf8');
 
       // Заменяем плейсхолдеры

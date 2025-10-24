@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Query,
-  Res,
-  Logger,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, Logger } from '@nestjs/common';
 import { Response } from 'express';
 import { PaymentService } from '../services/payment.service';
 import { SharedConfigService } from '../../shared/services/config.service';
@@ -26,7 +19,7 @@ export class SubscriptionPaymentPageController {
     this.logger.log('Возврат с YooKassa (подписка). Query params:', query);
 
     const frontendUrl = this.configService.getFrontendUrl();
-    
+
     // Простая страница с автоматическим редиректом на фронт
     // Статус платежа обновляется через webhook'и
     const html = `
@@ -108,7 +101,7 @@ export class SubscriptionPaymentPageController {
       </body>
       </html>
     `;
-    
+
     res.send(html);
     return;
   }
@@ -119,39 +112,58 @@ export class SubscriptionPaymentPageController {
     @Res() res: Response,
   ): Promise<void> {
     try {
-      this.logger.log(`Показываем success страницу для платежа подписки: ${paymentId}`);
+      this.logger.log(
+        `Показываем success страницу для платежа подписки: ${paymentId}`,
+      );
 
       // Получаем информацию о платеже
       const payment = await this.paymentService.checkPaymentStatus(paymentId);
-      
+
       if (!payment) {
         this.logger.error(`Платеж подписки ${paymentId} не найден`);
         const frontendUrl = this.configService.getFrontendUrl();
-        res.redirect(`${frontendUrl}/subscription-return?error=payment_not_found`);
+        res.redirect(
+          `${frontendUrl}/subscription-return?error=payment_not_found`,
+        );
         return;
       }
 
-      this.logger.log(`Платеж подписки найден: ${payment.id}, статус: ${payment.status}`);
+      this.logger.log(
+        `Платеж подписки найден: ${payment.id}, статус: ${payment.status}`,
+      );
 
       // Если платеж еще pending, симулируем успешную оплату (для тестового режима)
       if (payment.status === 'pending') {
-        this.logger.log('Платеж подписки в статусе pending, обновляем на paid (тестовый режим)');
+        this.logger.log(
+          'Платеж подписки в статусе pending, обновляем на paid (тестовый режим)',
+        );
         await this.paymentService.updatePaymentStatus(paymentId, 'paid');
         payment.status = 'paid';
       }
 
       // Перенаправляем на фронтенд с результатом
       const frontendUrl = this.configService.getFrontendUrl();
-      
+
       if (payment.status === 'paid') {
-        this.logger.log(`Перенаправляем на фронт с успешным платежом подписки: ${paymentId}`);
-        res.redirect(`${frontendUrl}/subscription-return?paymentId=${paymentId}&status=success`);
+        this.logger.log(
+          `Перенаправляем на фронт с успешным платежом подписки: ${paymentId}`,
+        );
+        res.redirect(
+          `${frontendUrl}/subscription-return?paymentId=${paymentId}&status=success`,
+        );
       } else {
-        this.logger.log(`Перенаправляем на фронт с неуспешным платежом подписки: ${paymentId}, статус: ${payment.status}`);
-        res.redirect(`${frontendUrl}/subscription-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`);
+        this.logger.log(
+          `Перенаправляем на фронт с неуспешным платежом подписки: ${paymentId}, статус: ${payment.status}`,
+        );
+        res.redirect(
+          `${frontendUrl}/subscription-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`,
+        );
       }
     } catch (error) {
-      this.logger.error('Ошибка при обработке success страницы подписки:', error);
+      this.logger.error(
+        'Ошибка при обработке success страницы подписки:',
+        error,
+      );
       const frontendUrl = this.configService.getFrontendUrl();
       res.redirect(`${frontendUrl}/subscription-return?error=processing_error`);
       return;
@@ -165,14 +177,20 @@ export class SubscriptionPaymentPageController {
   ): Promise<void> {
     try {
       const payment = await this.paymentService.checkPaymentStatus(paymentId);
-      
+
       if (!payment) {
         res.status(404).send('Платеж подписки не найден');
         return;
       }
 
       // Читаем HTML шаблон для подписки
-      const templatePath = join(process.cwd(), 'src', 'subscription', 'templates', 'subscription-payment-form.html');
+      const templatePath = join(
+        process.cwd(),
+        'src',
+        'subscription',
+        'templates',
+        'subscription-payment-form.html',
+      );
       let html = readFileSync(templatePath, 'utf8');
 
       // Заменяем плейсхолдеры
@@ -184,7 +202,9 @@ export class SubscriptionPaymentPageController {
       res.send(html);
     } catch (error) {
       this.logger.error('Ошибка загрузки формы оплаты подписки:', error);
-      res.status(500).send(`Ошибка загрузки формы оплаты подписки: ${error.message}`);
+      res
+        .status(500)
+        .send(`Ошибка загрузки формы оплаты подписки: ${error.message}`);
     }
   }
 }
