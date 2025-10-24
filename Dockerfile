@@ -16,6 +16,8 @@ RUN yarn build
 
 # Устанавливаем переменные окружения
 ENV NODE_ENV=production
+ENV YOOKASSA_SHOP_ID=1193587
+ENV YOOKASSA_SECRET_KEY=test_qXKh3h-nMuuiZuKqowskhCczKnwEDCxlkix8Eo1wEJQ
 
 EXPOSE 3000
 

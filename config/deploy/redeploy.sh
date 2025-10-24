@@ -18,6 +18,9 @@ ssh root@213.171.8.18 'rm /root/projects/backend/project.tar.gz'
 # Delete tar file locally
 rm project.tar.gz
 
+# Update .env.production file on server if template changed
+ssh root@213.171.8.18 'cd /root/projects/backend && cp env.production.template .env.production'
+
 # Stop and remove only the app container
 ssh root@213.171.8.18 'cd /root/projects/backend && docker-compose -f docker-compose.yml -f docker-compose.prod.yml stop app && docker-compose -f docker-compose.yml -f docker-compose.prod.yml rm -f app'
 

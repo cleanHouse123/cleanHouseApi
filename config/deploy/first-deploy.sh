@@ -18,6 +18,9 @@ ssh root@213.171.8.18 'rm /root/projects/backend/project.tar.gz'
 # delete file locally
 rm project.tar.gz
 
+# create .env.production file on server
+ssh root@213.171.8.18 'cd /root/projects/backend && cp env.production.template .env.production'
+
 # off docker container
 ssh root@213.171.8.18  'cd /root/projects/backend && docker-compose down'
 
