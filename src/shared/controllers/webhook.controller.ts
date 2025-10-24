@@ -30,33 +30,89 @@ export class WebhookController {
   @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
   async handleYookassaWebhook(@Body() webhookData: any) {
     try {
-      this.logger.log(
-        'Получен webhook от YooKassa:',
-        JSON.stringify(webhookData, null, 2),
-      );
+      const eventType = webhookData.type || webhookData.event;
+      this.logger.log(`Получен webhook от YooKassa: ${eventType}`);
+      this.logger.log('Данные webhook:', JSON.stringify(webhookData, null, 2));
 
-      const { object: payment } = webhookData;
-      const metadata = payment.metadata || {};
+      // Обрабатываем разные типы событий
+      switch (eventType) {
+        case 'payment.succeeded':
+          return await this.handlePaymentSucceeded(webhookData);
 
-      // Определяем тип платежа по metadata
-      const isOrderPayment =
-        metadata.orderId && metadata.paymentId && !metadata.subscriptionId;
-      const isSubscriptionPayment =
-        metadata.subscriptionId && metadata.paymentId;
+        case 'payment.waiting_for_capture':
+          return await this.handlePaymentWaitingForCapture(webhookData);
 
-      if (isOrderPayment) {
-        this.logger.log(`Обрабатываем платеж заказа: ${metadata.paymentId}`);
-        return await this.handleOrderPayment(webhookData);
-      } else if (isSubscriptionPayment) {
-        this.logger.log(`Обрабатываем платеж подписки: ${metadata.paymentId}`);
-        return await this.handleSubscriptionPayment(webhookData);
-      } else {
-        this.logger.warn('Неизвестный тип платежа в metadata:', metadata);
-        return { message: 'Неизвестный тип платежа', metadata };
+        case 'payment.canceled':
+          return await this.handlePaymentCanceled(webhookData);
+
+        case 'refund.succeeded':
+          return await this.handleRefundSucceeded(webhookData);
+
+        default:
+          this.logger.warn(`Неизвестный тип события: ${eventType}`);
+          return {
+            message: 'Неизвестный тип события',
+            eventType,
+            processed: false,
+          };
       }
     } catch (error) {
       this.logger.error('Ошибка обработки webhook:', error);
       return { message: 'Ошибка обработки webhook', error: error.message };
+    }
+  }
+
+  private async handlePaymentSucceeded(webhookData: any) {
+    this.logger.log('Обрабатываем успешный платеж');
+    return await this.processPaymentEvent(webhookData, 'succeeded');
+  }
+
+  private async handlePaymentWaitingForCapture(webhookData: any) {
+    this.logger.log('Обрабатываем платеж, ожидающий подтверждения');
+    return await this.processPaymentEvent(webhookData, 'waiting_for_capture');
+  }
+
+  private async handlePaymentCanceled(webhookData: any) {
+    this.logger.log('Обрабатываем отмененный платеж');
+    return await this.processPaymentEvent(webhookData, 'canceled');
+  }
+
+  private async handleRefundSucceeded(webhookData: any) {
+    this.logger.log('Обрабатываем успешный возврат');
+    // Для возвратов логика может отличаться
+    return {
+      message: 'Возврат обработан успешно',
+      type: 'refund',
+      refundId: webhookData.object?.id,
+    };
+  }
+
+  private async processPaymentEvent(webhookData: any, eventStatus: string) {
+    const { object: payment } = webhookData;
+    const metadata = payment.metadata || {};
+
+    // Определяем тип платежа по metadata
+    const isOrderPayment =
+      metadata.orderId && metadata.paymentId && !metadata.subscriptionId;
+    const isSubscriptionPayment = metadata.subscriptionId && metadata.paymentId;
+
+    if (isOrderPayment) {
+      this.logger.log(
+        `Обрабатываем платеж заказа: ${metadata.paymentId} (${eventStatus})`,
+      );
+      return await this.handleOrderPayment(webhookData);
+    } else if (isSubscriptionPayment) {
+      this.logger.log(
+        `Обрабатываем платеж подписки: ${metadata.paymentId} (${eventStatus})`,
+      );
+      return await this.handleSubscriptionPayment(webhookData);
+    } else {
+      this.logger.warn('Неизвестный тип платежа в metadata:', metadata);
+      return {
+        message: 'Неизвестный тип платежа',
+        metadata,
+        eventStatus,
+      };
     }
   }
 
