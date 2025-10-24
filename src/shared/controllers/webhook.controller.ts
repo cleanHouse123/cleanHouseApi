@@ -68,22 +68,115 @@ export class WebhookController {
   }
 
   private async handlePaymentWaitingForCapture(webhookData: any) {
-    this.logger.log('Обрабатываем платеж, ожидающий подтверждения');
+    this.logger.log('Обрабатываем платеж, ожидающий подтверждения (payment.waiting_for_capture)');
+    
+    const { object: payment } = webhookData;
+    const metadata = payment.metadata || {};
+    
+    // Обновляем статус платежа на "ожидает подтверждения"
+    if (metadata.orderId && metadata.paymentId) {
+      await this.orderPaymentService.updatePaymentStatus(metadata.paymentId, 'waiting_for_capture');
+      
+      // Уведомляем через WebSocket
+      this.orderPaymentGateway.notifyPaymentSuccess(
+        metadata.paymentId,
+        metadata.orderId
+      );
+    } else if (metadata.subscriptionId && metadata.paymentId) {
+      await this.subscriptionPaymentService.updatePaymentStatus(metadata.paymentId, 'waiting_for_capture');
+      
+      // Уведомляем через WebSocket (пока используем заглушку)
+      this.logger.log(`Уведомление о статусе подписки: ${metadata.paymentId} - waiting_for_capture`);
+    }
+    
     return await this.processPaymentEvent(webhookData, 'waiting_for_capture');
   }
 
   private async handlePaymentCanceled(webhookData: any) {
-    this.logger.log('Обрабатываем отмененный платеж');
+    this.logger.log('Обрабатываем отмененный платеж (payment.canceled)');
+    
+    const { object: payment } = webhookData;
+    const metadata = payment.metadata || {};
+    
+    // Обновляем статус платежа на "отменен"
+    if (metadata.orderId && metadata.paymentId) {
+      await this.orderPaymentService.updatePaymentStatus(metadata.paymentId, 'canceled');
+      
+      // Пытаемся обновить статус заказа (если возможно)
+      try {
+        await this.orderService.updateStatus(metadata.orderId, {
+          status: OrderStatus.CANCELED,
+        });
+      } catch (error) {
+        this.logger.warn(`Не удалось обновить статус заказа ${metadata.orderId}: ${error.message}`);
+      }
+      
+      // Уведомляем через WebSocket
+      this.orderPaymentGateway.notifyPaymentError(
+        metadata.paymentId,
+        metadata.orderId,
+        'Платеж отменен'
+      );
+    } else if (metadata.subscriptionId && metadata.paymentId) {
+      await this.subscriptionPaymentService.updatePaymentStatus(metadata.paymentId, 'canceled');
+      
+      // Уведомляем через WebSocket (пока используем заглушку)
+      this.logger.log(`Уведомление об ошибке подписки: ${metadata.paymentId} - canceled`);
+    }
+    
     return await this.processPaymentEvent(webhookData, 'canceled');
   }
 
   private async handleRefundSucceeded(webhookData: any) {
-    this.logger.log('Обрабатываем успешный возврат');
-    // Для возвратов логика может отличаться
+    this.logger.log('Обрабатываем успешный возврат (refund.succeeded)');
+    
+    const { object: refund } = webhookData;
+    const paymentId = refund.payment_id;
+    
+    if (paymentId) {
+      // Ищем платеж по YooKassa ID для определения типа
+      try {
+        const orderPayment = await this.orderPaymentService.findByYookassaId(paymentId);
+        if (orderPayment) {
+          await this.orderPaymentService.updatePaymentStatus(orderPayment.id, 'refunded');
+          
+          this.orderPaymentGateway.notifyPaymentError(
+            orderPayment.id,
+            orderPayment.orderId,
+            'Платеж возвращен'
+          );
+          
+          return {
+            message: 'Возврат заказа обработан успешно',
+            type: 'order_refund',
+            paymentId: orderPayment.id,
+            refundId: refund.id,
+          };
+        }
+        
+        const subscriptionPayment = await this.subscriptionPaymentService.findByYookassaId(paymentId);
+        if (subscriptionPayment) {
+          await this.subscriptionPaymentService.updatePaymentStatus(subscriptionPayment.id, 'refunded');
+          
+          // Уведомляем через WebSocket (пока используем заглушку)
+          this.logger.log(`Уведомление о возврате подписки: ${subscriptionPayment.id} - refunded`);
+          
+          return {
+            message: 'Возврат подписки обработан успешно',
+            type: 'subscription_refund',
+            paymentId: subscriptionPayment.id,
+            refundId: refund.id,
+          };
+        }
+      } catch (error) {
+        this.logger.error('Ошибка при обработке возврата:', error);
+      }
+    }
+    
     return {
-      message: 'Возврат обработан успешно',
+      message: 'Возврат обработан (платеж не найден в системе)',
       type: 'refund',
-      refundId: webhookData.object?.id,
+      refundId: refund.id,
     };
   }
 
@@ -122,10 +215,23 @@ export class WebhookController {
         await this.orderPaymentService.handleYookassaWebhook(webhookData);
 
       if (payment && payment.status === 'paid') {
-        // Обновляем статус заказа на "оплачен"
-        await this.orderService.updateStatus(payment.orderId, {
-          status: OrderStatus.PAID,
-        });
+        try {
+          // Обновляем статус заказа на "оплачен" (только если еще не оплачен)
+          await this.orderService.updateStatus(payment.orderId, {
+            status: OrderStatus.PAID,
+          });
+        } catch (error) {
+          // Игнорируем ошибку, если заказ уже оплачен
+          if (
+            error.message?.includes('Невозможно изменить статус с paid на paid')
+          ) {
+            this.logger.log(
+              `Заказ ${payment.orderId} уже оплачен, пропускаем обновление статуса`,
+            );
+          } else {
+            throw error;
+          }
+        }
 
         // Отправляем уведомление через WebSocket
         this.orderPaymentGateway.notifyPaymentSuccess(

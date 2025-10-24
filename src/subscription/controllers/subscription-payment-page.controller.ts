@@ -1,17 +1,16 @@
 import {
   Controller,
   Get,
-  Post,
   Param,
   Query,
-  Body,
   Res,
-  Req,
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { PaymentService } from '../services/payment.service';
 import { SharedConfigService } from '../../shared/services/config.service';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 @Controller('subscription-payment')
 export class SubscriptionPaymentPageController {
@@ -24,217 +23,168 @@ export class SubscriptionPaymentPageController {
 
   @Get('yookassa-return')
   async handleYookassaReturn(@Query() query: any, @Res() res: Response) {
-    try {
-      this.logger.log(
-        `Обработка возврата с YooKassa для подписки. Query params:`,
-        query,
-      );
+    this.logger.log('Возврат с YooKassa (подписка). Query params:', query);
 
-      // Получаем orderId из query параметров (это YooKassa ID)
-      const yookassaOrderId = query.orderId || query.orderid || query.order_id;
+    const frontendUrl = this.configService.getFrontendUrl();
+    
+    // Простая страница с автоматическим редиректом на фронт
+    // Статус платежа обновляется через webhook'и
+    const html = `
+      <!DOCTYPE html>
+      <html lang="ru">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Обработка платежа подписки</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            text-align: center;
+          }
+          .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .success-icon {
+            font-size: 48px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+          }
+          .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007AFF;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          .return-button {
+            display: inline-block;
+            background: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            margin-top: 20px;
+          }
+          .return-button:hover {
+            background: #0056CC;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="success-icon">💳</div>
+          <h1>Платеж за подписку обрабатывается</h1>
+          <div class="spinner"></div>
+          <p>Ваш платеж за подписку обрабатывается. Вы будете автоматически перенаправлены в приложение через несколько секунд.</p>
+          <p><small>Статус платежа обновляется через webhook'и от YooKassa</small></p>
+          
+          <a href="${frontendUrl}" class="return-button">
+            🏠 Вернуться в приложение сейчас
+          </a>
+        </div>
 
-      if (!yookassaOrderId) {
-        this.logger.error(
-          'orderId не найден в query параметрах для подписки:',
-          query,
-        );
-
-        // Показываем страницу с инструкциями для пользователя
-        const frontendUrl = this.configService.getFrontendUrl();
-        const instructionsHtml = `
-          <!DOCTYPE html>
-          <html lang="ru">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Завершение оплаты подписки</title>
-              <style>
-                  body {
-                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                      margin: 0;
-                      padding: 20px;
-                      min-height: 100vh;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                  }
-                  .container {
-                      background: white;
-                      border-radius: 20px;
-                      padding: 40px;
-                      text-align: center;
-                      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-                      max-width: 500px;
-                      width: 100%;
-                  }
-                  .icon {
-                      font-size: 64px;
-                      margin-bottom: 20px;
-                  }
-                  h1 {
-                      color: #333;
-                      margin-bottom: 20px;
-                  }
-                  p {
-                      color: #666;
-                      line-height: 1.6;
-                      margin-bottom: 20px;
-                  }
-                  .btn {
-                      display: inline-block;
-                      padding: 15px 30px;
-                      background: #007bff;
-                      color: white;
-                      text-decoration: none;
-                      border-radius: 10px;
-                      font-size: 16px;
-                      margin: 10px;
-                      transition: background-color 0.3s;
-                  }
-                  .btn:hover {
-                      background: #0056b3;
-                  }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <div class="icon">🔄</div>
-                  <h1>Оплата подписки завершена</h1>
-                  <p>Если оплата прошла успешно, нажмите кнопку ниже, чтобы вернуться в приложение:</p>
-                  
-                  <a href="${frontendUrl}/payment-return?type=subscription" class="btn" id="returnBtn">
-                      Вернуться в приложение
-                  </a>
-                  
-                  <p style="margin-top: 30px; font-size: 14px; color: #999;">
-                      Если у вас возникли проблемы, обратитесь в службу поддержки
-                  </p>
-                  
-                  <script>
-                    // Пытаемся извлечь orderId из referrer URL
-                    function extractOrderIdFromReferrer() {
-                      const referrer = document.referrer;
-                      console.log('Referrer:', referrer);
-                      
-                      if (referrer && referrer.includes('yoomoney.ru')) {
-                        const match = referrer.match(/orderId=([^&]+)/);
-                        if (match) {
-                          const orderId = match[1];
-                          console.log('Найден orderId в referrer для подписки:', orderId);
-                          
-                          // Перенаправляем на наш endpoint с orderId
-                          window.location.href = '/subscription-payment/yookassa-return?orderId=' + orderId;
-                          return true;
-                        }
-                      }
-                      return false;
-                    }
-                    
-                    // Пытаемся автоматически обработать платеж
-                    if (!extractOrderIdFromReferrer()) {
-                      console.log('OrderId не найден в referrer для подписки, показываем кнопку возврата');
-                      
-                      // Альтернативный способ - проверяем последний платеж из sessionStorage
-                      const pendingPaymentId = sessionStorage?.getItem('pendingPaymentId');
-                      if (pendingPaymentId) {
-                        console.log('Найден pendingPaymentId для подписки:', pendingPaymentId);
-                        // Перенаправляем на success страницу с нашим paymentId
-                        window.location.href = '/subscription-payment/success/' + pendingPaymentId;
-                      }
-                    }
-                  </script>
-              </div>
-          </body>
-          </html>
-        `;
-
-        res.setHeader('Content-Type', 'text/html');
-        res.send(instructionsHtml);
-        return;
-      }
-
-      this.logger.log(
-        `Найден YooKassa orderId для подписки: ${yookassaOrderId}`,
-      );
-
-      // Ищем платеж по yookassaId
-      const payment =
-        await this.paymentService.findByYookassaId(yookassaOrderId);
-
-      if (!payment) {
-        this.logger.error(
-          `Платеж подписки с yookassaId ${yookassaOrderId} не найден`,
-        );
-        const frontendUrl = this.configService.getFrontendUrl();
-        return res.redirect(
-          `${frontendUrl}/payment-return?type=subscription&error=payment_not_found`,
-        );
-      }
-
-      this.logger.log(`Найден платеж подписки: ${payment.id}`);
-
-      // Перенаправляем на наш стандартный success endpoint
-      return res.redirect(`/subscription-payment/success/${payment.id}`);
-    } catch (error) {
-      this.logger.error(
-        `Ошибка обработки возврата с YooKassa для подписки:`,
-        error,
-      );
-
-      // В случае ошибки перенаправляем на фронтенд с ошибкой
-      const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(
-        `${frontendUrl}/payment-return?type=subscription&error=yookassa_return_error`,
-      );
-    }
+        <script>
+          console.log('Возврат с YooKassa (подписка), автоматическое перенаправление через 3 секунды');
+          
+          // Автоматическое перенаправление через 3 секунды
+          setTimeout(() => {
+            window.location.href = '${frontendUrl}';
+          }, 3000);
+        </script>
+      </body>
+      </html>
+    `;
+    
+    res.send(html);
+    return;
   }
 
   @Get('success/:paymentId')
   async showSuccessPage(
     @Param('paymentId') paymentId: string,
     @Res() res: Response,
-  ) {
+  ): Promise<void> {
     try {
-      this.logger.log(
-        `Обработка успешной оплаты подписки для paymentId: ${paymentId}`,
-      );
+      this.logger.log(`Показываем success страницу для платежа подписки: ${paymentId}`);
 
-      // Проверяем существование платежа
-      const payment = await this.paymentService.getPayment(paymentId);
-
+      // Получаем информацию о платеже
+      const payment = await this.paymentService.checkPaymentStatus(paymentId);
+      
       if (!payment) {
-        // Если платеж не найден, все равно перенаправляем на фронтенд с ошибкой
+        this.logger.error(`Платеж подписки ${paymentId} не найден`);
         const frontendUrl = this.configService.getFrontendUrl();
-        return res.redirect(
-          `${frontendUrl}/payment-return?paymentId=${paymentId}&type=subscription&error=not_found`,
-        );
+        res.redirect(`${frontendUrl}/subscription-return?error=payment_not_found`);
+        return;
       }
 
-      // Автоматически обновляем статус платежа на успешный
+      this.logger.log(`Платеж подписки найден: ${payment.id}, статус: ${payment.status}`);
+
+      // Если платеж еще pending, симулируем успешную оплату (для тестового режима)
       if (payment.status === 'pending') {
-        await this.paymentService.simulateSuccessfulPayment(paymentId);
-        this.logger.log(
-          `Платеж подписки ${paymentId} автоматически помечен как успешный`,
-        );
+        this.logger.log('Платеж подписки в статусе pending, обновляем на paid (тестовый режим)');
+        await this.paymentService.updatePaymentStatus(paymentId, 'paid');
+        payment.status = 'paid';
       }
 
-      // Перенаправляем на фронтенд
+      // Перенаправляем на фронтенд с результатом
       const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(
-        `${frontendUrl}/payment-return?paymentId=${paymentId}&type=subscription`,
-      );
+      
+      if (payment.status === 'paid') {
+        this.logger.log(`Перенаправляем на фронт с успешным платежом подписки: ${paymentId}`);
+        res.redirect(`${frontendUrl}/subscription-return?paymentId=${paymentId}&status=success`);
+      } else {
+        this.logger.log(`Перенаправляем на фронт с неуспешным платежом подписки: ${paymentId}, статус: ${payment.status}`);
+        res.redirect(`${frontendUrl}/subscription-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`);
+      }
     } catch (error) {
-      this.logger.error(
-        `Ошибка обработки успешной оплаты подписки для paymentId: ${paymentId}`,
-        error,
-      );
-
-      // В случае ошибки тоже перенаправляем на фронтенд
+      this.logger.error('Ошибка при обработке success страницы подписки:', error);
       const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(
-        `${frontendUrl}/payment-return?paymentId=${paymentId}&type=subscription&error=processing_error`,
-      );
+      res.redirect(`${frontendUrl}/subscription-return?error=processing_error`);
+      return;
+    }
+  }
+
+  @Get(':paymentId')
+  async getPaymentForm(
+    @Param('paymentId') paymentId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    try {
+      const payment = await this.paymentService.checkPaymentStatus(paymentId);
+      
+      if (!payment) {
+        res.status(404).send('Платеж подписки не найден');
+        return;
+      }
+
+      // Читаем HTML шаблон для подписки
+      const templatePath = join(process.cwd(), 'src', 'subscription', 'templates', 'subscription-payment-form.html');
+      let html = readFileSync(templatePath, 'utf8');
+
+      // Заменяем плейсхолдеры
+      html = html.replace(/{{paymentId}}/g, payment.id);
+      html = html.replace(/{{amount}}/g, payment.amount.toString());
+      html = html.replace(/{{paymentUrl}}/g, payment.paymentUrl || '#');
+      html = html.replace(/{{status}}/g, payment.status);
+
+      res.send(html);
+    } catch (error) {
+      this.logger.error('Ошибка загрузки формы оплаты подписки:', error);
+      res.status(500).send(`Ошибка загрузки формы оплаты подписки: ${error.message}`);
     }
   }
 }

@@ -26,368 +26,167 @@ export class OrderPaymentPageController {
 
   @Get('yookassa-return')
   async handleYookassaReturn(@Query() query: any, @Res() res: Response) {
-    try {
-      this.logger.log(`Обработка возврата с YooKassa. Query params:`, query);
+    this.logger.log('Возврат с YooKassa. Query params:', query);
 
-      // Получаем orderId из query параметров (это YooKassa ID)
-      const yookassaOrderId = query.orderId || query.orderid || query.order_id;
+    const frontendUrl = this.configService.getFrontendUrl();
+    
+    // Простая страница с автоматическим редиректом на фронт
+    // Статус платежа обновляется через webhook'и
+    const html = `
+      <!DOCTYPE html>
+      <html lang="ru">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Обработка платежа</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            text-align: center;
+          }
+          .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .success-icon {
+            font-size: 48px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+          }
+          .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007AFF;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          .return-button {
+            display: inline-block;
+            background: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            margin-top: 20px;
+          }
+          .return-button:hover {
+            background: #0056CC;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="success-icon">✅</div>
+          <h1>Платеж обрабатывается</h1>
+          <div class="spinner"></div>
+          <p>Ваш платеж обрабатывается. Вы будете автоматически перенаправлены в приложение через несколько секунд.</p>
+          <p><small>Статус платежа обновляется через webhook'и от YooKassa</small></p>
+          
+          <a href="${frontendUrl}" class="return-button">
+            🏠 Вернуться в приложение сейчас
+          </a>
+        </div>
 
-      if (!yookassaOrderId) {
-        this.logger.error('orderId не найден в query параметрах:', query);
-
-        // Показываем страницу с инструкциями для пользователя
-        const frontendUrl = this.configService.getFrontendUrl();
-        const instructionsHtml = `
-          <!DOCTYPE html>
-          <html lang="ru">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Завершение оплаты</title>
-              <style>
-                  body {
-                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                      margin: 0;
-                      padding: 20px;
-                      min-height: 100vh;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                  }
-                  .container {
-                      background: white;
-                      border-radius: 20px;
-                      padding: 40px;
-                      text-align: center;
-                      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-                      max-width: 500px;
-                      width: 100%;
-                  }
-                  .icon {
-                      font-size: 64px;
-                      margin-bottom: 20px;
-                  }
-                  h1 {
-                      color: #333;
-                      margin-bottom: 20px;
-                  }
-                  p {
-                      color: #666;
-                      line-height: 1.6;
-                      margin-bottom: 20px;
-                  }
-                  .btn {
-                      display: inline-block;
-                      padding: 15px 30px;
-                      background: #007bff;
-                      color: white;
-                      text-decoration: none;
-                      border-radius: 10px;
-                      font-size: 16px;
-                      margin: 10px;
-                      transition: background-color 0.3s;
-                  }
-                  .btn:hover {
-                      background: #0056b3;
-                  }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <div class="icon">💳</div>
-                  <h1>Оплата завершена</h1>
-                  <p>Если оплата прошла успешно, нажмите кнопку ниже, чтобы вернуться в приложение:</p>
-                  
-                  <div style="margin: 20px 0;">
-                    <input type="text" id="orderIdInput" placeholder="Введите orderId из URL YooKassa" 
-                           style="padding: 10px; width: 300px; border: 1px solid #ddd; border-radius: 5px; margin-right: 10px;">
-                    <button onclick="processManualOrderId()" class="btn" style="display: inline-block; padding: 10px 20px;">
-                      Обработать платеж
-                    </button>
-                  </div>
-                  
-                  <a href="${frontendUrl}/payment-return" class="btn" id="returnBtn">
-                      Вернуться в приложение
-                  </a>
-                  
-                  <p style="margin-top: 30px; font-size: 14px; color: #999;">
-                      Если у вас возникли проблемы, обратитесь в службу поддержки
-                  </p>
-                  
-                  <script>
-                    console.log('=== Отладка извлечения orderId ===');
-                    console.log('Current URL:', window.location.href);
-                    console.log('Referrer:', document.referrer);
-                    console.log('User Agent:', navigator.userAgent);
-                    
-                    // Пытаемся извлечь orderId из referrer URL
-                    function extractOrderIdFromReferrer() {
-                      const referrer = document.referrer;
-                      console.log('Проверяем referrer:', referrer);
-                      
-                      if (referrer) {
-                        // Проверяем разные варианты URL YooKassa
-                        const patterns = [
-                          /orderId=([^&?#]+)/i,
-                          /orderid=([^&?#]+)/i,
-                          /order_id=([^&?#]+)/i,
-                          /contract\?([^&?#]+)/i, // для случая contract?308dd069-000f-5001-9000-1885b0d59941
-                          /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i // UUID в пути
-                        ];
-                        
-                        for (let pattern of patterns) {
-                          const match = referrer.match(pattern);
-                          if (match) {
-                            const orderId = match[1];
-                            console.log('Найден orderId по паттерну', pattern, ':', orderId);
-                            
-                            // Проверяем, что это похоже на YooKassa ID
-                            if (orderId.length > 10) {
-                              console.log('Перенаправляем с orderId:', orderId);
-                              window.location.href = '/order-payment/yookassa-return?orderId=' + orderId;
-                              return true;
-                            }
-                          }
-                        }
-                      }
-                      
-                      console.log('OrderId не найден в referrer');
-                      return false;
-                    }
-                    
-                    // Альтернативный способ - извлечение из истории браузера
-                    function extractFromHistory() {
-                      try {
-                        const historyLength = window.history.length;
-                        console.log('History length:', historyLength);
-                        
-                        // Пытаемся получить предыдущий URL из performance API
-                        if (window.performance && window.performance.navigation) {
-                          console.log('Navigation type:', window.performance.navigation.type);
-                        }
-                        
-                        // Проверяем performance entries
-                        if (window.performance && window.performance.getEntriesByType) {
-                          const navigationEntries = window.performance.getEntriesByType('navigation');
-                          console.log('Navigation entries:', navigationEntries);
-                        }
-                      } catch (e) {
-                        console.log('Ошибка при работе с историей:', e);
-                      }
-                    }
-                    
-                    // Функция для ручной обработки orderId
-                    function processManualOrderId() {
-                      const input = document.getElementById('orderIdInput');
-                      const orderId = input.value.trim();
-                      
-                      if (!orderId) {
-                        alert('Введите orderId');
-                        return;
-                      }
-                      
-                      console.log('Ручная обработка orderId:', orderId);
-                      window.location.href = '/order-payment/yookassa-return?orderId=' + orderId;
-                    }
-                    
-                    // Обработка Enter в поле ввода
-                    document.addEventListener('DOMContentLoaded', function() {
-                      const input = document.getElementById('orderIdInput');
-                      if (input) {
-                        input.addEventListener('keypress', function(e) {
-                          if (e.key === 'Enter') {
-                            processManualOrderId();
-                          }
-                        });
-                      }
-                    });
-                    
-                    // Пытаемся автоматически обработать платеж
-                    setTimeout(() => {
-                      console.log('Начинаем обработку возврата...');
-                      
-                      if (!extractOrderIdFromReferrer()) {
-                        console.log('Пробуем альтернативные способы...');
-                        extractFromHistory();
-                        
-                        // Проверяем sessionStorage
-                        const pendingPaymentId = sessionStorage?.getItem('pendingPaymentId');
-                        if (pendingPaymentId) {
-                          console.log('Найден pendingPaymentId:', pendingPaymentId);
-                          console.log('Перенаправляем на success страницу...');
-                          window.location.href = '/order-payment/success/' + pendingPaymentId;
-                          return;
-                        }
-                        
-                        console.log('Показываем кнопку возврата пользователю');
-                        // Показываем сообщение пользователю
-                        const container = document.querySelector('.container');
-                        if (container) {
-                          const debugInfo = document.createElement('div');
-                          debugInfo.style.marginTop = '20px';
-                          debugInfo.style.padding = '10px';
-                          debugInfo.style.backgroundColor = '#f0f0f0';
-                          debugInfo.style.borderRadius = '5px';
-                          debugInfo.style.fontSize = '12px';
-                          debugInfo.innerHTML = '<strong>Отладочная информация:</strong><br>' +
-                            'Referrer: ' + (document.referrer || 'отсутствует') + '<br>' +
-                            'Current URL: ' + window.location.href;
-                          container.appendChild(debugInfo);
-                        }
-                      }
-                    }, 1000); // Даем время на загрузку
-                  </script>
-              </div>
-          </body>
-          </html>
-        `;
-
-        res.setHeader('Content-Type', 'text/html');
-        res.send(instructionsHtml);
-        return;
-      }
-
-      this.logger.log(`Найден YooKassa orderId: ${yookassaOrderId}`);
-
-      // Ищем платеж по yookassaId
-      const payment =
-        await this.orderPaymentService.findByYookassaId(yookassaOrderId);
-
-      if (!payment) {
-        this.logger.error(`Платеж с yookassaId ${yookassaOrderId} не найден`);
-        const frontendUrl = this.configService.getFrontendUrl();
-        return res.redirect(
-          `${frontendUrl}/payment-return?error=payment_not_found`,
-        );
-      }
-
-      this.logger.log(`Найден платеж: ${payment.id}`);
-
-      // Перенаправляем на наш стандартный success endpoint
-      return res.redirect(`/order-payment/success/${payment.id}`);
-    } catch (error) {
-      this.logger.error(`Ошибка обработки возврата с YooKassa:`, error);
-
-      // В случае ошибки перенаправляем на фронтенд с ошибкой
-      const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(`${frontendUrl}/payment-return?error=yookassa_return_error`);
-    }
+        <script>
+          console.log('Возврат с YooKassa, автоматическое перенаправление через 3 секунды');
+          
+          // Автоматическое перенаправление через 3 секунды
+          setTimeout(() => {
+            window.location.href = '${frontendUrl}';
+          }, 3000);
+        </script>
+      </body>
+      </html>
+    `;
+    
+    res.send(html);
+    return;
   }
 
   @Get('success/:paymentId')
   async showSuccessPage(
     @Param('paymentId') paymentId: string,
     @Res() res: Response,
-  ) {
+  ): Promise<void> {
     try {
-      this.logger.log(`Обработка успешной оплаты для paymentId: ${paymentId}`);
+      this.logger.log(`Показываем success страницу для платежа: ${paymentId}`);
 
-      // Проверяем существование платежа
-      const payment = await this.orderPaymentService.getPayment(paymentId);
-
+      // Получаем информацию о платеже
+      const payment = await this.orderPaymentService.checkPaymentStatus(paymentId);
+      
       if (!payment) {
-        // Если платеж не найден, все равно перенаправляем на фронтенд с ошибкой
+        this.logger.error(`Платеж ${paymentId} не найден`);
         const frontendUrl = this.configService.getFrontendUrl();
-        return res.redirect(
-          `${frontendUrl}/payment-return?paymentId=${paymentId}&error=not_found`,
-        );
+        res.redirect(`${frontendUrl}/payment-return?error=payment_not_found`);
+        return;
       }
 
-      // Автоматически обновляем статус платежа на успешный
+      this.logger.log(`Платеж найден: ${payment.id}, статус: ${payment.status}`);
+
+      // Если платеж еще pending, симулируем успешную оплату (для тестового режима)
       if (payment.status === 'pending') {
-        await this.orderPaymentService.simulateSuccessfulPayment(paymentId);
-        this.logger.log(
-          `Платеж ${paymentId} автоматически помечен как успешный`,
-        );
+        this.logger.log('Платеж в статусе pending, обновляем на paid (тестовый режим)');
+        await this.orderPaymentService.updatePaymentStatus(paymentId, 'paid');
+        payment.status = 'paid';
       }
 
-      // Перенаправляем на фронтенд
+      // Перенаправляем на фронтенд с результатом
       const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(`${frontendUrl}/payment-return?paymentId=${paymentId}`);
+      
+      if (payment.status === 'paid') {
+        this.logger.log(`Перенаправляем на фронт с успешным платежом: ${paymentId}`);
+        res.redirect(`${frontendUrl}/payment-return?paymentId=${paymentId}&status=success`);
+      } else {
+        this.logger.log(`Перенаправляем на фронт с неуспешным платежом: ${paymentId}, статус: ${payment.status}`);
+        res.redirect(`${frontendUrl}/payment-return?paymentId=${paymentId}&status=${payment.status}&error=payment_failed`);
+      }
     } catch (error) {
-      this.logger.error(
-        `Ошибка обработки успешной оплаты для paymentId: ${paymentId}`,
-        error,
-      );
-
-      // В случае ошибки тоже перенаправляем на фронтенд
+      this.logger.error('Ошибка при обработке success страницы:', error);
       const frontendUrl = this.configService.getFrontendUrl();
-      res.redirect(
-        `${frontendUrl}/payment-return?paymentId=${paymentId}&error=processing_error`,
-      );
+      res.redirect(`${frontendUrl}/payment-return?error=processing_error`);
+      return;
     }
   }
 
   @Get(':paymentId')
-  async showPaymentForm(
+  async getPaymentForm(
     @Param('paymentId') paymentId: string,
     @Res() res: Response,
-  ) {
+  ): Promise<void> {
     try {
-      // Проверяем существование платежа
-      const payment = await this.orderPaymentService.getPayment(paymentId);
-
+      const payment = await this.orderPaymentService.checkPaymentStatus(paymentId);
+      
       if (!payment) {
-        return res.status(404).send('Платеж не найден');
-      }
-
-      if (payment.status !== 'pending') {
-        return res.status(400).send('Платеж уже обработан');
+        res.status(404).send('Платеж не найден');
+        return;
       }
 
       // Читаем HTML шаблон
-      const templatePath = join(
-        process.cwd(),
-        'dist',
-        'order',
-        'templates',
-        'order-payment-form.html',
-      );
-
-      this.logger.log(`Пытаемся загрузить шаблон из: ${templatePath}`);
-
+      const templatePath = join(process.cwd(), 'src', 'order', 'templates', 'order-payment-form.html');
       let html = readFileSync(templatePath, 'utf8');
 
-      // Заменяем параметры в HTML
-      html = html.replace(
-        "const paymentId = urlParams.get('paymentId') || 'test-payment-id';",
-        `const paymentId = '${paymentId}';`,
-      );
+      // Заменяем плейсхолдеры
+      html = html.replace(/{{paymentId}}/g, payment.id);
+      html = html.replace(/{{amount}}/g, payment.amount.toString());
+      html = html.replace(/{{paymentUrl}}/g, payment.paymentUrl || '#');
+      html = html.replace(/{{status}}/g, payment.status);
 
-      html = html.replace(
-        "const amount = urlParams.get('amount') || '1000';",
-        `const amount = '${payment.amount}';`,
-      );
-
-      // Заменяем WebSocket URL
-      const wsUrl = this.configService.getWebSocketUrl();
-      html = html.replace('{{WEBSOCKET_URL}}', wsUrl);
-
-      // Добавляем ссылку для возврата в приложение
-      const frontendUrl = this.configService.getFrontendUrl();
-      const returnUrl = `${this.configService.getBaseUrl()}/order-payment/success/${paymentId}`;
-
-      html = html.replace(
-        '</body>',
-        `
-        <div style="margin-top: 20px; padding: 20px; background: #f0f0f0; border-radius: 8px;">
-          <h3>После оплаты:</h3>
-          <p>Если вас не перенаправило автоматически, нажмите кнопку ниже:</p>
-          <a href="${returnUrl}" style="display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 4px;">
-            Вернуться в приложение
-          </a>
-        </div>
-        </body>`,
-      );
-
-      res.setHeader('Content-Type', 'text/html');
       res.send(html);
     } catch (error) {
-      this.logger.error(
-        `Ошибка загрузки формы оплаты для paymentId: ${paymentId}`,
-        error,
-      );
+      this.logger.error('Ошибка загрузки формы оплаты:', error);
       res.status(500).send(`Ошибка загрузки формы оплаты: ${error.message}`);
     }
   }

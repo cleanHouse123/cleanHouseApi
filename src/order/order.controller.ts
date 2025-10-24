@@ -327,10 +327,23 @@ export class OrderController {
         await this.orderPaymentService.handleYookassaWebhook(webhookData);
 
       if (payment && payment.status === 'paid') {
-        // Обновляем статус заказа на "оплачен"
-        await this.orderService.updateStatus(payment.orderId, {
-          status: OrderStatus.PAID,
-        });
+        try {
+          // Обновляем статус заказа на "оплачен"
+          await this.orderService.updateStatus(payment.orderId, {
+            status: OrderStatus.PAID,
+          });
+        } catch (error) {
+          // Игнорируем ошибку, если заказ уже оплачен
+          if (
+            error.message?.includes('Невозможно изменить статус с paid на paid')
+          ) {
+            console.log(
+              `Заказ ${payment.orderId} уже оплачен, пропускаем обновление статуса`,
+            );
+          } else {
+            throw error;
+          }
+        }
 
         // Отправляем уведомление через WebSocket
         this.orderPaymentGateway.notifyPaymentSuccess(
