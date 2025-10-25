@@ -236,7 +236,7 @@
         // Получаем параметры из URL
         const urlParams = new URLSearchParams(window.location.search);
         const paymentId = urlParams.get('paymentId') || 'test-payment-id';
-        const amount = urlParams.get('amount') || '149';
+        const amount = urlParams.get('amount') || '14900';
 
         // Обновляем информацию о платеже
         document.getElementById('payment-amount').textContent = amount + ' ₽';
