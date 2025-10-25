@@ -111,12 +111,12 @@ export class PaymentService {
         try {
           yookassaPayment = await this.yookassaService.createPayment({
             amount: {
-              value: amount,
+              value: Number((amount / 100).toFixed(2)),
               currency: CurrencyEnum.RUB,
             },
             confirmation: {
               type: ConfirmationEnum.redirect,
-              return_url: `${baseUrl}/subscription-payment/yookassa-return`,
+              return_url: `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173')}/payment/result?paymentId=${paymentId}&type=subscription`,
             },
             description: `Оплата подписки ${subscriptionType}`,
             capture: true, // Автоматический захват средств

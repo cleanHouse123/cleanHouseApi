@@ -63,12 +63,12 @@ export class OrderPaymentService {
         try {
           yookassaPayment = await this.yookassaService.createPayment({
             amount: {
-              value: amount,
+              value: (amount / 100).toFixed(2),
               currency: CurrencyEnum.RUB,
             },
             confirmation: {
               type: ConfirmationEnum.redirect,
-              return_url: `${baseUrl}/order-payment/yookassa-return`,
+              return_url: `${frontendUrl}/payment/result?paymentId=${paymentId}&type=order`,
             },
             description: `Оплата заказа №${orderId}`,
             capture: true, // Автоматический захват средств

@@ -1,804 +1,374 @@
-# Интеграция YooKassa платежей
+# Система платежей YooKassa
 
-Документация по настройке и использованию платежной системы YooKassa в приложении Clean House.
+Документация по интеграции платежной системы YooKassa в Clean House API.
 
-## 🚀 Быстрый старт для фронтенда
+## 🏗️ Архитектура платежей
 
-### Важно! Не используйте iframe для оплаты
+### Основные компоненты
 
-**❌ Неправильно:**
+1. **Order Payment Service** (`src/order/services/order-payment.service.ts`)
+   - Создание платежей для заказов
+   - Обработка статусов платежей заказов
 
-```javascript
-// НЕ ДЕЛАЙТЕ ТАК - iframe не поддерживается YooKassa
-const iframe = document.createElement('iframe');
-iframe.src = paymentUrl;
-```
+2. **Subscription Payment Service** (`src/subscription/services/payment.service.ts`)
+   - Создание платежей для подписок
+   - Обработка статусов платежей подписок
 
-**✅ Правильно:**
+3. **Webhook Controller** (`src/shared/controllers/webhook.controller.ts`)
+   - Единый обработчик всех webhook'ов от YooKassa
+   - Автоматическое определение типа платежа (заказ/подписка)
 
-```javascript
-// Прямое перенаправление на страницу оплаты
-window.location.href = paymentUrl;
-// или
-window.open(paymentUrl, '_blank');
-```
+4. **Payment Status Controller** (`src/shared/controllers/payment-status.controller.ts`)
+   - Проверка статуса любого платежа
+   - Универсальный поиск по заказам и подпискам
 
-## 🔄 Упрощенный Flow оплаты
+## 🔄 Упрощенный Flow платежей
 
-### 1. Создание платежа для заказа
+### 1. Создание платежа
 
-```javascript
-const createOrderPayment = async (orderId, amount) => {
-  try {
-    const response = await fetch('/orders/payment/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ orderId, amount }),
-    });
-
-    const data = await response.json();
-    return data; // { paymentUrl, paymentId, status }
-  } catch (error) {
-    console.error('Ошибка создания платежа заказа:', error);
-  }
-};
-
-// Использование
-const payment = await createOrderPayment(orderId, 1500);
-if (payment?.paymentUrl) {
-  // Прямое перенаправление на YooKassa
-  window.location.href = payment.paymentUrl;
-}
-```
-
-### 1.1. Создание платежа для подписки
-
-```javascript
-const createSubscriptionPayment = async (
-  subscriptionId,
-  subscriptionType,
-  planId,
-  amount,
-) => {
-  try {
-    const response = await fetch('/subscriptions/payment/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        subscriptionId,
-        subscriptionType, // 'basic', 'premium', 'pro'
-        planId, // UUID плана подписки
-        amount,
-      }),
-    });
-
-    const data = await response.json();
-    return data; // { paymentUrl, paymentId, status }
-  } catch (error) {
-    console.error('Ошибка создания платежа подписки:', error);
-  }
-};
-
-// Использование
-const payment = await createSubscriptionPayment(
-  subscriptionId,
-  'premium',
-  planId, // UUID плана
-  29900,
-);
-if (payment?.paymentUrl) {
-  // Прямое перенаправление на YooKassa
-  window.location.href = payment.paymentUrl;
-}
-```
-
-### 2. Автоматическая обработка
-
-- **YooKassa** → отправляет webhook на `https://your-domain.com/webhooks/yookassa`
-- **Backend** → автоматически обновляет статус платежа и заказа
-- **Пользователь** → видит страницу "Платеж обрабатывается" и автоматически перенаправляется в приложение через 3 секунды
-
-### 3. Отслеживание статуса в реальном времени
-
-```javascript
-// WebSocket подключение для получения обновлений
-import { io } from 'socket.io-client';
-
-const socket = io('your-backend-url');
-
-// Подписка на обновления платежа заказа
-socket.on(`order_payment_${paymentId}`, (data) => {
-  console.log('Обновление статуса платежа заказа:', data);
-
-  if (data.status === 'success') {
-    // Платеж заказа успешен
-    showSuccessMessage('Заказ оплачен успешно!');
-    updateOrderStatus(data.orderId, 'paid');
-  } else if (data.status === 'error') {
-    // Ошибка платежа заказа
-    showErrorMessage(data.error || 'Ошибка при оплате заказа');
-  }
-});
-
-// Подписка на обновления платежа подписки
-socket.on(`subscription_payment_${paymentId}`, (data) => {
-  console.log('Обновление статуса платежа подписки:', data);
-
-  if (data.status === 'success') {
-    // Платеж подписки успешен
-    showSuccessMessage('Подписка активирована!');
-    updateSubscriptionStatus(data.subscriptionId, 'active');
-  } else if (data.status === 'error') {
-    // Ошибка платежа подписки
-    showErrorMessage(data.error || 'Ошибка при оплате подписки');
-  }
-});
-```
-
-## 📱 Примеры для React Web App
-
-### React компонент для оплаты
-
-```jsx
-import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
-
-const PaymentComponent = ({
-  orderId,
-  subscriptionId,
-  subscriptionType,
-  planId, // для подписок
-  amount,
-  type = 'order', // 'order' или 'subscription'
-  onSuccess,
-  onError,
-}) => {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [socket, setSocket] = useState(null);
-
-  useEffect(() => {
-    // Инициализация WebSocket
-    const socketConnection = io(process.env.REACT_APP_BACKEND_URL);
-    setSocket(socketConnection);
-
-    return () => {
-      socketConnection.disconnect();
-    };
-  }, []);
-
-  const handlePayment = async () => {
-    setIsProcessing(true);
-
-    try {
-      const endpoint =
-        type === 'subscription'
-          ? '/subscriptions/payment/create'
-          : '/orders/payment/create';
-
-      const body =
-        type === 'subscription'
-          ? { subscriptionId, subscriptionType, planId, amount }
-          : { orderId, amount };
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      const payment = await response.json();
-
-      if (payment.paymentUrl) {
-        // Подписываемся на обновления статуса
-        const eventName =
-          type === 'subscription'
-            ? `subscription_payment_${payment.paymentId}`
-            : `order_payment_${payment.paymentId}`;
-
-        socket?.on(eventName, (data) => {
-          if (data.status === 'success') {
-            onSuccess?.(data);
-          } else if (data.status === 'error') {
-            onError?.(data.error);
-          }
-          setIsProcessing(false);
-        });
-
-        // Перенаправляем на оплату
-        window.location.href = payment.paymentUrl;
-      }
-    } catch (error) {
-      console.error(`Ошибка создания платежа ${type}:`, error);
-      onError?.(error.message);
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <div>
-      <button
-        onClick={handlePayment}
-        disabled={isProcessing}
-        className="payment-button"
-      >
-        {isProcessing ? 'Обработка...' : `Оплатить ${amount / 100} ₽`}
-      </button>
-    </div>
-  );
-};
-
-export default PaymentComponent;
-```
-
-### Хук для управления платежами
-
-```jsx
-import { useState, useEffect, useCallback } from 'react';
-import { io } from 'socket.io-client';
-
-const usePayment = () => {
-  const [socket, setSocket] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  useEffect(() => {
-    const socketConnection = io(process.env.REACT_APP_BACKEND_URL, {
-      auth: {
-        token: localStorage.getItem('token'),
-      },
-    });
-    setSocket(socketConnection);
-
-    return () => {
-      socketConnection.disconnect();
-    };
-  }, []);
-
-  const createPayment = useCallback(
-    async (orderId, amount, onSuccess, onError) => {
-      setIsProcessing(true);
-
-      try {
-        const response = await fetch('/orders/payment/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify({ orderId, amount }),
-        });
-
-        const payment = await response.json();
-
-        if (payment.paymentUrl) {
-          // Подписываемся на обновления статуса
-          socket?.on(`order_payment_${payment.paymentId}`, (data) => {
-            if (data.status === 'success') {
-              onSuccess?.(data);
-            } else if (data.status === 'error') {
-              onError?.(data.error);
-            }
-            setIsProcessing(false);
-          });
-
-          // Перенаправляем на оплату
-          window.location.href = payment.paymentUrl;
-        }
-      } catch (error) {
-        console.error('Ошибка создания платежа:', error);
-        onError?.(error.message);
-        setIsProcessing(false);
-      }
-    },
-    [socket],
-  );
-
-  return {
-    createPayment,
-    isProcessing,
-  };
-};
-
-// Использование хука в компоненте заказа
-const OrderComponent = ({ orderId, amount }) => {
-  const { createPayment, isProcessing } = usePayment();
-
-  const handlePaymentSuccess = (data) => {
-    console.log('Платеж заказа успешен:', data);
-    // Обновляем UI, показываем успех
-  };
-
-  const handlePaymentError = (error) => {
-    console.error('Ошибка платежа заказа:', error);
-    // Показываем ошибку пользователю
-  };
-
-  const handlePayClick = () => {
-    createPayment(orderId, amount, handlePaymentSuccess, handlePaymentError);
-  };
-
-  return (
-    <button onClick={handlePayClick} disabled={isProcessing}>
-      {isProcessing ? 'Обработка...' : `Оплатить заказ ${amount / 100} ₽`}
-    </button>
-  );
-};
-
-// Использование хука в компоненте подписки
-const SubscriptionComponent = ({
-  subscriptionId,
-  subscriptionType,
-  planId,
-  amount,
-}) => {
-  const { createPayment, isProcessing } = usePayment();
-
-  const handlePaymentSuccess = (data) => {
-    console.log('Платеж подписки успешен:', data);
-    // Активируем подписку в UI
-  };
-
-  const handlePaymentError = (error) => {
-    console.error('Ошибка платежа подписки:', error);
-    // Показываем ошибку пользователю
-  };
-
-  const handleSubscribeClick = () => {
-    createPayment(
-      subscriptionId,
-      amount,
-      handlePaymentSuccess,
-      handlePaymentError,
-      'subscription',
-      subscriptionType,
-    );
-  };
-
-  return (
-    <button onClick={handleSubscribeClick} disabled={isProcessing}>
-      {isProcessing
-        ? 'Обработка...'
-        : `Подписаться ${subscriptionType} ${amount / 100} ₽`}
-    </button>
-  );
-};
-
-export default usePayment;
-```
-
-### Компонент страницы возврата после оплаты
-
-```jsx
-import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-
-const PaymentReturn = () => {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const [status, setStatus] = useState('processing');
-
-  useEffect(() => {
-    const paymentId = searchParams.get('paymentId');
-    const paymentStatus = searchParams.get('status');
-    const paymentType = searchParams.get('type'); // 'order' или 'subscription'
-    const error = searchParams.get('error');
-
-    if (error) {
-      setStatus('error');
-      return;
-    }
-
-    if (paymentId && paymentStatus === 'success') {
-      setStatus('success');
-
-      // Делаем контрольный запрос для проверки статуса
-      verifyPaymentStatus(paymentId, paymentType);
-
-      // Перенаправляем на соответствующую страницу через 3 секунды
-      setTimeout(() => {
-        const redirectPath =
-          paymentType === 'subscription' ? '/subscriptions' : '/orders';
-        navigate(redirectPath);
-      }, 3000);
-    } else {
-      setStatus('error');
-    }
-  }, [searchParams, navigate]);
-
-  const verifyPaymentStatus = async (paymentId, type) => {
-    try {
-      const endpoint =
-        type === 'subscription'
-          ? `/subscriptions/payment/status/${paymentId}`
-          : `/orders/payment/status/${paymentId}`;
-
-      const response = await fetch(endpoint, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const paymentData = await response.json();
-      console.log('Подтверждение статуса платежа:', paymentData);
-
-      if (paymentData.status !== 'success' && paymentData.status !== 'paid') {
-        console.warn('Платеж не подтвержден:', paymentData);
-        setStatus('error');
-      }
-    } catch (error) {
-      console.error('Ошибка проверки статуса платежа:', error);
-    }
-  };
-
-  const renderContent = () => {
-    switch (status) {
-      case 'success':
-        const paymentType = searchParams.get('type');
-        const isSubscription = paymentType === 'subscription';
-
-        return (
-          <div className="payment-success">
-            <div className="success-icon">✅</div>
-            <h1>Платеж успешно завершен!</h1>
-            <p>
-              {isSubscription
-                ? 'Спасибо за оплату! Ваша подписка активирована.'
-                : 'Спасибо за оплату. Ваш заказ принят в обработку.'}
-            </p>
-            <p>
-              Вы будете перенаправлены на страницу{' '}
-              {isSubscription ? 'подписок' : 'заказов'} через несколько
-              секунд...
-            </p>
-            <button
-              onClick={() =>
-                navigate(isSubscription ? '/subscriptions' : '/orders')
-              }
-            >
-              {isSubscription ? 'Перейти к подпискам' : 'Перейти к заказам'}{' '}
-              сейчас
-            </button>
-          </div>
-        );
-
-      case 'error':
-        return (
-          <div className="payment-error">
-            <div className="error-icon">❌</div>
-            <h1>Ошибка при оплате</h1>
-            <p>К сожалению, произошла ошибка при обработке платежа.</p>
-            <button onClick={() => navigate('/orders')}>
-              Вернуться к заказам
-            </button>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="payment-processing">
-            <div className="spinner"></div>
-            <h1>Обработка платежа...</h1>
-            <p>Пожалуйста, подождите</p>
-          </div>
-        );
-    }
-  };
-
-  return <div className="payment-return-page">{renderContent()}</div>;
-};
-
-export default PaymentReturn;
-```
-
-### CSS стили для компонентов
-
-```css
-.payment-return-page {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background-color: #f5f5f5;
-  padding: 20px;
-}
-
-.payment-success,
-.payment-error,
-.payment-processing {
-  background: white;
-  padding: 40px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  max-width: 500px;
-  width: 100%;
-}
-
-.success-icon,
-.error-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-}
-
-.spinner {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #007aff;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.payment-button {
-  background: #007aff;
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.payment-button:hover {
-  background: #0056cc;
-}
-
-.payment-button:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-```
-
-## 🔗 API Endpoints
-
-### Создание платежа для заказа
+**Для заказов:**
 
 ```
 POST /orders/payment/create
-Content-Type: application/json
-Authorization: Bearer <token>
-
 {
-  "orderId": "uuid-заказа",
-  "amount": 1500
+  "orderId": "uuid",
+  "amount": 150000  // в копейках (1500 рублей)
 }
 
 Response:
 {
-  "paymentId": "uuid-платежа",
-  "paymentUrl": "https://yoomoney.ru/checkout/payments/v2/contract?orderId=...",
+  "paymentUrl": "https://yoomoney.ru/checkout/...",
+  "paymentId": "uuid",
   "status": "pending"
 }
 ```
 
-### Создание платежа для подписки
+**Для подписок:**
 
 ```
 POST /subscriptions/payment/create
-Content-Type: application/json
-Authorization: Bearer <token>
-
 {
-  "subscriptionId": "uuid-подписки",
-  "subscriptionType": "premium",
-  "planId": "uuid-плана",
-  "amount": 29900
+  "subscriptionId": "uuid",
+  "subscriptionType": "monthly",
+  "planId": "uuid",
+  "amount": 100000  // в копейках (1000 рублей)
 }
 
 Response:
 {
-  "paymentId": "uuid-платежа",
-  "paymentUrl": "https://yoomoney.ru/checkout/payments/v2/contract?orderId=...",
+  "paymentUrl": "https://yoomoney.ru/checkout/...",
+  "paymentId": "uuid",
   "status": "pending"
 }
 ```
 
-### Проверка статуса платежа
+### 2. Прямой редирект на фронтенд
 
+**YooKassa настроена на возврат сразу на фронтенд:**
+
+- **Заказы**: `FRONTEND_URL/payment/result?paymentId=xxx&type=order`
+- **Подписки**: `FRONTEND_URL/payment/result?paymentId=xxx&type=subscription`
+
+### 3. Обработка на фронтенде
+
+```javascript
+// На странице /payment/result
+const urlParams = new URLSearchParams(window.location.search);
+const paymentId = urlParams.get('paymentId');
+const type = urlParams.get('type'); // 'order' или 'subscription'
+
+// Показываем "Обработка платежа..."
+showProcessingState();
+
+// Проверяем статус каждые 2 секунды
+const checkStatus = setInterval(async () => {
+  const status = await fetch(`/payment-status/${paymentId}`);
+  const payment = await status.json();
+
+  if (payment.status === 'paid' || payment.status === 'success') {
+    clearInterval(checkStatus);
+    showSuccess('Платеж успешен!');
+    redirectToApp();
+  } else if (payment.status === 'failed') {
+    clearInterval(checkStatus);
+    showError('Ошибка платежа');
+  }
+}, 2000);
 ```
-GET /orders/payment/status/:paymentId
-Authorization: Bearer <token>
 
-Response:
-{
-  "id": "uuid-платежа",
-  "orderId": "uuid-заказа",
-  "amount": 1500,
-  "status": "paid", // pending, paid, failed, canceled
-  "createdAt": "2024-01-01T00:00:00.000Z"
+### 4. Автоматическое обновление через webhook'и
+
+Пока пользователь на странице результата, webhook'и от YooKassa обновляют статус в БД:
+
+```typescript
+// Webhook обработчик автоматически определяет тип
+const { orderId, subscriptionId } = webhookData.object.metadata;
+
+if (subscriptionId) {
+  await this.subscriptionPaymentService.updateStatus(paymentId, 'success');
+} else if (orderId) {
+  await this.orderPaymentService.updateStatus(paymentId, 'paid');
 }
 ```
 
-### Проверка статуса платежа подписки
+## 📊 Структура данных
 
-```
-GET /subscriptions/payment/status/:paymentId
-Authorization: Bearer <token>
+### Платежи заказов (Payment)
 
-Response:
+```typescript
 {
-  "id": "uuid-платежа",
-  "subscriptionId": "uuid-подписки",
-  "amount": 29900,
-  "status": "success", // pending, success, failed, refunded
-  "subscriptionType": "premium",
-  "createdAt": "2024-01-01T00:00:00.000Z"
+  id: string; // UUID платежа
+  orderId: string; // UUID заказа
+  amount: number; // Сумма в копейках
+  status: PaymentStatus; // pending, paid, failed, canceled
+  method: PaymentMethod; // online, subscription
+  yookassaId: string; // ID в системе YooKassa
+  createdAt: Date;
 }
 ```
 
-## 🔔 WebSocket Events
+### Платежи подписок (SubscriptionPayment)
 
-### Подключение
-
-```javascript
-const socket = io('your-backend-url', {
-  auth: {
-    token: 'your-jwt-token',
-  },
-});
+```typescript
+{
+  id: string;                    // UUID платежа
+  subscriptionId: string;        // UUID подписки
+  amount: number;                // Сумма в копейках
+  subscriptionType: string;      // monthly, yearly
+  status: SubscriptionPaymentStatus; // pending, success, failed, refunded
+  yookassaId: string;           // ID в системе YooKassa
+  paymentUrl: string;           // URL для оплаты
+  createdAt: Date;
+  paidAt?: Date;
+}
 ```
 
-### События платежей заказов
+## 🔧 Конфигурация YooKassa
 
-```javascript
-// Успешный платеж
-socket.on(`order_payment_${paymentId}`, (data) => {
-  // data: { status: 'success', paymentId, orderId }
-});
+### Переменные окружения
 
-// Ошибка платежа
-socket.on(`order_payment_error_${paymentId}`, (data) => {
-  // data: { status: 'error', paymentId, orderId, error }
-});
+```env
+YOOKASSA_SHOP_ID=123456
+YOOKASSA_SECRET_KEY=live_xxx или test_xxx
+NODE_ENV=production  # для режима работы
 ```
 
-### События платежей подписок
+### Настройка webhook'ов
 
-```javascript
-// Успешный платеж подписки
-socket.on(`subscription_payment_${paymentId}`, (data) => {
-  // data: { status: 'success', paymentId, subscriptionId, subscriptionType }
-});
-
-// Ошибка платежа подписки
-socket.on(`subscription_payment_error_${paymentId}`, (data) => {
-  // data: { status: 'error', paymentId, subscriptionId, error }
-});
-```
-
-## 🔗 Настройка webhook'ов в YooKassa
-
-В личном кабинете YooKassa → **Интеграция → HTTP-уведомления** указать **ОДИН URL**:
+В личном кабинете YooKassa указать **один URL**:
 
 ```
 https://your-domain.com/webhooks/yookassa
 ```
 
-**Поддерживаемые события YooKassa:**
+События для обработки:
 
-- ✅ `payment.succeeded` - Успешный платеж
-- ✅ `payment.waiting_for_capture` - Платеж ожидает подтверждения
-- ✅ `payment.canceled` - Отмена платежа или ошибка оплаты
-- ✅ `refund.succeeded` - Успешный возврат денег
+- `payment.succeeded` - успешная оплата
+- `payment.canceled` - отмена/ошибка оплаты
+- `refund.succeeded` - возврат средств
 
-**Автоматическое определение типа платежа:**
+## 🚀 API Endpoints
 
-- **Заказы** - если есть `orderId` и `paymentId` в metadata
-- **Подписки** - если есть `subscriptionId` и `paymentId` в metadata
+### Создание платежей
 
-**Один URL для всех типов событий и платежей!** 🎯
+- `POST /orders/payment/create` - платеж заказа
+- `POST /subscriptions/payment/create` - платеж подписки
 
-## ⚠️ Особенности тестового режима
+### Проверка статусов
 
-В тестовом режиме YooKassa может не передавать параметры в `return_url`. Это нормально - статус платежа обновляется через webhook'и автоматически.
+- `GET /orders/payment/status/:paymentId` - статус платежа заказа
+- `GET /subscriptions/payment/status/:paymentId` - статус платежа подписки
+- `GET /payment-status/:paymentId` - универсальная проверка
 
-**Что происходит:**
+### Webhook'и
 
-1. Пользователь оплачивает на YooKassa
-2. YooKassa отправляет webhook на backend
-3. Backend обновляет статус платежа
-4. WebSocket уведомляет фронтенд о статусе
-5. Пользователь видит результат в реальном времени
+- `POST /webhooks/yookassa` - обработка уведомлений YooKassa
 
-## 🎯 Лучшие практики
+### Страницы возврата (устарели)
 
-### 1. Обработка ошибок
+- ~~`GET /order-payment/yookassa-return`~~ - больше не используется
+- ~~`GET /subscription-payment/yookassa-return`~~ - больше не используется
+
+**Теперь YooKassa редиректит сразу на фронтенд!**
+
+## 💻 Использование на фронтенде
+
+### Простой flow без WebSocket'ов
 
 ```javascript
-const handlePaymentError = (error) => {
-  console.error('Ошибка платежа:', error);
+// 1. Создание платежа
+const createPayment = async (orderId, amount) => {
+  const response = await fetch('/orders/payment/create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ orderId, amount }),
+  });
 
-  // Показать пользователю понятное сообщение
-  switch (error) {
-    case 'payment_not_found':
-      showError('Платеж не найден');
-      break;
-    case 'processing_error':
-      showError('Ошибка обработки платежа');
-      break;
-    default:
-      showError('Произошла ошибка при оплате');
-  }
+  const { paymentUrl, paymentId } = await response.json();
+
+  // 2. Перенаправление на оплату
+  window.location.href = paymentUrl;
+};
+
+// 3. Проверка статуса после возврата
+const checkPaymentStatus = async (paymentId) => {
+  const response = await fetch(`/payment-status/${paymentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const payment = await response.json();
+  return payment.status; // 'paid', 'pending', 'failed'
 };
 ```
 
-### 2. Индикация загрузки
+### Страница результата платежа
 
 ```javascript
-const [paymentStatus, setPaymentStatus] = useState('idle'); // idle, processing, success, error
+// /payment/result - единая страница для всех типов платежей
+const PaymentResult = () => {
+  const [status, setStatus] = useState('processing');
+  const urlParams = new URLSearchParams(window.location.search);
+  const paymentId = urlParams.get('paymentId');
+  const type = urlParams.get('type'); // 'order' или 'subscription'
 
-// Показывать спиннер во время обработки
-if (paymentStatus === 'processing') {
-  return <LoadingSpinner message="Обработка платежа..." />;
-}
+  useEffect(() => {
+    if (!paymentId) {
+      setStatus('error');
+      return;
+    }
+
+    // Проверяем статус каждые 2 секунды
+    const checkStatus = setInterval(async () => {
+      try {
+        const response = await fetch(`/payment-status/${paymentId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payment = await response.json();
+
+        if (payment.status === 'paid' || payment.status === 'success') {
+          clearInterval(checkStatus);
+          setStatus('success');
+
+          // Перенаправляем через 3 секунды
+          setTimeout(() => {
+            const redirectPath =
+              type === 'subscription' ? '/subscriptions' : '/orders';
+            navigate(redirectPath);
+          }, 3000);
+        } else if (
+          payment.status === 'failed' ||
+          payment.status === 'canceled'
+        ) {
+          clearInterval(checkStatus);
+          setStatus('error');
+        }
+      } catch (error) {
+        console.error('Ошибка проверки статуса:', error);
+      }
+    }, 2000);
+
+    return () => clearInterval(checkStatus);
+  }, [paymentId]);
+
+  return (
+    <div className="payment-result">
+      {status === 'processing' && (
+        <div>
+          <Spinner />
+          <h1>Обработка платежа...</h1>
+          <p>Пожалуйста, подождите</p>
+        </div>
+      )}
+
+      {status === 'success' && (
+        <div>
+          <SuccessIcon />
+          <h1>Платеж успешен!</h1>
+          <p>Перенаправление...</p>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div>
+          <ErrorIcon />
+          <h1>Ошибка платежа</h1>
+          <button onClick={() => navigate('/orders')}>
+            Вернуться к заказам
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 ```
 
-### 3. Таймауты
+## 🔍 Отладка и мониторинг
 
-```javascript
-// Устанавливаем таймаут для WebSocket событий
-const paymentTimeout = setTimeout(() => {
-  showError('Превышено время ожидания платежа');
-  setPaymentStatus('error');
-}, 300000); // 5 минут
-
-socket.on(`order_payment_${paymentId}`, (data) => {
-  clearTimeout(paymentTimeout);
-  // Обработка события
-});
-```
-
-## 🔧 Отладка
-
-### Логи на backend
+### Логи платежей
 
 ```bash
 # Просмотр логов webhook'ов
-docker logs -f your-container-name | grep "webhook"
+docker logs -f container_name | grep "webhook"
 
-# Просмотр логов YooKassa
-docker logs -f your-container-name | grep "YooKassa"
+# Логи создания платежей
+docker logs -f container_name | grep "YooKassa payment"
 ```
 
-### Проверка статуса платежа
+### Проверка конфигурации
 
-```javascript
-// Ручная проверка статуса
-const checkPaymentStatus = async (paymentId) => {
-  const response = await fetch(`/orders/payment/status/${paymentId}`);
-  const status = await response.json();
-  console.log('Статус платежа:', status);
-};
+```bash
+# Проверка переменных окружения
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/health
 ```
 
-## 📞 Поддержка
+### Тестирование платежей
 
-При возникновении проблем:
+```bash
+# Создание тестового платежа
+curl -X POST http://localhost:3000/orders/payment/create \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"orderId":"test-uuid","amount":100}'
+```
 
-1. Проверьте логи backend'а
-2. Убедитесь, что webhook'и настроены правильно
-3. Проверьте WebSocket подключение
-4. Обратитесь к разработчикам backend'а
+## ⚠️ Важные особенности
 
----
+### Конвертация сумм
 
-**Важно:** Всегда тестируйте платежи в тестовом режиме перед переходом на продакшн!
+- **Фронтенд/API**: сумма в копейках (integer)
+- **YooKassa API**: сумма в рублях (string с 2 знаками)
+- **Конвертация**: `(amount / 100).toFixed(2)`
+
+### Тестовый режим
+
+- В тестовом режиме YooKassa может не передавать параметры в return_url
+- Статус платежа всегда проверяется через webhook'и
+- Используйте тестовые карты из документации YooKassa
+
+### Безопасность
+
+- Все webhook'и проверяются на подлинность
+- Платежи привязаны к пользователям через JWT
+- Суммы валидируются на backend'е
+
+## 🎯 Упрощения в архитектуре
+
+### Убрано из системы:
+
+- ❌ WebSocket'ы для real-time уведомлений
+- ❌ Сложная система событий
+- ❌ Gateway'и для уведомлений
+- ❌ Множественные контроллеры для одного типа операций
+
+### Оставлено только необходимое:
+
+- ✅ Прямые HTTP API для создания платежей
+- ✅ Единый webhook обработчик
+- ✅ Простая проверка статусов
+- ✅ Автоматическое обновление через webhook'и
+
+Эта упрощенная архитектура надежнее и проще в поддержке, убирает зависимости от WebSocket соединений и сложной синхронизации состояний.
