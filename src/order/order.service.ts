@@ -17,6 +17,7 @@ import { OrderResponseDto } from './dto/order-response.dto';
 import { User } from '../user/entities/user.entity';
 import { UserRole } from '../shared/types/user.role';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { OrderPaymentService } from './services/order-payment.service';
 
 @Injectable()
 export class OrderService {
@@ -28,6 +29,7 @@ export class OrderService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private subscriptionService: SubscriptionService,
+    private orderPaymentService: OrderPaymentService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -95,6 +97,21 @@ export class OrderService {
         method: PaymentMethod.SUBSCRIPTION,
       });
       await this.paymentRepository.save(payment);
+    } else if (orderStatus === OrderStatus.NEW) {
+      // Для новых заказов создаем ссылку на оплату
+      try {
+        const paymentData = await this.orderPaymentService.createPaymentLink(
+          savedOrder.id,
+          savedOrder.price * 100, // Конвертируем в копейки
+        );
+
+        // Обновляем заказ с ссылкой на оплату
+        savedOrder.paymentUrl = paymentData.paymentUrl;
+        await this.orderRepository.save(savedOrder);
+      } catch (error) {
+        console.error('Ошибка создания ссылки на оплату:', error);
+        // Не блокируем создание заказа из-за ошибки платежа
+      }
     }
 
     return this.findOne(savedOrder.id);

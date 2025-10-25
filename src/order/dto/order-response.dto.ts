@@ -87,6 +87,10 @@ export class OrderResponseDto {
   @Expose()
   notes?: string;
 
+  @ApiProperty({ required: false, description: 'Ссылка на оплату заказа' })
+  @Expose()
+  paymentUrl?: string;
+
   @ApiProperty({ type: [PaymentResponseDto] })
   @Expose()
   @Type(() => PaymentResponseDto)

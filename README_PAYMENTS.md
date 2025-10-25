@@ -143,6 +143,7 @@ if (subscriptionId) {
   description?: string;
   price: number;        // ✅ ЧИСЛО в рублях (например: 200.00)
   status: OrderStatus;  // new, paid, in_progress, completed, canceled
+  paymentUrl?: string;  // ✅ Ссылка на оплату (для неоплаченных заказов)
   payments: Payment[];
   createdAt: Date;
 }
@@ -242,6 +243,45 @@ https://your-domain.com/webhooks/yookassa
 **Теперь YooKassa редиректит сразу на фронтенд!**
 
 ## 💻 Использование на фронтенде
+
+### ✅ Новый упрощенный flow для заказов
+
+```javascript
+// 1. Создание заказа (автоматически создается ссылка на оплату)
+const createOrder = async (customerId, address, description) => {
+  const response = await fetch('/orders', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      customerId,
+      address,
+      description,
+      paymentMethod: 'online',
+    }),
+  });
+
+  const order = await response.json();
+  // order.paymentUrl уже содержит ссылку на оплату!
+
+  return order;
+};
+
+// 2. Показ ссылки на оплату в любой момент
+const showPaymentLink = (order) => {
+  if (order.status === 'new' && order.paymentUrl) {
+    // Показываем кнопку "Оплатить заказ"
+    return (
+      <button onClick={() => (window.location.href = order.paymentUrl)}>
+        Оплатить заказ {order.price} ₽
+      </button>
+    );
+  }
+  return null;
+};
+```
 
 ### Полный flow с реальными примерами
 
@@ -521,15 +561,15 @@ const formatAmount = (amount) => `${(amount / 100).toFixed(2)} ₽`;
 
 1. **Убрать парсинг строк в числа:**
 
-   ```javascript
-   // ❌ Старый код
-   const price = parseFloat(order.price);
-   const amount = parseInt(payment.amount);
+```javascript
+// ❌ Старый код
+const price = parseFloat(order.price);
+const amount = parseInt(payment.amount);
 
-   // ✅ Новый код
-   const price = order.price; // уже число
-   const amount = payment.amount; // уже число
-   ```
+// ✅ Новый код
+const price = order.price; // уже число
+const amount = payment.amount; // уже число
+```
 
 2. **Создать страницу `/payment/result`** для обработки возврата с YooKassa
 

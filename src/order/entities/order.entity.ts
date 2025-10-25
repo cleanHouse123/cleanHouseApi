@@ -70,6 +70,9 @@ export class Order {
   @Column({ type: 'text', nullable: true })
   notes?: string;
 
+  @Column({ type: 'text', nullable: true })
+  paymentUrl?: string;
+
   @OneToMany(() => Payment, (payment) => payment.order, {
     cascade: true,
   })
