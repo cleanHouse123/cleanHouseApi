@@ -108,10 +108,11 @@ export class PaymentService {
       } else {
         // Создаем реальный платеж в YooKassa
         console.log('Creating real YooKassa payment for subscription');
+        console.log('AMOUNTTTTT', amount, subscriptionType);
         try {
           yookassaPayment = await this.yookassaService.createPayment({
             amount: {
-              value: Number((amount / 100).toFixed(2)),
+              value: amount,
               currency: CurrencyEnum.RUB,
             },
             confirmation: {
