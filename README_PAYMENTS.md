@@ -113,16 +113,66 @@ if (subscriptionId) {
 
 ## 📊 Структура данных
 
+### ⚠️ ВАЖНО для фронтенда: Все суммы теперь возвращаются как числа!
+
+**До исправления:**
+
+```json
+{
+  "price": "200.00", // ❌ строка
+  "amount": "20000" // ❌ строка
+}
+```
+
+**После исправления:**
+
+```json
+{
+  "price": 200.0, // ✅ число
+  "amount": 20000 // ✅ число
+}
+```
+
+### Заказы (Order)
+
+```typescript
+{
+  id: string;
+  customer: User;
+  address: string;
+  description?: string;
+  price: number;        // ✅ ЧИСЛО в рублях (например: 200.00)
+  status: OrderStatus;  // new, paid, in_progress, completed, canceled
+  payments: Payment[];
+  createdAt: Date;
+}
+```
+
 ### Платежи заказов (Payment)
 
 ```typescript
 {
-  id: string; // UUID платежа
-  orderId: string; // UUID заказа
-  amount: number; // Сумма в копейках
-  status: PaymentStatus; // pending, paid, failed, canceled
-  method: PaymentMethod; // online, subscription
-  yookassaId: string; // ID в системе YooKassa
+  id: string;           // UUID платежа
+  orderId: string;      // UUID заказа
+  amount: number;       // ✅ ЧИСЛО в копейках (например: 20000)
+  status: PaymentStatus; // pending, paid, failed, refunded
+  method: PaymentMethod; // cash, card, online, subscription
+  yookassaId?: string;  // ID в системе YooKassa
+  createdAt: Date;
+}
+```
+
+### Подписки (Subscription)
+
+```typescript
+{
+  id: string;
+  userId: string;
+  type: SubscriptionType; // monthly, yearly, one_time
+  status: SubscriptionStatus; // pending, active, expired, canceled
+  price: number; // ✅ ЧИСЛО в рублях (например: 299.00)
+  startDate: Date;
+  endDate: Date;
   createdAt: Date;
 }
 ```
@@ -133,11 +183,11 @@ if (subscriptionId) {
 {
   id: string;                    // UUID платежа
   subscriptionId: string;        // UUID подписки
-  amount: number;                // Сумма в копейках
-  subscriptionType: string;      // monthly, yearly
+  amount: number;                // ✅ ЧИСЛО в копейках (например: 29900)
+  subscriptionType?: string;     // monthly, yearly
   status: SubscriptionPaymentStatus; // pending, success, failed, refunded
-  yookassaId: string;           // ID в системе YooKassa
-  paymentUrl: string;           // URL для оплаты
+  yookassaId?: string;          // ID в системе YooKassa
+  paymentUrl?: string;          // URL для оплаты
   createdAt: Date;
   paidAt?: Date;
 }
@@ -339,9 +389,31 @@ curl -X POST http://localhost:3000/orders/payment/create \
 
 ### Конвертация сумм
 
-- **Фронтенд/API**: сумма в копейках (integer)
-- **YooKassa API**: сумма в рублях (string с 2 знаками)
-- **Конвертация**: `(amount / 100).toFixed(2)`
+- **Фронтенд → API**: сумма в копейках (integer)
+- **API → Фронтенд**: все суммы как числа (не строки!)
+- **API → YooKassa**: сумма в рублях как число
+- **Конвертация**: `Number((amount / 100).toFixed(2))`
+
+### Работа с суммами на фронтенде
+
+```javascript
+// ✅ Правильно - суммы теперь числа
+const order = await fetch('/orders/123').then((r) => r.json());
+console.log(typeof order.price); // "number" (было "string")
+console.log(order.price); // 200.00 (было "200.00")
+
+const payment = order.payments[0];
+console.log(typeof payment.amount); // "number" (было "string")
+console.log(payment.amount); // 20000 (было "20000")
+
+// Можно сразу использовать в вычислениях
+const totalPrice = order.price * 1.2; // ✅ работает без parseInt/parseFloat
+const amountInRubles = payment.amount / 100; // ✅ сразу число
+
+// Форматирование для отображения
+const formatPrice = (price) => `${price.toFixed(2)} ₽`;
+const formatAmount = (amount) => `${(amount / 100).toFixed(2)} ₽`;
+```
 
 ### Тестовый режим
 
@@ -363,6 +435,7 @@ curl -X POST http://localhost:3000/orders/payment/create \
 - ❌ Сложная система событий
 - ❌ Gateway'и для уведомлений
 - ❌ Множественные контроллеры для одного типа операций
+- ❌ Промежуточные серверные страницы возврата
 
 ### Оставлено только необходимое:
 
@@ -370,5 +443,33 @@ curl -X POST http://localhost:3000/orders/payment/create \
 - ✅ Единый webhook обработчик
 - ✅ Простая проверка статусов
 - ✅ Автоматическое обновление через webhook'и
+- ✅ Прямой редирект на фронтенд после оплаты
+
+### Исправлено для фронтенда:
+
+- ✅ **Все суммы теперь числа** вместо строк
+- ✅ **Упрощенный flow** - один URL для результата платежа
+- ✅ **Polling вместо WebSocket'ов** - проще и надежнее
+- ✅ **Единая обработка** заказов и подписок
+
+## 🚀 Миграция для фронтенда
+
+### Что нужно изменить:
+
+1. **Убрать парсинг строк в числа:**
+
+   ```javascript
+   // ❌ Старый код
+   const price = parseFloat(order.price);
+   const amount = parseInt(payment.amount);
+
+   // ✅ Новый код
+   const price = order.price; // уже число
+   const amount = payment.amount; // уже число
+   ```
+
+2. **Создать страницу `/payment/result`** для обработки возврата с YooKassa
+
+3. **Использовать polling** вместо WebSocket'ов для проверки статуса
 
 Эта упрощенная архитектура надежнее и проще в поддержке, убирает зависимости от WebSocket соединений и сложной синхронизации состояний.
