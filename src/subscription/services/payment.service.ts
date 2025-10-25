@@ -90,8 +90,9 @@ export class PaymentService {
       );
 
       // Проверяем, используются ли тестовые данные
-      const secretKey = this.configService.get('YOOKASSA_SECRET_KEY');
-      const isTestMode = secretKey?.startsWith('test_');
+      const shopId = this.configService.get('YOOKASSA_SHOP_ID');
+      const isTestMode = shopId?.startsWith('test_');
+      console.log('YooKassa config check:', { shopId, isTestMode });
 
       let yookassaPayment: any;
 
