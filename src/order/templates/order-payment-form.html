@@ -187,7 +187,7 @@
 
         <div class="payment-info">
             <h3>Детали платежа</h3>
-            <div class="payment-amount" id="payment-amount">200 ₽</div>
+            <div class="payment-amount" id="payment-amount">149 ₽</div>
             <div class="payment-type">Оплата заказа на вынос мусора</div>
         </div>
 
@@ -236,7 +236,7 @@
         // Получаем параметры из URL
         const urlParams = new URLSearchParams(window.location.search);
         const paymentId = urlParams.get('paymentId') || 'test-payment-id';
-        const amount = urlParams.get('amount') || '200';
+        const amount = urlParams.get('amount') || '149';
 
         // Обновляем информацию о платеже
         document.getElementById('payment-amount').textContent = amount + ' ₽';

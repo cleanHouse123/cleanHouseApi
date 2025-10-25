@@ -75,7 +75,7 @@ export class OrderService {
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
       description: createOrderDto.description,
-      price: 200.0, // Фиксированная цена
+      price: 149, // Фиксированная цена
       notes: createOrderDto.notes,
       scheduledAt: createOrderDto.scheduledAt
         ? new Date(createOrderDto.scheduledAt)
