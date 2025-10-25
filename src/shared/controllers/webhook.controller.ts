@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Param } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../decorators/public.decorator';
 import { OrderPaymentService } from '../../order/services/order-payment.service';
@@ -25,11 +25,56 @@ export class WebhookController {
     private readonly paymentGateway: PaymentGateway,
   ) {}
 
+  @Post('test')
+  @Public()
+  @ApiOperation({ summary: 'Тестовый webhook endpoint' })
+  async testWebhook(@Body() data: any) {
+    this.logger.log('=== TEST WEBHOOK RECEIVED ===');
+    this.logger.log('Test data:', JSON.stringify(data, null, 2));
+    return {
+      message: 'Test webhook received successfully',
+      timestamp: new Date(),
+    };
+  }
+
+  @Post('manual-success/:paymentId')
+  @Public()
+  @ApiOperation({
+    summary: 'Ручное обновление статуса платежа для тестирования',
+  })
+  async manualSuccess(@Param('paymentId') paymentId: string) {
+    this.logger.log(`=== MANUAL SUCCESS FOR PAYMENT: ${paymentId} ===`);
+
+    // Имитируем webhook от YooKassa
+    const mockWebhook = {
+      type: 'payment.succeeded',
+      event: 'payment.succeeded',
+      object: {
+        id: 'mock-yookassa-id',
+        status: 'succeeded',
+        metadata: {
+          paymentId,
+          subscriptionId: 'test-subscription-id',
+        },
+      },
+    };
+
+    try {
+      const result = await this.handleYookassaWebhook(mockWebhook);
+      return { message: 'Manual success processed', result };
+    } catch (error) {
+      this.logger.error('Manual success error:', error);
+      return { message: 'Manual success failed', error: error.message };
+    }
+  }
+
   @Post('yookassa')
   @Public()
   @ApiOperation({ summary: 'Универсальный webhook для всех YooKassa платежей' })
   @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
   async handleYookassaWebhook(@Body() webhookData: any) {
+    this.logger.log('=== YOOKASSA WEBHOOK RECEIVED ===');
+    this.logger.log('Webhook body:', JSON.stringify(webhookData, null, 2));
     try {
       const eventType = webhookData.type || webhookData.event;
       this.logger.log(`Получен webhook от YooKassa: ${eventType}`);
