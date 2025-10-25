@@ -117,6 +117,33 @@ export class OrderService {
     return this.findOne(savedOrder.id);
   }
 
+  // Метод для создания ссылок на оплату для существующих заказов
+  async createPaymentUrlForOrder(orderId: string): Promise<string | null> {
+    try {
+      const order = await this.orderRepository.findOne({
+        where: { id: orderId },
+      });
+
+      if (!order || order.status !== OrderStatus.NEW) {
+        return null;
+      }
+
+      const paymentData = await this.orderPaymentService.createPaymentLink(
+        orderId,
+        order.price * 100, // Конвертируем в копейки
+      );
+
+      // Обновляем заказ с ссылкой на оплату
+      order.paymentUrl = paymentData.paymentUrl;
+      await this.orderRepository.save(order);
+
+      return paymentData.paymentUrl;
+    } catch (error) {
+      console.error('Ошибка создания ссылки на оплату для заказа:', error);
+      return null;
+    }
+  }
+
   async findAll(
     page: number = 1,
     limit: number = 10,

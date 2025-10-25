@@ -272,6 +272,40 @@ export class OrderController {
     );
   }
 
+  @Post(':id/create-payment-url')
+  @ApiOperation({
+    summary: 'Создать ссылку на оплату для существующего заказа',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Ссылка на оплату создана',
+    schema: {
+      type: 'object',
+      properties: {
+        paymentUrl: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Заказ не найден или уже оплачен' })
+  async createPaymentUrlForOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ paymentUrl: string | null; message: string }> {
+    const paymentUrl = await this.orderService.createPaymentUrlForOrder(id);
+
+    if (!paymentUrl) {
+      return {
+        paymentUrl: null,
+        message: 'Заказ не найден или уже оплачен',
+      };
+    }
+
+    return {
+      paymentUrl,
+      message: 'Ссылка на оплату создана успешно',
+    };
+  }
+
   @Post('payment/callback')
   @Public()
   @ApiOperation({ summary: 'Callback для обработки платежа заказа' })

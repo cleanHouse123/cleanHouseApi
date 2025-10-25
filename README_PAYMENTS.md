@@ -269,12 +269,32 @@ const createOrder = async (customerId, address, description) => {
   return order;
 };
 
-// 2. Показ ссылки на оплату в любой момент
-const showPaymentLink = (order) => {
-  if (order.status === 'new' && order.paymentUrl) {
-    // Показываем кнопку "Оплатить заказ"
+// 2. Создание ссылки на оплату для существующего заказа
+const createPaymentUrlForOrder = async (orderId) => {
+  const response = await fetch(`/orders/${orderId}/create-payment-url`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result = await response.json();
+  return result; // { paymentUrl: "...", message: "..." }
+};
+
+// 3. Показ ссылки на оплату в любой момент
+const showPaymentLink = async (order) => {
+  let paymentUrl = order.paymentUrl;
+
+  // Если нет ссылки, создаем её
+  if (order.status === 'new' && !paymentUrl) {
+    const result = await createPaymentUrlForOrder(order.id);
+    paymentUrl = result.paymentUrl;
+  }
+
+  if (order.status === 'new' && paymentUrl) {
     return (
-      <button onClick={() => (window.location.href = order.paymentUrl)}>
+      <button onClick={() => (window.location.href = paymentUrl)}>
         Оплатить заказ {order.price} ₽
       </button>
     );
