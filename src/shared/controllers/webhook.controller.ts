@@ -76,7 +76,7 @@ export class WebhookController {
     this.logger.log('=== YOOKASSA WEBHOOK RECEIVED ===');
     this.logger.log('Webhook body:', JSON.stringify(webhookData, null, 2));
     try {
-      const eventType = webhookData.type || webhookData.event;
+      const eventType = webhookData.event || webhookData.type;
       this.logger.log(`Получен webhook от YooKassa: ${eventType}`);
       this.logger.log('Данные webhook:', JSON.stringify(webhookData, null, 2));
 
