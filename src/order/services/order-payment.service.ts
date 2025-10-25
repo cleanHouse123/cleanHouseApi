@@ -63,7 +63,7 @@ export class OrderPaymentService {
         try {
           yookassaPayment = await this.yookassaService.createPayment({
             amount: {
-              value: (amount / 100).toFixed(2),
+              value: Number((amount / 100).toFixed(2)),
               currency: CurrencyEnum.RUB,
             },
             confirmation: {
