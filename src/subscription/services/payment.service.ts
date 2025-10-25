@@ -109,24 +109,42 @@ export class PaymentService {
         // Создаем реальный платеж в YooKassa
         console.log('Creating real YooKassa payment for subscription');
         console.log('AMOUNTTTTT', amount, subscriptionType);
+        console.log('Converted amount for YooKassa:', amount / 100);
+        console.log('Payment metadata:', {
+          subscriptionId,
+          paymentId,
+          planId,
+          userId,
+        });
+
+        const frontendUrl = this.configService.get<string>(
+          'FRONTEND_URL',
+          'http://localhost:5173',
+        );
+        const returnUrl = `${frontendUrl}/payment/result?paymentId=${paymentId}&type=subscription`;
+        console.log('Return URL:', returnUrl);
         try {
           yookassaPayment = await this.yookassaService.createPayment({
             amount: {
-              value: amount,
+              value: amount / 100,
               currency: CurrencyEnum.RUB,
             },
             confirmation: {
               type: ConfirmationEnum.redirect,
-              return_url: `${this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173')}/payment/result?paymentId=${paymentId}&type=subscription`,
+              return_url: returnUrl,
             },
             description: `Оплата подписки ${subscriptionType}`,
             capture: true, // Автоматический захват средств
             metadata: {
               subscriptionId,
               paymentId,
-              planId,
-              userId,
             },
+          });
+
+          console.log('YooKassa payment created successfully:', {
+            id: yookassaPayment.id,
+            status: yookassaPayment.status,
+            confirmation_url: yookassaPayment.confirmation?.confirmation_url,
           });
         } catch (error) {
           console.error(
@@ -351,10 +369,18 @@ export class PaymentService {
 
   // Обработка webhook от YooKassa
   async handleYookassaWebhook(webhookData: any) {
+    console.log('=== SUBSCRIPTION WEBHOOK DEBUG ===');
+    console.log('Webhook data:', JSON.stringify(webhookData, null, 2));
+
     const { object: payment } = webhookData;
+    console.log('Payment object:', JSON.stringify(payment, null, 2));
+    console.log('Payment metadata:', payment.metadata);
+
     const { subscriptionId, paymentId, userId } = payment.metadata;
+    console.log('Extracted metadata:', { subscriptionId, paymentId, userId });
 
     if (!paymentId) {
+      console.error('PaymentId не найден в metadata');
       throw new Error('PaymentId не найден в metadata');
     }
 

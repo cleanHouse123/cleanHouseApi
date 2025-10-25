@@ -10,8 +10,8 @@ export class CreateOrderPaymentDto {
   orderId: string;
 
   @ApiProperty({
-    example: 200.0,
-    description: 'Сумма к оплате',
+    example: 20000,
+    description: 'Сумма к оплате в копейках (200 рублей = 20000 копеек)',
   })
   amount: number;
 }
