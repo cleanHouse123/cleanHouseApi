@@ -31,8 +31,8 @@ services:
       - JWT_EXPIRES_IN=15m
       - JWT_REFRESH_EXPIRES_IN=7d
       - PORT=4000
-      - WAHA_API_URL=https://your-waha-domain.com
-      - WAHA_API_TOKEN=0C85DAAA24374C408D0143B375233B6F
+      - WAHA_API_URL=https://cleanhouse123-waha-server-6ff4.twc1.net
+      - WAHA_API_TOKEN=sha512:d4273065fd5d79963463cae272d31277c88b5c510c23460c5c31d72ea95705008bcb4ba25fb229d3e516714bbef2b902df03d43695f33a88f973664763677ca3
       - YOOKASSA_SHOP_ID=1193587
       - YOOKASSA_SECRET_KEY=test_qXKh3h-nMuuiZuKqowskhCczKnwEDCxlkix8Eo1wEJQ
       - BASE_URL=http://localhost:4000
