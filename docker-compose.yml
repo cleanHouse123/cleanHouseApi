@@ -25,18 +25,6 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - app-network
-  waha:
-    image: devlikeapro/waha
-    platform: linux/amd64
-    ports:
-      - '3001:3000'
-    volumes:
-      - waha_sessions:/app/.sessions
-    environment:
-      - WAHA_API_URL=http://localhost:3000
-      - WAHA_API_KEY=sha512:d4273065fd5d79963463cae272d31277c88b5c510c23460c5c31d72ea95705008bcb4ba25fb229d3e516714bbef2b902df03d43695f33a88f973664763677ca3
-    networks:
-      - app-network
 
 networks:
   app-network:
@@ -44,4 +32,3 @@ networks:
 
 volumes:
   pgdata:
-  waha_sessions:
