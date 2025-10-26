@@ -57,21 +57,6 @@ export class SmsProviderService {
     // Автоматический режим: сначала WhatsApp, потом SMS
     if (channel === 'auto') {
       try {
-        // Проверяем доступность WAHA сервиса
-        const isWahaAvailable = await this.wahaService.isServiceAvailable();
-        if (!isWahaAvailable) {
-          this.logger.warn('WAHA сервис недоступен, отправляем SMS');
-          return this.sendSms(phoneNumber, signedMessage);
-        }
-
-        // Проверяем активность WAHA сессии
-        const isSessionActive = await this.wahaService.isSessionActive();
-        if (!isSessionActive) {
-          this.logger.warn('WAHA сессия не активна, отправляем SMS');
-          return this.sendSms(phoneNumber, signedMessage);
-        }
-
-        // Пытаемся отправить через WhatsApp
         await this.wahaService.sendMessage(phoneNumber, signedMessage);
         return {
           success: true,
@@ -79,16 +64,8 @@ export class SmsProviderService {
           channel: 'whatsapp',
         };
       } catch (error) {
-        // Проверяем тип ошибки для более детального логирования
-        if (error.message.includes('Session status is not as expected')) {
-          this.logger.warn(`WAHA сессия не готова: ${error.message}, отправляем SMS`);
-        } else if (error.message.includes('Номер не зарегистрирован')) {
-          this.logger.warn(`Номер не зарегистрирован в WhatsApp: ${error.message}, отправляем SMS`);
-        } else {
-          this.logger.warn(`WhatsApp недоступен: ${error.message}, отправляем SMS`);
-        }
+        this.logger.error(`Ошибка отправки через WhatsApp: ${error.message} fallback на SMS`);
         
-        // Fallback на SMS
         return this.sendSms(phoneNumber, signedMessage);
       }
     }
