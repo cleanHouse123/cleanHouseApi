@@ -47,6 +47,28 @@ export class CreateSubscriptionDto {
   })
   @IsDateString()
   endDate: string;
+
+  @ApiProperty({
+    description: 'Лимит количества заказов (-1 = безлимит)',
+    example: 30,
+    minimum: -1,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(-1)
+  ordersLimit?: number;
+
+  @ApiProperty({
+    description: 'Количество использованных заказов (обычно 0 при создании)',
+    example: 0,
+    minimum: 0,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  usedOrders?: number;
 }
 
 export class UpdateSubscriptionStatusDto {

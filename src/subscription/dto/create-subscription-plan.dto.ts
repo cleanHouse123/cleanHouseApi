@@ -42,4 +42,8 @@ export class CreateSubscriptionPlanDto {
   @IsBoolean()
   @IsOptional()
   popular?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  ordersLimit?: number;
 }

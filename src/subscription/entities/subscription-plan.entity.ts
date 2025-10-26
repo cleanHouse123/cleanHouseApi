@@ -14,6 +14,9 @@ export class SubscriptionPlan {
   @Column()
   type: string;
 
+  @Column({ type: 'integer', default: -1 }) // -1 = безлимит
+  ordersLimit: number;
+
   @Column()
   name: string;
 

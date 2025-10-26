@@ -31,6 +31,12 @@ export class Subscription {
   @JoinColumn({ name: 'userId' })
   user: User;
 
+  @Column({ type: 'integer', default: -1 }) // -1 = безлимит
+  ordersLimit: number;
+
+  @Column({ type: 'integer', default: 0 })
+  usedOrders: number;
+
   @Column({ nullable: false })
   userId: string;
 

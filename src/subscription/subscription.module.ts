@@ -16,7 +16,9 @@ import { SubscriptionPayment } from './entities/subscription-payment.entity';
 import { PaymentAudit } from './entities/payment-audit.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { User } from '../user/entities/user.entity';
+import { Order } from '../order/entities/order.entity';
 import { UserModule } from '../user/user.module';
+import { SubscriptionLimitsService } from './services/subscription-limits.service';
 
 @Module({
   imports: [
@@ -26,6 +28,7 @@ import { UserModule } from '../user/user.module';
       PaymentAudit,
       SubscriptionPlan,
       User,
+      Order,
     ]),
     UserModule,
   ],
@@ -41,6 +44,7 @@ import { UserModule } from '../user/user.module';
     AuditService,
     PriceValidationService,
     SubscriptionPlansService,
+    SubscriptionLimitsService,
     PaymentGateway,
     SharedConfigService,
   ],
@@ -49,6 +53,7 @@ import { UserModule } from '../user/user.module';
     PaymentService,
     AuditService,
     SubscriptionPlansService,
+    SubscriptionLimitsService,
     PaymentGateway,
   ],
 })

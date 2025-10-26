@@ -17,6 +17,7 @@ import { OrderResponseDto } from './dto/order-response.dto';
 import { User } from '../user/entities/user.entity';
 import { UserRole } from '../shared/types/user.role';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionLimitsService } from '../subscription/services/subscription-limits.service';
 import { OrderPaymentService } from './services/order-payment.service';
 
 @Injectable()
@@ -29,6 +30,7 @@ export class OrderService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private subscriptionService: SubscriptionService,
+    private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
   ) {}
 
@@ -40,6 +42,21 @@ export class OrderService {
 
     if (!customer) {
       throw new NotFoundException('Клиент не найден');
+    }
+
+    // Проверяем лимиты заказов для пользователя
+    const limits = await this.subscriptionLimitsService.checkOrderLimits(
+      createOrderDto.customerId,
+    );
+
+    if (!limits.canCreateOrder) {
+      const reason = limits.isExpired 
+        ? `Подписка завершена по причине: ${limits.expiryReason === 'time' ? 'истечение времени' : 'исчерпание лимитов'}`
+        : 'Превышен лимит заказов для вашей подписки';
+      
+      throw new BadRequestException(
+        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}`
+      );
     }
 
     // Проверяем активную подписку пользователя
@@ -84,6 +101,11 @@ export class OrderService {
     });
 
     const savedOrder = await this.orderRepository.save(order);
+
+    // Обновляем счетчик использованных заказов в подписке
+    await this.subscriptionLimitsService.incrementUsedOrders(
+      createOrderDto.customerId,
+    );
 
     // Если заказ оплачен через подписку, создаем автоматический платеж
     if (
@@ -234,6 +256,11 @@ export class OrderService {
     order.status = updateOrderStatusDto.status;
 
     await this.orderRepository.save(order);
+
+    // Если заказ отменен, уменьшаем счетчик использованных заказов
+    // if (updateOrderStatusDto.status === OrderStatus.CANCELED) {
+    //   await this.subscriptionLimitsService.decrementUsedOrders(order.customerId);
+    // }
 
     return this.findOne(id);
   }

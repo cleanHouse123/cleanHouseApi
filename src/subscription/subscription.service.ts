@@ -78,6 +78,8 @@ export class SubscriptionService {
         startDate: new Date(createSubscriptionDto.startDate),
         endDate: new Date(createSubscriptionDto.endDate),
         status: SubscriptionStatus.PENDING,
+        ordersLimit: createSubscriptionDto.ordersLimit ?? -1,
+        usedOrders: createSubscriptionDto.usedOrders ?? 0,
       });
 
       const savedSubscription = await manager.save(subscription);
@@ -376,6 +378,8 @@ export class SubscriptionService {
       startDate: subscription.startDate,
       endDate: subscription.endDate,
       canceledAt: subscription.canceledAt,
+      ordersLimit: subscription.ordersLimit,
+      usedOrders: subscription.usedOrders,
       createdAt: subscription.createdAt,
       updatedAt: subscription.updatedAt,
       paymentUrl,

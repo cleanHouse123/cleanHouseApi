@@ -90,6 +90,20 @@ export class SubscriptionResponseDto {
   canceledAt?: Date;
 
   @ApiProperty({
+    description: 'Лимит количества заказов (-1 = безлимит)',
+    example: 30,
+  })
+  @Expose()
+  ordersLimit: number;
+
+  @ApiProperty({
+    description: 'Количество использованных заказов',
+    example: 5,
+  })
+  @Expose()
+  usedOrders: number;
+
+  @ApiProperty({
     description: 'Дата создания',
     example: '2024-01-15T10:00:00Z',
   })
