@@ -165,9 +165,17 @@ export class UserService {
     const admins = await this.userRepository.find({
       where: { role: UserRole.ADMIN },
     });
-    return admins.map((admin) => {
-      return new AdminResponseDto(admin);
-    });
+    return admins.map((admin) => ({
+      id: admin.id,
+      role: admin.role,
+      name: admin.name,
+      email: admin.email || '',
+      phone: admin.phone,
+      isPhoneVerified: admin.isPhoneVerified,
+      isEmailVerified: admin.isEmailVerified,
+      createdAt: admin.createdAt,
+      updatedAt: admin.updatedAt,
+    }));
   }
 
   async getAllUsers(query: FindUsersQueryDto): Promise<{
@@ -209,7 +217,17 @@ export class UserService {
     const [users, total] = await queryBuilder.getManyAndCount();
 
     return {
-      data: users.map((user) => new UsersListDto(user)),
+      data: users.map((user) => ({
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        email: user.email || '',
+        phone: user.phone,
+        isPhoneVerified: user.isPhoneVerified,
+        isEmailVerified: user.isEmailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      })),
       total,
       page: currentPage,
       limit,

@@ -1,19 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from '../entities/user.entity';
 import { UserRole } from 'src/shared/types/user.role';
 
 export class UsersListDto {
-  constructor(user: User) {
-    this.id = user?.id || '';
-    this.role = user?.role || null;
-    this.name = user?.name || '';
-    this.email = user?.email || '';
-    this.phone = user?.phone || '';
-    this.isPhoneVerified = user?.isPhoneVerified || false;
-    this.isEmailVerified = user?.isEmailVerified || false;
-    this.createdAt = user?.createdAt || new Date();
-    this.updatedAt = user?.updatedAt || new Date();
-  }
 
   @ApiProperty({
     description: 'ID администратора',
