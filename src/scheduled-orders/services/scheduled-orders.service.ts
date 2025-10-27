@@ -173,17 +173,14 @@ export class ScheduledOrdersService {
 
   /**
    * Cron job для автоматического создания заказов по расписанию
-   * Запускается каждый день в 8:00
    */
-  @Cron(CronExpression.EVERY_DAY_AT_8AM)
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async handleDailyScheduledOrders() {
-    this.logger.log('Начинаем обработку расписаний заказов...');
-    
     try {
       await this.processScheduledOrders();
-      this.logger.log('Обработка расписаний заказов завершена');
+      this.logger.log(`[CRON] ${new Date().toISOString()} - Обработка расписаний заказов завершена`);
     } catch (error) {
-      this.logger.error('Ошибка при обработке расписаний заказов:', error);
+      this.logger.error(`[CRON] ${new Date().toISOString()} - Ошибка при обработке расписаний заказов:`, error);
     }
   }
 
@@ -196,13 +193,11 @@ export class ScheduledOrdersService {
       relations: ['customer'],
     });
 
-    this.logger.log(`Найдено ${activeSchedules.length} активных расписаний`);
-
     for (const schedule of activeSchedules) {
       try {
         await this.createOrderFromSchedule(schedule);
       } catch (error) {
-        this.logger.error(`Ошибка при создании заказа из расписания ${schedule.id}:`, error);
+        this.logger.error(`[CRON] Ошибка при создании заказа из расписания ${schedule.id}:`, error);
       }
     }
   }
@@ -265,6 +260,8 @@ export class ScheduledOrdersService {
       await this.scheduledOrderRepository.save(schedule);
 
       this.logger.log(`Создан заказ ${savedOrder.id} из расписания ${schedule.id} для пользователя ${schedule.customerId}`);
+    } else {
+      this.logger.log(`[CRON] Заказ НЕ создан для расписания ${schedule.id} - не подходит по частоте`);
     }
   }
 
@@ -331,26 +328,66 @@ export class ScheduledOrdersService {
    */
   private calculateNextOrderTime(schedule: ScheduledOrder): Date {
     const now = new Date();
+    let nextTime = new Date(now);
     
+    switch (schedule.frequency) {
+      case ScheduleFrequency.DAILY:
+        nextTime.setDate(nextTime.getDate() + 1);
+        break;
+        
+      case ScheduleFrequency.EVERY_OTHER_DAY:
+        nextTime.setDate(nextTime.getDate() + 2);
+        break;
+        
+      case ScheduleFrequency.WEEKLY:
+        nextTime.setDate(nextTime.getDate() + 7);
+        break;
+        
+      case ScheduleFrequency.CUSTOM:
+        // Для настраиваемого расписания находим следующий день недели
+        if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0) {
+          nextTime = this.getNextCustomDay(now, schedule.daysOfWeek);
+        } else {
+          nextTime.setDate(nextTime.getDate() + 1);
+        }
+        break;
+        
+      default:
+        nextTime.setDate(nextTime.getDate() + 1);
+    }
+    
+    // Устанавливаем предпочтительное время, если указано
     if (schedule.preferredTime) {
       const [hours, minutes] = schedule.preferredTime.split(':').map(Number);
-      const scheduledTime = new Date(now);
-      scheduledTime.setHours(hours, minutes, 0, 0);
-      
-      // Если время уже прошло сегодня, планируем на завтра
-      if (scheduledTime <= now) {
-        scheduledTime.setDate(scheduledTime.getDate() + 1);
-      }
-      
-      return scheduledTime;
+      nextTime.setHours(hours, minutes, 0, 0);
+    } else {
+      // Если время не указано, планируем в 10:00
+      nextTime.setHours(10, 0, 0, 0);
     }
-
-    // Если время не указано, планируем на завтра в 10:00
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(10, 0, 0, 0);
     
-    return tomorrow;
+    return nextTime;
+  }
+
+  /**
+   * Находит следующий день недели из списка дней
+   */
+  private getNextCustomDay(now: Date, daysOfWeek: number[]): Date {
+    const currentDay = now.getDay(); // 0 = воскресенье, 1 = понедельник, ..., 6 = суббота
+    const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
+    
+    // Ищем следующий день в текущей неделе
+    for (const day of sortedDays) {
+      if (day > currentDay) {
+        const nextDate = new Date(now);
+        nextDate.setDate(now.getDate() + (day - currentDay));
+        return nextDate;
+      }
+    }
+    
+    // Если не нашли в текущей неделе, берем первый день следующей недели
+    const firstDayNextWeek = new Date(now);
+    firstDayNextWeek.setDate(now.getDate() + (7 - currentDay + sortedDays[0]));
+    return firstDayNextWeek;
   }
 
   /**
