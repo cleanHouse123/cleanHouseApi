@@ -1,19 +1,47 @@
+import { Expose } from 'class-transformer';
 import { SubscriptionPlan } from '../entities/subscription-plan.entity';
 
 export class SubscriptionPlanResponseDto {
+  @Expose()
   id: string;
+
+  @Expose()
   type: string;
+
+  @Expose()
   name: string;
+
+  @Expose()
   description: string;
+
+  @Expose()
   priceInKopecks: number;
+
+  @Expose()
   priceInRubles: number;
+
+  @Expose()
   duration: string;
+
+  @Expose()
   features: string[];
+
+  @Expose()
   icon: string;
+
+  @Expose()
   badgeColor: string;
+
+  @Expose()
   popular: boolean;
+
+  @Expose()
   ordersLimit: number;
+
+  @Expose()
   createdAt: Date;
+
+  @Expose()
   updatedAt: Date;
 
   constructor(subscriptionPlan: SubscriptionPlan) {

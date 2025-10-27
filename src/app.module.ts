@@ -25,8 +25,10 @@ import { AddressModule } from './address/address.module';
 import { Location } from './address/entities/location.entity';
 import { AdTokenModule } from './ad-tokens/ad-token.module';
 import { AdToken } from './ad-tokens/ad-token.entity';
+import { ScheduledOrder } from './scheduled-orders/entities/scheduled-order.entity';
 import { getYookassaConfig } from './shared/config/yookassa.config';
 import { PriceModule } from './price/price.module';
+import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.module';
 
 @Module({
   imports: [
@@ -48,7 +50,7 @@ import { PriceModule } from './price/price.module';
           synchronize: true,
           migrationsRun: true,
           migrations: ['dist/migrations/*.js'],
-          timezone: 'Europe/Moscow',
+          timezone: 'UTC',
           dateStrings: true,
           entities: [
             User,
@@ -63,6 +65,7 @@ import { PriceModule } from './price/price.module';
             AddressCache,
             Location,
             AdToken,
+            ScheduledOrder,
           ],
         };
       },
@@ -82,6 +85,7 @@ import { PriceModule } from './price/price.module';
     AddressModule,
     AdTokenModule,
     PriceModule,
+    ScheduledOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
