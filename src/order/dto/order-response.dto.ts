@@ -61,7 +61,7 @@ export class OrderResponseDto {
   @ApiProperty({ type: UserResponseDto, required: false })
   @Expose()
   @Type(() => UserResponseDto)
-  currier?: UserResponseDto;
+  currier?: UserResponseDto | null;
 
   @ApiProperty()
   @Expose()
@@ -81,7 +81,7 @@ export class OrderResponseDto {
 
   @ApiProperty({ required: false })
   @Expose()
-  scheduledAt?: Date;
+  scheduledAt?: Date | null;
 
   @ApiProperty({ required: false })
   @Expose()
