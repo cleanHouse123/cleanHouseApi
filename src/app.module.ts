@@ -26,6 +26,7 @@ import { Location } from './address/entities/location.entity';
 import { AdTokenModule } from './ad-tokens/ad-token.module';
 import { AdToken } from './ad-tokens/ad-token.entity';
 import { getYookassaConfig } from './shared/config/yookassa.config';
+import { PriceModule } from './price/price.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { getYookassaConfig } from './shared/config/yookassa.config';
     WebhookModule,
     AddressModule,
     AdTokenModule,
+    PriceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

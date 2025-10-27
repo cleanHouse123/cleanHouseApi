@@ -7,6 +7,7 @@ import { OrderPaymentService } from './services/order-payment.service';
 import { OrderPaymentGateway } from './gateways/order-payment.gateway';
 import { SharedConfigService } from '../shared/services/config.service';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { PriceModule } from '../price/price.module';
 import { Order } from './entities/order.entity';
 import { Payment } from './entities/payment.entity';
 import { Review } from './entities/review.entity';
@@ -16,6 +17,7 @@ import { User } from '../user/entities/user.entity';
   imports: [
     TypeOrmModule.forFeature([Order, Payment, Review, User]),
     SubscriptionModule,
+    PriceModule,
   ],
   controllers: [OrderController, OrderPaymentPageController],
   providers: [

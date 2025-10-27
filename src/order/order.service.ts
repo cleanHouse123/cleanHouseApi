@@ -19,6 +19,7 @@ import { UserRole } from '../shared/types/user.role';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitsService } from '../subscription/services/subscription-limits.service';
 import { OrderPaymentService } from './services/order-payment.service';
+import { PriceService } from '../price/price.service';
 
 @Injectable()
 export class OrderService {
@@ -32,6 +33,7 @@ export class OrderService {
     private subscriptionService: SubscriptionService,
     private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
+    private priceService: PriceService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -87,12 +89,13 @@ export class OrderService {
       );
     }
 
-    // Создаем заказ
+    const orderPrice = await this.priceService.getOrderPrice();
+
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
       description: createOrderDto.description,
-      price: 14900, // Фиксированная цена
+      price: orderPrice,
       notes: createOrderDto.notes,
       scheduledAt: createOrderDto.scheduledAt
         ? new Date(createOrderDto.scheduledAt)

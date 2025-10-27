@@ -187,7 +187,7 @@
 
         <div class="payment-info">
             <h3>Детали платежа</h3>
-            <div class="payment-amount" id="payment-amount">149 ₽</div>
+            <div class="payment-amount" id="payment-amount">{{amount}} ₽</div>
             <div class="payment-type">Оплата заказа на вынос мусора</div>
         </div>
 
@@ -235,11 +235,12 @@
     <script>
         // Получаем параметры из URL
         const urlParams = new URLSearchParams(window.location.search);
-        const paymentId = urlParams.get('paymentId') || 'test-payment-id';
-        const amount = urlParams.get('amount') || '14900';
+        const paymentId = urlParams.get('paymentId') || '{{paymentId}}';
+        const amount = urlParams.get('amount') || '{{amountKopecks}}';
 
         // Обновляем информацию о платеже
-        document.getElementById('payment-amount').textContent = amount + ' ₽';
+        const amountInRubles = (parseInt(amount) / 100).toFixed(0);
+        document.getElementById('payment-amount').textContent = amountInRubles + ' ₽';
 
         // Подключение к WebSocket
         const socket = io('{{WEBSOCKET_URL}}');

@@ -202,11 +202,17 @@ export class OrderPaymentPageController {
       );
       let html = readFileSync(templatePath, 'utf8');
 
+      // Конвертируем сумму из копеек в рубли для отображения
+      const amountInRubles = (payment.amount / 100).toFixed(0);
+      const amountInKopecks = payment.amount.toString();
+
       // Заменяем плейсхолдеры
       html = html.replace(/{{paymentId}}/g, payment.id);
-      html = html.replace(/{{amount}}/g, payment.amount.toString());
+      html = html.replace(/{{amount}}/g, amountInRubles);
+      html = html.replace(/{{amountKopecks}}/g, amountInKopecks);
       html = html.replace(/{{paymentUrl}}/g, payment.paymentUrl || '#');
       html = html.replace(/{{status}}/g, payment.status);
+      html = html.replace(/{{WEBSOCKET_URL}}/g, this.configService.getWebSocketUrl());
 
       res.send(html);
     } catch (error) {
