@@ -28,6 +28,7 @@ import {
   CreateSubscriptionDto,
   UpdateSubscriptionStatusDto,
 } from './dto/subscription.dto';
+import { CreateSubscriptionByPlanDto } from './dto/create-subscription-by-plan.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import {
   CreatePaymentDto,
@@ -64,6 +65,26 @@ export class SubscriptionController {
     @Body() createSubscriptionDto: CreateSubscriptionDto,
   ): Promise<SubscriptionResponseDto> {
     return this.subscriptionService.create(createSubscriptionDto);
+  }
+
+  @Post('by-plan')
+  @ApiOperation({ summary: 'Создать подписку по ID плана' })
+  @ApiResponse({
+    status: 201,
+    description: 'Подписка успешно создана по плану',
+    type: SubscriptionResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Неверные данные' })
+  @ApiResponse({ status: 404, description: 'План подписки не найден' })
+  async createByPlan(
+    @Body() createSubscriptionByPlanDto: CreateSubscriptionByPlanDto,
+    @Request() req,
+  ): Promise<SubscriptionResponseDto> {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('Пользователь не авторизован');
+    }
+    return this.subscriptionService.createByPlan(createSubscriptionByPlanDto.planId, userId);
   }
 
   @Get()

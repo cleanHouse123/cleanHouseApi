@@ -12,6 +12,7 @@ import {
 } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/subscription.dto';
 import { UpdateSubscriptionStatusDto } from './dto/subscription.dto';
+import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import {
   SubscriptionResponseDto,
   UserResponseDto,
@@ -31,6 +32,8 @@ export class SubscriptionService {
     private subscriptionRepository: Repository<Subscription>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(SubscriptionPlan)
+    private subscriptionPlanRepository: Repository<SubscriptionPlan>,
     private auditService: AuditService,
     private dataSource: DataSource,
   ) {}
@@ -95,6 +98,87 @@ export class SubscriptionService {
             type: savedSubscription.type,
             startDate: savedSubscription.startDate,
             endDate: savedSubscription.endDate,
+          },
+        },
+      );
+
+      return await this.transformToResponseDto(savedSubscription, user);
+    });
+  }
+
+  async createByPlan(
+    planId: string,
+    userId: string,
+  ): Promise<SubscriptionResponseDto> {
+    return await this.dataSource.transaction(async (manager) => {
+      // Получаем план подписки
+      const plan = await manager.findOne(SubscriptionPlan, {
+        where: { id: planId },
+      });
+
+      if (!plan) {
+        throw new NotFoundException('План подписки не найден');
+      }
+
+      // Проверяем существование пользователя
+      const user = await manager.findOne(User, {
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new NotFoundException('Пользователь не найден');
+      }
+
+      // Проверяем, нет ли у пользователя активной подписки
+      const existingActiveSubscription = await manager.findOne(Subscription, {
+        where: {
+          userId: userId,
+          status: SubscriptionStatus.ACTIVE,
+        },
+      });
+
+      if (existingActiveSubscription) {
+        throw new BadRequestException(
+          'У пользователя уже есть активная подписка',
+        );
+      }
+
+      // Вычисляем даты начала и окончания
+      const startDate = new Date();
+      const endDate = new Date();
+      
+      if (plan.type === 'monthly') {
+        endDate.setMonth(endDate.getMonth() + 1);
+      } else if (plan.type === 'yearly') {
+        endDate.setFullYear(endDate.getFullYear() + 1);
+      }
+
+      // Создаем новую подписку на основе плана
+      const subscription = manager.create(Subscription, {
+        userId: userId,
+        type: plan.type as any, // Приводим к SubscriptionType
+        price: plan.priceInKopecks,
+        startDate: startDate,
+        endDate: endDate,
+        status: SubscriptionStatus.PENDING,
+        ordersLimit: plan.ordersLimit,
+        usedOrders: 0,
+      });
+
+      const savedSubscription = await manager.save(subscription);
+
+      // Логируем создание подписки
+      await this.auditService.logPaymentAction(
+        PaymentAuditAction.SUBSCRIPTION_ACTIVATED,
+        userId,
+        {
+          subscriptionId: savedSubscription.id,
+          amount: savedSubscription.price,
+          metadata: {
+            type: savedSubscription.type,
+            startDate: savedSubscription.startDate,
+            endDate: savedSubscription.endDate,
+            planId: planId,
           },
         },
       );
