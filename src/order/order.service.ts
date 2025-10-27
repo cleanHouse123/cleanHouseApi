@@ -334,18 +334,18 @@ export class OrderService {
 
   private transformToResponseDto(order: Order): OrderResponseDto {
     return {
-      id: order.id,
-      customer: order.customer,
-      currier: order.currier,
-      address: order.address,
-      description: order.description,
-      price: order.price,
-      status: order.status,
-      scheduledAt: order.scheduledAt,
-      notes: order.notes,
-      payments: order.payments || [],
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
+      id: order?.id || '',
+      customer: order?.customer || null,
+      currier: order?.currier || null,
+      address: order?.address || '',
+      description: order?.description || '',
+      price: order?.price || 0,
+      status: order?.status || null,
+      scheduledAt: order?.scheduledAt || null,
+      notes: order?.notes || '',
+      payments: order?.payments || [],
+      createdAt: order?.createdAt || new Date(),
+      updatedAt: order?.updatedAt || new Date(),
     };
   }
 

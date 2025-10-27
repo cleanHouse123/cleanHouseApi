@@ -4,15 +4,15 @@ import { User } from '../entities/user.entity';
 
 export class AdminResponseDto {
   constructor(admin: User) {
-    this.id = admin.id;
-    this.role = admin.role;
-    this.name = admin.name;
-    this.email = admin.email || '';
-    this.phone = admin.phone;
-    this.isPhoneVerified = admin.isPhoneVerified;
-    this.isEmailVerified = admin.isEmailVerified;
-    this.createdAt = admin.createdAt;
-    this.updatedAt = admin.updatedAt;
+    this.id = admin?.id || '';
+    this.role = admin?.role || null;
+    this.name = admin?.name || '';
+    this.email = admin?.email || '';
+    this.phone = admin?.phone || '';
+    this.isPhoneVerified = admin?.isPhoneVerified || false;
+    this.isEmailVerified = admin?.isEmailVerified || false;
+    this.createdAt = admin?.createdAt || new Date();
+    this.updatedAt = admin?.updatedAt || new Date();
   }
 
   @ApiProperty({

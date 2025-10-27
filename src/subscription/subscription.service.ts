@@ -419,15 +419,15 @@ export class SubscriptionService {
   ): Promise<SubscriptionResponseDto> {
     const userResponseDto: UserResponseDto = user
       ? {
-          id: user.id,
-          name: user.name,
-          phone: user.phone,
+          id: user?.id || '',
+          name: user?.name || '',
+          phone: user?.phone || '',
         }
-      : subscription.user
+      : subscription?.user
         ? {
-            id: subscription.user.id,
-            name: subscription.user.name,
-            phone: subscription.user.phone,
+            id: subscription.user?.id || '',
+            name: subscription.user?.name || '',
+            phone: subscription.user?.phone || '',
           }
         : {
             id: '',
@@ -454,18 +454,18 @@ export class SubscriptionService {
     }
 
     return {
-      id: subscription.id,
+      id: subscription?.id || '',
       user: userResponseDto,
-      type: subscription.type,
-      status: subscription.status,
-      price: subscription.price,
-      startDate: subscription.startDate,
-      endDate: subscription.endDate,
-      canceledAt: subscription.canceledAt,
-      ordersLimit: subscription.ordersLimit,
-      usedOrders: subscription.usedOrders,
-      createdAt: subscription.createdAt,
-      updatedAt: subscription.updatedAt,
+      type: subscription?.type || null,
+      status: subscription?.status || null,
+      price: subscription?.price || 0,
+      startDate: subscription?.startDate || new Date(),
+      endDate: subscription?.endDate || new Date(),
+      canceledAt: subscription?.canceledAt || undefined,
+      ordersLimit: subscription?.ordersLimit || 0,
+      usedOrders: subscription?.usedOrders || 0,
+      createdAt: subscription?.createdAt || new Date(),
+      updatedAt: subscription?.updatedAt || new Date(),
       paymentUrl,
     };
   }

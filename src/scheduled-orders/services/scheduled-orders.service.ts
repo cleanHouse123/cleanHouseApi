@@ -421,10 +421,10 @@ export class ScheduledOrdersService {
    * Преобразует сущность в DTO для ответа
    */
   private transformToResponseDto(schedule: ScheduledOrder): ScheduledOrderResponseDto {
-    return {
+    const dto = {
       id: schedule.id,
       customerId: schedule.customerId,
-      customer: schedule.customer,
+      customer: schedule.customer || null,
       address: schedule.address,
       description: schedule.description,
       notes: schedule.notes,
@@ -438,5 +438,6 @@ export class ScheduledOrdersService {
       createdAt: schedule.createdAt,
       updatedAt: schedule.updatedAt,
     };
+    return dto;
   }
 }
