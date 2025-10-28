@@ -17,7 +17,24 @@ export class AddressService {
   ) {}
 
   async getLocations(): Promise<LocationDto[]> {
-    return await this.locationRepository.find();
+    const locations = await this.locationRepository
+      .createQueryBuilder('location')
+      .select([
+        'location.id',
+        'location.region',
+        'location.area',
+        'location.city',
+        'location.settlement',
+        'location.street',
+        'location.created_at',
+        'location.updated_at',
+      ])
+      .where(
+        'location.region IS NOT NULL OR location.area IS NOT NULL OR location.city IS NOT NULL OR location.settlement IS NOT NULL OR location.street IS NOT NULL',
+      )
+      .getMany();
+
+    return locations
   }
 
   async createLocation(location: CreateLocationDto): Promise<LocationDto> {
