@@ -39,12 +39,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  app.useGlobalInterceptors(
-    // new ClassSerializerInterceptor(app.get(Reflector), {
-    //   excludeExtraneousValues: true,
-    // }),
-    // new TimezoneInterceptor(), // Отключено для работы с UTC
-  );
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
