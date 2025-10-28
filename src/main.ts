@@ -40,9 +40,9 @@ async function bootstrap() {
     }),
   );
   app.useGlobalInterceptors(
-    new ClassSerializerInterceptor(app.get(Reflector), {
-      excludeExtraneousValues: true,
-    }),
+    // new ClassSerializerInterceptor(app.get(Reflector), {
+    //   excludeExtraneousValues: true,
+    // }),
     // new TimezoneInterceptor(), // Отключено для работы с UTC
   );
 
