@@ -17,7 +17,7 @@ export class AddressService {
   ) {}
 
   async getLocations(): Promise<LocationDto[]> {
-    return this.locationRepository.find();
+    return await this.locationRepository.find();
   }
 
   async createLocation(location: CreateLocationDto): Promise<LocationDto> {
