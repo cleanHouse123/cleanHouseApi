@@ -356,6 +356,8 @@ export class OrderService {
       status: order?.status || null,
       scheduledAt: order?.scheduledAt || null,
       notes: order?.notes || '',
+      paymentUrl: order?.paymentUrl || undefined,
+      coordinates: order?.coordinates || undefined,
       payments: order?.payments || [],
       createdAt: order?.createdAt || new Date(),
       updatedAt: order?.updatedAt || new Date(),
