@@ -5,9 +5,22 @@ import {
   IsDateString,
   MaxLength,
   IsUUID,
+  IsObject,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PaymentMethod } from '../entities/payment.entity';
 import { IsOptionalEnum } from '../../shared/validators/optional-enum.validator';
+
+export class CoordinatesDto {
+  @ApiProperty({ description: 'Широта', example: '55.7558' })
+  @IsString()
+  geo_lat: string;
+
+  @ApiProperty({ description: 'Долгота', example: '37.6176' })
+  @IsString()
+  geo_lon: string;
+}
 
 export class CreateOrderDto {
   @ApiProperty({
@@ -62,4 +75,15 @@ export class CreateOrderDto {
   })
   @IsOptionalEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @ApiProperty({
+    description: 'Координаты адреса',
+    type: CoordinatesDto,
+    required: false,
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => CoordinatesDto)
+  coordinates?: CoordinatesDto;
 }
