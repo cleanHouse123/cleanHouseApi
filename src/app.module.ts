@@ -48,8 +48,8 @@ import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.modul
           password: configService.get<string>('DATABASE_PASSWORD'),
           database: configService.get<string>('DATABASE_NAME'),
           synchronize: true,
-          migrationsRun: true,
-          migrations: ['dist/migrations/*.js'],
+          // migrationsRun: true,
+          // migrations: ['dist/migrations/*.js'],
           timezone: 'UTC',
           dateStrings: true,
           entities: [
