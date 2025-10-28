@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import { AddressResponseDto } from './dto/address-response.dto';
 import { AddressCache } from './entities/address-cache.entity';
-import { DaDataAddressResponse, DaDataAddressSuggestion } from './interfaces/address-data.interface';
+import {
+  DaDataAddressResponse,
+  DaDataAddressSuggestion,
+} from './interfaces/address-data.interface';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto, LocationDto } from './dto/location.dto';
 
@@ -12,7 +15,7 @@ export class AddressService {
   constructor(
     @InjectRepository(AddressCache)
     private readonly addressCacheRepository: Repository<AddressCache>,
-    @InjectRepository(Location)  
+    @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
   ) {}
 
@@ -34,7 +37,7 @@ export class AddressService {
       )
       .getMany();
 
-    return locations
+    return locations;
   }
 
   async createLocation(location: CreateLocationDto): Promise<LocationDto> {
@@ -46,19 +49,41 @@ export class AddressService {
     await this.locationRepository.delete(id);
   }
 
+  async getCoordinatesByAddress(
+    address: string,
+  ): Promise<{ lat: number; lon: number } | null> {
+    try {
+      const addresses = await this.findAll(address);
+      if (
+        addresses.length > 0 &&
+        addresses[0].geo_lat &&
+        addresses[0].geo_lon
+      ) {
+        return {
+          lat: parseFloat(addresses[0].geo_lat),
+          lon: parseFloat(addresses[0].geo_lon),
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Ошибка получения координат:', error);
+      return null;
+    }
+  }
+
   async findAll(query: string): Promise<AddressResponseDto[]> {
     if (!query || query.trim().length < 2) {
       let cacheEntry = await this.addressCacheRepository
-      .createQueryBuilder('cache')
-      .orderBy('cache.search_count', 'DESC')
-      .addOrderBy('cache.last_searched_at', 'DESC')
-      .limit(10)
-      .getMany();
-      return cacheEntry?.map(entry => entry.cached_results).flat() || [];
+        .createQueryBuilder('cache')
+        .orderBy('cache.search_count', 'DESC')
+        .addOrderBy('cache.last_searched_at', 'DESC')
+        .limit(10)
+        .getMany();
+      return cacheEntry?.map((entry) => entry.cached_results).flat() || [];
     }
 
     const normalizedQuery = this.normalizeQuery(query);
-    
+
     const cachedResults = await this.findInCache(normalizedQuery);
     if (cachedResults.length > 0) {
       await this.updateSearchStats(normalizedQuery);
@@ -72,26 +97,29 @@ export class AddressService {
     return query.trim().toLowerCase();
   }
 
-  private async findInApiAndSaveToCache(query: string, normalizedQuery: string): Promise<AddressResponseDto[]> {
+  private async findInApiAndSaveToCache(
+    query: string,
+    normalizedQuery: string,
+  ): Promise<AddressResponseDto[]> {
     try {
-        const apiResults = await this.searchInDaData(query);
-        
-        if (apiResults.length > 0) {
-          await this.saveToCache(normalizedQuery, apiResults);
-        }
-        
-        return apiResults;
-      } catch (error) {
-        console.error('Ошибка при поиске в DaData API:', error);
-        throw new Error('Не удалось получить адреса');
+      const apiResults = await this.searchInDaData(query);
+
+      if (apiResults.length > 0) {
+        await this.saveToCache(normalizedQuery, apiResults);
       }
+
+      return apiResults;
+    } catch (error) {
+      console.error('Ошибка при поиске в DaData API:', error);
+      throw new Error('Не удалось получить адреса');
+    }
   }
 
   private async findInCache(query: string): Promise<AddressResponseDto[]> {
     try {
       let cacheEntry = await this.addressCacheRepository.findOne({
         where: { query },
-        order: { last_searched_at: 'DESC' }
+        order: { last_searched_at: 'DESC' },
       });
 
       if (!cacheEntry) {
@@ -122,7 +150,7 @@ export class AddressService {
         .update(AddressCache)
         .set({
           search_count: () => 'search_count + 1',
-          last_searched_at: new Date()
+          last_searched_at: new Date(),
         })
         .where('query = :query', { query })
         .execute();
@@ -131,7 +159,10 @@ export class AddressService {
     }
   }
 
-  private async saveToCache(query: string, results: AddressResponseDto[]): Promise<void> {
+  private async saveToCache(
+    query: string,
+    results: AddressResponseDto[],
+  ): Promise<void> {
     try {
       const cityOrSettlement = results[0]?.city_or_settlement || null;
 
@@ -140,7 +171,7 @@ export class AddressService {
         city_or_settlement: cityOrSettlement,
         cached_results: results,
         search_count: 1,
-        last_searched_at: new Date()
+        last_searched_at: new Date(),
       });
 
       await this.addressCacheRepository.save(cacheEntry);
@@ -151,7 +182,8 @@ export class AddressService {
 
   private async searchInDaData(query: string): Promise<AddressResponseDto[]> {
     try {
-      const url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
+      const url =
+        'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
       const token = '8c514de4553ad490a0c95f2c8a51385ecb1afd31'; // Замените на ваш API-ключ
 
       // const locations = [
@@ -162,7 +194,7 @@ export class AddressService {
       // ];
 
       const locations = await this.locationRepository.find();
-      const locationsData = locations.map(location => ({
+      const locationsData = locations.map((location) => ({
         city: location.city,
         settlement: location.settlement,
         area: location.area,
@@ -175,8 +207,8 @@ export class AddressService {
         mode: 'cors' as RequestMode,
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Token ' + token,
+          Accept: 'application/json',
+          Authorization: 'Token ' + token,
         },
         body: JSON.stringify({
           query: query,
@@ -193,47 +225,52 @@ export class AddressService {
       if (!result || !Array.isArray(result.suggestions)) return [];
 
       // Нормализуем ответ под привязку адреса на фронте, учитываем случаи без city (только settlement/мкр)
-      return result.suggestions.map((s: DaDataAddressSuggestion): AddressResponseDto => {
-        const d = s?.data ?? {};
-        const cityOrSettlement = d.city || d.settlement || null;
-        const cityOrSettlementWithType = d.city_with_type || d.settlement_with_type || null;
-        const isMicroDistrict = d.settlement_type === 'мкр';
-        const display = [
-          d.region_with_type,
-          d.area_with_type,
-          cityOrSettlementWithType,
-          d.street_with_type,
-          d.house,
-        ].filter(Boolean).join(', ');
+      return result.suggestions.map(
+        (s: DaDataAddressSuggestion): AddressResponseDto => {
+          const d = s?.data ?? {};
+          const cityOrSettlement = d.city || d.settlement || null;
+          const cityOrSettlementWithType =
+            d.city_with_type || d.settlement_with_type || null;
+          const isMicroDistrict = d.settlement_type === 'мкр';
+          const display = [
+            d.region_with_type,
+            d.area_with_type,
+            cityOrSettlementWithType,
+            d.street_with_type,
+            d.house,
+          ]
+            .filter(Boolean)
+            .join(', ');
 
-        return {
-          value: s.value,
-          unrestricted_value: s.unrestricted_value,
-          display,
-          region: d.region,
-          region_with_type: d.region_with_type,
-          area: d.area,
-          area_with_type: d.area_with_type,
-          city: d.city,
-          city_with_type: d.city_with_type,
-          settlement: d.settlement,
-          settlement_with_type: d.settlement_with_type,
-          is_microdistrict: isMicroDistrict,
-          city_or_settlement: cityOrSettlement,
-          street: d.street,
-          street_with_type: d.street_with_type,
-          house: d.house,
-          postal_code: d.postal_code,
-          geo_lat: d.geo_lat,
-          geo_lon: d.geo_lon,
-          fias_id: d.fias_id,
-          fias_level: d.fias_level,
-          kladr_id: d.kladr_id,
-          okato: d.okato,
-          oktmo: d.oktmo,
-          tax_office: d.tax_office,
-        };
-      });
+          return {
+            value: s.value,
+            unrestricted_value: s.unrestricted_value,
+            display,
+            region: d.region,
+            region_with_type: d.region_with_type,
+            area: d.area,
+            area_with_type: d.area_with_type,
+            city: d.city,
+            city_with_type: d.city_with_type,
+            settlement: d.settlement,
+            settlement_with_type: d.settlement_with_type,
+            is_microdistrict: isMicroDistrict,
+            city_or_settlement: cityOrSettlement,
+            street: d.street,
+            street_with_type: d.street_with_type,
+            house: d.house,
+            postal_code: d.postal_code,
+            geo_lat: d.geo_lat,
+            geo_lon: d.geo_lon,
+            fias_id: d.fias_id,
+            fias_level: d.fias_level,
+            kladr_id: d.kladr_id,
+            okato: d.okato,
+            oktmo: d.oktmo,
+            tax_office: d.tax_office,
+          };
+        },
+      );
     } catch (error) {
       throw new Error('Не удалось получить адреса');
     }
@@ -258,10 +295,12 @@ export class AddressService {
     }
   }
 
-  async limitCacheSize(maxRecords: number = 1000): Promise<{ deletedCount: number }> {
+  async limitCacheSize(
+    maxRecords: number = 1000,
+  ): Promise<{ deletedCount: number }> {
     try {
       const totalCount = await this.addressCacheRepository.count();
-      
+
       if (totalCount <= maxRecords) {
         return { deletedCount: 0 };
       }
@@ -274,7 +313,7 @@ export class AddressService {
         .limit(maxRecords)
         .getMany();
 
-      const idsToKeep = recordsToKeep.map(record => record.id);
+      const idsToKeep = recordsToKeep.map((record) => record.id);
 
       const result = await this.addressCacheRepository
         .createQueryBuilder()
@@ -321,14 +360,14 @@ export class AddressService {
   }> {
     try {
       const total = await this.addressCacheRepository.count();
-      
+
       const mostSearched = await this.addressCacheRepository
         .createQueryBuilder('cache')
         .select([
           'cache.query',
           'cache.search_count',
           'cache.last_searched_at',
-          'cache.city_or_settlement'
+          'cache.city_or_settlement',
         ])
         .orderBy('cache.search_count', 'DESC')
         .limit(10)
@@ -336,11 +375,7 @@ export class AddressService {
 
       const recentSearches = await this.addressCacheRepository
         .createQueryBuilder('cache')
-        .select([
-          'cache.query',
-          'cache.last_searched_at',
-          'cache.search_count'
-        ])
+        .select(['cache.query', 'cache.last_searched_at', 'cache.search_count'])
         .orderBy('cache.last_searched_at', 'DESC')
         .limit(10)
         .getMany();
@@ -359,19 +394,21 @@ export class AddressService {
   }> {
     try {
       console.log('Начинаем обслуживание кэша...');
-      
+
       const oldResult = await this.cleanOldCache(30);
-      
+
       const excessResult = await this.limitCacheSize(1000);
-      
+
       const totalDeleted = oldResult.deletedCount + excessResult.deletedCount;
-      
-      console.log(`Обслуживание кэша завершено. Удалено записей: ${totalDeleted}`);
-      
+
+      console.log(
+        `Обслуживание кэша завершено. Удалено записей: ${totalDeleted}`,
+      );
+
       return {
         oldRecordsDeleted: oldResult.deletedCount,
         excessRecordsDeleted: excessResult.deletedCount,
-        totalDeleted
+        totalDeleted,
       };
     } catch (error) {
       console.error('Ошибка при обслуживании кэша:', error);

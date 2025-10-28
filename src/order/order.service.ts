@@ -20,6 +20,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitsService } from '../subscription/services/subscription-limits.service';
 import { OrderPaymentService } from './services/order-payment.service';
 import { PriceService } from '../price/price.service';
+import { AddressService } from '../address/address.service';
 
 @Injectable()
 export class OrderService {
@@ -34,6 +35,7 @@ export class OrderService {
     private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
     private priceService: PriceService,
+    private addressService: AddressService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -52,12 +54,12 @@ export class OrderService {
     );
 
     if (!limits.canCreateOrder) {
-      const reason = limits.isExpired 
+      const reason = limits.isExpired
         ? `Подписка завершена по причине: ${limits.expiryReason === 'time' ? 'истечение времени' : 'исчерпание лимитов'}`
         : 'Превышен лимит заказов для вашей подписки';
-      
+
       throw new BadRequestException(
-        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}`
+        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}`,
       );
     }
 
@@ -91,6 +93,11 @@ export class OrderService {
 
     const orderPrice = await this.priceService.getOrderPrice();
 
+    // Получаем координаты адреса
+    const coordinates = await this.addressService.getCoordinatesByAddress(
+      createOrderDto.address,
+    );
+
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
@@ -101,6 +108,7 @@ export class OrderService {
         ? new Date(createOrderDto.scheduledAt)
         : undefined,
       status: orderStatus,
+      coordinates: coordinates || undefined,
     });
 
     const savedOrder = await this.orderRepository.save(order);
