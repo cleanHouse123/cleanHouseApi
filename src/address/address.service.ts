@@ -53,17 +53,28 @@ export class AddressService {
     address: string,
   ): Promise<{ lat: number; lon: number } | null> {
     try {
+      console.log('Получение координат для адреса:', address);
       const addresses = await this.findAll(address);
-      if (
-        addresses.length > 0 &&
-        addresses[0].geo_lat &&
-        addresses[0].geo_lon
-      ) {
-        return {
-          lat: parseFloat(addresses[0].geo_lat),
-          lon: parseFloat(addresses[0].geo_lon),
-        };
+      console.log('Найдено адресов:', addresses.length);
+
+      if (addresses.length > 0) {
+        console.log('Первый адрес:', {
+          value: addresses[0].value,
+          geo_lat: addresses[0].geo_lat,
+          geo_lon: addresses[0].geo_lon,
+        });
+
+        if (addresses[0].geo_lat && addresses[0].geo_lon) {
+          const coordinates = {
+            lat: parseFloat(addresses[0].geo_lat),
+            lon: parseFloat(addresses[0].geo_lon),
+          };
+          console.log('Возвращаем координаты:', coordinates);
+          return coordinates;
+        }
       }
+
+      console.log('Координаты не найдены');
       return null;
     } catch (error) {
       console.error('Ошибка получения координат:', error);

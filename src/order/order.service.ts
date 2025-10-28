@@ -94,9 +94,11 @@ export class OrderService {
     const orderPrice = await this.priceService.getOrderPrice();
 
     // Получаем координаты адреса
+    console.log('Создание заказа, адрес:', createOrderDto.address);
     const coordinates = await this.addressService.getCoordinatesByAddress(
       createOrderDto.address,
     );
+    console.log('Полученные координаты:', coordinates);
 
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
