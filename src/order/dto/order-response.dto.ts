@@ -91,6 +91,14 @@ export class OrderResponseDto {
   @Expose()
   paymentUrl?: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'Координаты адреса',
+    example: { lat: 55.7558, lon: 37.6176 },
+  })
+  @Expose()
+  coordinates?: { lat: number; lon: number };
+
   @ApiProperty({ type: [PaymentResponseDto] })
   @Expose()
   @Type(() => PaymentResponseDto)

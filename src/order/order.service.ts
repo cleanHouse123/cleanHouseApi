@@ -52,12 +52,12 @@ export class OrderService {
     );
 
     if (!limits.canCreateOrder) {
-      const reason = limits.isExpired 
+      const reason = limits.isExpired
         ? `Подписка завершена по причине: ${limits.expiryReason === 'time' ? 'истечение времени' : 'исчерпание лимитов'}`
         : 'Превышен лимит заказов для вашей подписки';
-      
+
       throw new BadRequestException(
-        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}`
+        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}`,
       );
     }
 
@@ -91,6 +91,18 @@ export class OrderService {
 
     const orderPrice = await this.priceService.getOrderPrice();
 
+    // Преобразуем координаты из фронта в нужный формат
+    let coordinates: { lat: number; lon: number } | undefined;
+    if (
+      createOrderDto.coordinates?.geo_lat &&
+      createOrderDto.coordinates?.geo_lon
+    ) {
+      coordinates = {
+        lat: parseFloat(createOrderDto.coordinates.geo_lat),
+        lon: parseFloat(createOrderDto.coordinates.geo_lon),
+      };
+    }
+
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
@@ -101,6 +113,7 @@ export class OrderService {
         ? new Date(createOrderDto.scheduledAt)
         : undefined,
       status: orderStatus,
+      coordinates,
     });
 
     const savedOrder = await this.orderRepository.save(order);
@@ -343,6 +356,8 @@ export class OrderService {
       status: order?.status || null,
       scheduledAt: order?.scheduledAt || null,
       notes: order?.notes || '',
+      paymentUrl: order?.paymentUrl || undefined,
+      coordinates: order?.coordinates || undefined,
       payments: order?.payments || [],
       createdAt: order?.createdAt || new Date(),
       updatedAt: order?.updatedAt || new Date(),
