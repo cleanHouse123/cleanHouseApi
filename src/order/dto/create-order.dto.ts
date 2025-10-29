@@ -7,6 +7,7 @@ import {
   IsUUID,
   IsObject,
   ValidateNested,
+  IsNumber,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { PaymentMethod } from '../entities/payment.entity';
@@ -20,6 +21,37 @@ export class CoordinatesDto {
   @ApiProperty({ description: 'Долгота', example: '37.6176' })
   @IsString()
   geo_lon: string;
+}
+
+export class AddressDetailsDto {
+  @ApiProperty({
+    description: 'Номер дома/здания',
+    example: 10,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  building?: number;
+
+  @ApiProperty({ description: 'Корпус/блок', example: 'А', required: false })
+  @IsOptional()
+  @IsString()
+  buildingBlock?: string;
+
+  @ApiProperty({ description: 'Подъезд', example: '2', required: false })
+  @IsOptional()
+  @IsString()
+  entrance?: string;
+
+  @ApiProperty({ description: 'Этаж', example: 5, required: false })
+  @IsOptional()
+  @IsNumber()
+  floor?: number;
+
+  @ApiProperty({ description: 'Квартира/офис', example: 25, required: false })
+  @IsOptional()
+  @IsNumber()
+  apartment?: number;
 }
 
 export class CreateOrderDto {
@@ -75,6 +107,17 @@ export class CreateOrderDto {
   })
   @IsOptionalEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @ApiProperty({
+    description: 'Детали адреса',
+    type: AddressDetailsDto,
+    required: false,
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AddressDetailsDto)
+  addressDetails?: AddressDetailsDto;
 
   @ApiProperty({
     description: 'Координаты адреса',

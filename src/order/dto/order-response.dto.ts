@@ -67,6 +67,26 @@ export class OrderResponseDto {
   @Expose()
   address: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'Детали адреса',
+    example: {
+      building: 10,
+      buildingBlock: 'А',
+      entrance: '2',
+      floor: 5,
+      apartment: 25,
+    },
+  })
+  @Expose()
+  addressDetails?: {
+    building?: number;
+    buildingBlock?: string;
+    entrance?: string;
+    floor?: number;
+    apartment?: number;
+  };
+
   @ApiProperty({ required: false })
   @Expose()
   description?: string;
