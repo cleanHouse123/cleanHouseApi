@@ -55,8 +55,7 @@ export class CreateOrderDto {
   })
   @IsOptional()
   @IsDateString()
-  @Transform(({ value }) => (value ? new Date(value) : undefined))
-  scheduledAt?: Date;
+  scheduledAt?: string;
 
   @ApiProperty({
     description: 'Дополнительные заметки к заказу',
