@@ -11,6 +11,14 @@ import {
   PaymentStatus,
   PaymentMethod,
 } from '../entities/payment.entity';
+import {
+  ReceiptDto,
+  ReceiptItemDto,
+  CustomerDto,
+  PaymentSubject,
+  PaymentMode,
+} from '../../shared/dto/receipt.dto';
+import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
 
 @Injectable()
 export class OrderPaymentService {
@@ -23,10 +31,43 @@ export class OrderPaymentService {
     private yookassaService: YookassaService,
   ) {}
 
+  // Создание данных для чека заказа
+  private createOrderReceipt(
+    orderId: string,
+    amount: number,
+    customerEmail: string,
+  ): ReceiptDto {
+    // Создаем одну позицию для всего заказа
+    const items: ReceiptItemDto[] = [
+      {
+        description: `Услуги клининга по заказу №${orderId}`,
+        quantity: 1,
+        amount: {
+          value: amount / 100,
+          currency: CurrencyEnum.RUB,
+        },
+        vat_code: VatCodesEnum.ndsNone,
+        payment_subject: PaymentSubject.SERVICE,
+        payment_mode: PaymentMode.FULL_PAYMENT,
+      },
+    ];
+
+    const customer: CustomerDto = {
+      email: customerEmail,
+    };
+
+    return {
+      customer,
+      items,
+      send: true,
+    };
+  }
+
   // Создание ссылки на оплату заказа
   async createPaymentLink(
     orderId: string,
     amount: number,
+    customerEmail?: string,
   ): Promise<OrderPaymentResponseDto> {
     try {
       const baseUrl = this.configService.get<string>(
@@ -60,23 +101,45 @@ export class OrderPaymentService {
       } else {
         // Создаем реальный платеж в YooKassa
         console.log('Creating real YooKassa payment');
+
+        // Создаем данные для платежа
+        const paymentData: any = {
+          amount: {
+            value: amount / 100,
+            currency: CurrencyEnum.RUB,
+          },
+          confirmation: {
+            type: ConfirmationEnum.redirect,
+            return_url: `${frontendUrl}/payment/result?paymentId=${paymentId}&type=order`,
+          },
+          description: `Оплата заказа №${orderId}`,
+          capture: true, // Автоматический захват средств
+          metadata: {
+            orderId,
+            paymentId,
+          },
+        };
+
+        // Создаем чек - используем email пользователя или резервный
+        const receiptEmail = customerEmail || 'shuminskiy23@gmail.com';
+        const receipt = this.createOrderReceipt(orderId, amount, receiptEmail);
+        paymentData.receipt = receipt as any;
+
+        if (customerEmail) {
+          console.log(
+            'Чек будет отправлен на email пользователя:',
+            customerEmail,
+          );
+        } else {
+          console.log(
+            'Email пользователя не указан, чек будет отправлен на резервный email:',
+            receiptEmail,
+          );
+        }
+
         try {
-          yookassaPayment = await this.yookassaService.createPayment({
-            amount: {
-              value: amount / 100,
-              currency: CurrencyEnum.RUB,
-            },
-            confirmation: {
-              type: ConfirmationEnum.redirect,
-              return_url: `${frontendUrl}/payment/result?paymentId=${paymentId}&type=order`,
-            },
-            description: `Оплата заказа №${orderId}`,
-            capture: true, // Автоматический захват средств
-            metadata: {
-              orderId,
-              paymentId,
-            },
-          });
+          yookassaPayment =
+            await this.yookassaService.createPayment(paymentData);
         } catch (error) {
           console.error('Ошибка создания платежа YooKassa:', error);
 

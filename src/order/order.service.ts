@@ -51,7 +51,10 @@ export class OrderService {
       createOrderDto.customerId,
     );
 
-    if (!limits.canCreateOrder && createOrderDto?.paymentMethod === PaymentMethod.SUBSCRIPTION) {
+    if (
+      !limits.canCreateOrder &&
+      createOrderDto?.paymentMethod === PaymentMethod.SUBSCRIPTION
+    ) {
       const reason = limits.isExpired
         ? `Подписка завершена по причине: ${limits.expiryReason === 'time' ? 'истечение времени' : 'исчерпание лимитов'}`
         : 'Превышен лимит заказов для вашей подписки';
@@ -136,9 +139,15 @@ export class OrderService {
     } else if (orderStatus === OrderStatus.NEW) {
       // Для новых заказов создаем ссылку на оплату
       try {
+        // Получаем пользователя с email
+        const customer = await this.userRepository.findOne({
+          where: { id: savedOrder.customerId },
+        });
+
         const paymentData = await this.orderPaymentService.createPaymentLink(
           savedOrder.id,
           savedOrder.price * 100, // Конвертируем в копейки
+          customer?.email, // Передаем email если есть, иначе undefined
         );
 
         // Обновляем заказ с ссылкой на оплату
@@ -158,6 +167,7 @@ export class OrderService {
     try {
       const order = await this.orderRepository.findOne({
         where: { id: orderId },
+        relations: ['customer'],
       });
 
       if (!order || order.status !== OrderStatus.NEW) {
@@ -167,6 +177,7 @@ export class OrderService {
       const paymentData = await this.orderPaymentService.createPaymentLink(
         orderId,
         order.price * 100, // Конвертируем в копейки
+        order.customer?.email, // Передаем email если есть, иначе undefined
       );
 
       // Обновляем заказ с ссылкой на оплату

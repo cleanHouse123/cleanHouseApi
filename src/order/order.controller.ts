@@ -269,6 +269,7 @@ export class OrderController {
     return await this.orderPaymentService.createPaymentLink(
       createOrderPaymentDto.orderId,
       createOrderPaymentDto.amount,
+      createOrderPaymentDto.customerEmail,
     );
   }
 

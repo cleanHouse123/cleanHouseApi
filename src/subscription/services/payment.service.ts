@@ -18,6 +18,14 @@ import { Subscription } from '../entities/subscription.entity';
 import { PriceValidationService } from './price-validation.service';
 import { AuditService } from './audit.service';
 import { PaymentAuditAction } from '../entities/payment-audit.entity';
+import {
+  ReceiptDto,
+  ReceiptItemDto,
+  CustomerDto,
+  PaymentSubject,
+  PaymentMode,
+} from '../../shared/dto/receipt.dto';
+import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
 
 @Injectable()
 export class PaymentService {
@@ -33,6 +41,35 @@ export class PaymentService {
     private yookassaService: YookassaService,
   ) {}
 
+  // Создание данных для чека подписки
+  private createSubscriptionReceipt(
+    subscriptionType: string,
+    amount: number,
+    customerEmail: string,
+  ): ReceiptDto {
+    const receiptItem: ReceiptItemDto = {
+      description: `Подписка ${subscriptionType}`,
+      quantity: 1,
+      amount: {
+        value: amount / 100,
+        currency: CurrencyEnum.RUB,
+      },
+      vat_code: VatCodesEnum.ndsNone,
+      payment_subject: PaymentSubject.SERVICE,
+      payment_mode: PaymentMode.FULL_PAYMENT,
+    };
+
+    const customer: CustomerDto = {
+      email: customerEmail,
+    };
+
+    return {
+      customer,
+      items: [receiptItem],
+      send: true,
+    };
+  }
+
   // Создание ссылки на оплату с проверками безопасности
   async createPaymentLink(
     subscriptionId: string,
@@ -40,6 +77,7 @@ export class PaymentService {
     subscriptionType: string,
     planId: string,
     userId: string,
+    customerEmail?: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<SubscriptionPaymentResponseDto> {
@@ -124,23 +162,49 @@ export class PaymentService {
         );
         const returnUrl = `${frontendUrl}/payment/result?paymentId=${paymentId}&type=subscription`;
         console.log('Return URL:', returnUrl);
+
+        // Создаем данные для платежа
+        const paymentData: any = {
+          amount: {
+            value: amount / 100,
+            currency: CurrencyEnum.RUB,
+          },
+          confirmation: {
+            type: ConfirmationEnum.redirect,
+            return_url: returnUrl,
+          },
+          description: `Оплата подписки ${subscriptionType}`,
+          capture: true, // Автоматический захват средств
+          metadata: {
+            subscriptionId,
+            paymentId,
+          },
+        };
+
+        // Создаем чек - используем email пользователя или резервный
+        const receiptEmail = customerEmail || 'shuminskiy23@gmail.com';
+        const receipt = this.createSubscriptionReceipt(
+          subscriptionType,
+          amount,
+          receiptEmail,
+        );
+        paymentData.receipt = receipt as any;
+
+        if (customerEmail) {
+          console.log(
+            'Чек будет отправлен на email пользователя:',
+            customerEmail,
+          );
+        } else {
+          console.log(
+            'Email пользователя не указан, чек будет отправлен на резервный email:',
+            receiptEmail,
+          );
+        }
+
         try {
-          yookassaPayment = await this.yookassaService.createPayment({
-            amount: {
-              value: amount / 100,
-              currency: CurrencyEnum.RUB,
-            },
-            confirmation: {
-              type: ConfirmationEnum.redirect,
-              return_url: returnUrl,
-            },
-            description: `Оплата подписки ${subscriptionType}`,
-            capture: true, // Автоматический захват средств
-            metadata: {
-              subscriptionId,
-              paymentId,
-            },
-          });
+          yookassaPayment =
+            await this.yookassaService.createPayment(paymentData);
 
           console.log('YooKassa payment created successfully:', {
             id: yookassaPayment.id,
@@ -377,8 +441,8 @@ export class PaymentService {
     console.log('Payment object:', JSON.stringify(payment, null, 2));
     console.log('Payment metadata:', payment.metadata);
 
-    const { subscriptionId, paymentId, userId } = payment.metadata;
-    console.log('Extracted metadata:', { subscriptionId, paymentId, userId });
+    const { subscriptionId, paymentId } = payment.metadata;
+    console.log('Extracted metadata:', { subscriptionId, paymentId });
 
     if (!paymentId) {
       console.error('PaymentId не найден в metadata');
@@ -397,7 +461,8 @@ export class PaymentService {
         status = SubscriptionPaymentStatus.PENDING;
     }
 
-    return await this.updatePaymentStatus(paymentId, status.toString(), userId);
+    // Не передаем userId, так как его нет в metadata - он будет получен из подписки
+    return await this.updatePaymentStatus(paymentId, status.toString());
   }
 
   // Проверка статуса платежа в YooKassa

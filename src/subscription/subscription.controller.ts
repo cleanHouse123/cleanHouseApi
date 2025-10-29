@@ -84,7 +84,10 @@ export class SubscriptionController {
     if (!userId) {
       throw new BadRequestException('Пользователь не авторизован');
     }
-    return this.subscriptionService.createByPlan(createSubscriptionByPlanDto.planId, userId);
+    return this.subscriptionService.createByPlan(
+      createSubscriptionByPlanDto.planId,
+      userId,
+    );
   }
 
   @Get()
@@ -208,10 +211,13 @@ export class SubscriptionController {
     @Headers('user-agent') userAgent: string,
   ): Promise<SubscriptionPaymentResponseDto> {
     const userId = req.user?.id;
+    const userEmail = req.user?.email;
 
     if (!userId) {
       throw new BadRequestException('Пользователь не авторизован');
     }
+
+    // Email необязателен - если его нет, чек не будет создан
 
     // Проверяем существование подписки и права доступа
     const subscription = await this.subscriptionService.findOne(
@@ -229,6 +235,7 @@ export class SubscriptionController {
       createPaymentDto.subscriptionType,
       createPaymentDto.planId,
       userId,
+      userEmail,
       ipAddress,
       userAgent,
     );

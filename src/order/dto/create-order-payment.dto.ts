@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsUUID } from 'class-validator';
+import { IsString, IsUUID, IsEmail, IsOptional } from 'class-validator';
 
 export class CreateOrderPaymentDto {
   @ApiProperty({
@@ -14,6 +14,15 @@ export class CreateOrderPaymentDto {
     description: 'Сумма к оплате в копейках (200 рублей = 20000 копеек)',
   })
   amount: number;
+
+  @ApiProperty({
+    example: 'user@example.com',
+    description: 'Email клиента для отправки чека (необязательно)',
+    required: false,
+  })
+  @IsOptional()
+  @IsEmail()
+  customerEmail?: string;
 }
 
 export class OrderPaymentResponseDto {
