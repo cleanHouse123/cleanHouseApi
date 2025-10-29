@@ -52,6 +52,9 @@ import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.modul
           // migrations: ['dist/migrations/*.js'],
           timezone: 'UTC',
           dateStrings: true,
+          extra: {
+            options: '-c timezone=UTC',
+          },
           entities: [
             User,
             VerificationCode,

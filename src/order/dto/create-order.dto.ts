@@ -8,7 +8,7 @@ import {
   IsObject,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { PaymentMethod } from '../entities/payment.entity';
 import { IsOptionalEnum } from '../../shared/validators/optional-enum.validator';
 
@@ -55,7 +55,8 @@ export class CreateOrderDto {
   })
   @IsOptional()
   @IsDateString()
-  scheduledAt?: string;
+  @Transform(({ value }) => (value ? new Date(value) : undefined))
+  scheduledAt?: Date;
 
   @ApiProperty({
     description: 'Дополнительные заметки к заказу',

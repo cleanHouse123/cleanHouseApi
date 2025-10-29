@@ -64,7 +64,7 @@ export class Order {
   })
   status: OrderStatus;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   scheduledAt?: Date;
 
   @Column({ type: 'text', nullable: true })
@@ -84,9 +84,15 @@ export class Order {
   @OneToMany(() => Review, (review) => review.order)
   reviews: Review[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({
+    type: 'timestamptz',
+    default: () => 'CURRENT_TIMESTAMP',
+  })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({
+    type: 'timestamptz',
+    default: () => 'CURRENT_TIMESTAMP',
+  })
   updatedAt: Date;
 }

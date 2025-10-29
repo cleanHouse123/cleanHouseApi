@@ -109,9 +109,7 @@ export class OrderService {
       description: createOrderDto.description,
       price: orderPrice,
       notes: createOrderDto.notes,
-      scheduledAt: createOrderDto.scheduledAt
-        ? new Date(createOrderDto.scheduledAt)
-        : undefined,
+      scheduledAt: createOrderDto.scheduledAt,
       status: orderStatus,
       coordinates,
     });
