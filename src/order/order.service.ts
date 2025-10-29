@@ -51,7 +51,7 @@ export class OrderService {
       createOrderDto.customerId,
     );
 
-    if (!limits.canCreateOrder) {
+    if (!limits.canCreateOrder && createOrderDto?.paymentMethod === PaymentMethod.SUBSCRIPTION) {
       const reason = limits.isExpired
         ? `Подписка завершена по причине: ${limits.expiryReason === 'time' ? 'истечение времени' : 'исчерпание лимитов'}`
         : 'Превышен лимит заказов для вашей подписки';
