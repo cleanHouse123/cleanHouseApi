@@ -312,7 +312,7 @@ export class ScheduledOrdersService {
       return false;
     }
 
-    const currentDayOfWeek = now.getDay(); // 0 = воскресенье, 1 = понедельник
+    const currentDayOfWeek = now.getUTCDay(); // 0 = воскресенье, 1 = понедельник (UTC)
     
     // Проверяем, что сегодня подходящий день недели
     if (!schedule.daysOfWeek.includes(currentDayOfWeek)) {
@@ -332,15 +332,15 @@ export class ScheduledOrdersService {
     
     switch (schedule.frequency) {
       case ScheduleFrequency.DAILY:
-        nextTime.setDate(nextTime.getDate() + 1);
+        nextTime.setUTCDate(nextTime.getUTCDate() + 1);
         break;
         
       case ScheduleFrequency.EVERY_OTHER_DAY:
-        nextTime.setDate(nextTime.getDate() + 2);
+        nextTime.setUTCDate(nextTime.getUTCDate() + 2);
         break;
         
       case ScheduleFrequency.WEEKLY:
-        nextTime.setDate(nextTime.getDate() + 7);
+        nextTime.setUTCDate(nextTime.getUTCDate() + 7);
         break;
         
       case ScheduleFrequency.CUSTOM:
@@ -348,21 +348,21 @@ export class ScheduledOrdersService {
         if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0) {
           nextTime = this.getNextCustomDay(now, schedule.daysOfWeek);
         } else {
-          nextTime.setDate(nextTime.getDate() + 1);
+          nextTime.setUTCDate(nextTime.getUTCDate() + 1);
         }
         break;
         
       default:
-        nextTime.setDate(nextTime.getDate() + 1);
+        nextTime.setUTCDate(nextTime.getUTCDate() + 1);
     }
     
     // Устанавливаем предпочтительное время, если указано
     if (schedule.preferredTime) {
       const [hours, minutes] = schedule.preferredTime.split(':').map(Number);
-      nextTime.setHours(hours, minutes, 0, 0);
+      nextTime.setUTCHours(hours, minutes, 0, 0);
     } else {
       // Если время не указано, планируем в 10:00
-      nextTime.setHours(10, 0, 0, 0);
+      nextTime.setUTCHours(10, 0, 0, 0);
     }
     
     return nextTime;
@@ -372,21 +372,21 @@ export class ScheduledOrdersService {
    * Находит следующий день недели из списка дней
    */
   private getNextCustomDay(now: Date, daysOfWeek: number[]): Date {
-    const currentDay = now.getDay(); // 0 = воскресенье, 1 = понедельник, ..., 6 = суббота
+    const currentDay = now.getUTCDay(); // 0 = воскресенье, 1 = понедельник, ..., 6 = суббота (UTC)
     const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
     
     // Ищем следующий день в текущей неделе
     for (const day of sortedDays) {
       if (day > currentDay) {
         const nextDate = new Date(now);
-        nextDate.setDate(now.getDate() + (day - currentDay));
+        nextDate.setUTCDate(now.getUTCDate() + (day - currentDay));
         return nextDate;
       }
     }
     
     // Если не нашли в текущей неделе, берем первый день следующей недели
     const firstDayNextWeek = new Date(now);
-    firstDayNextWeek.setDate(now.getDate() + (7 - currentDay + sortedDays[0]));
+    firstDayNextWeek.setUTCDate(now.getUTCDate() + (7 - currentDay + sortedDays[0]));
     return firstDayNextWeek;
   }
 
@@ -397,8 +397,8 @@ export class ScheduledOrdersService {
     const d1 = new Date(date1);
     const d2 = new Date(date2);
     
-    d1.setHours(0, 0, 0, 0);
-    d2.setHours(0, 0, 0, 0);
+    d1.setUTCHours(0, 0, 0, 0);
+    d2.setUTCHours(0, 0, 0, 0);
     
     return d1.getTime() !== d2.getTime();
   }
@@ -410,8 +410,8 @@ export class ScheduledOrdersService {
     const d1 = new Date(date1);
     const d2 = new Date(date2);
     
-    d1.setHours(0, 0, 0, 0);
-    d2.setHours(0, 0, 0, 0);
+    d1.setUTCHours(0, 0, 0, 0);
+    d2.setUTCHours(0, 0, 0, 0);
     
     const diffTime = d2.getTime() - d1.getTime();
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
