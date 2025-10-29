@@ -106,6 +106,12 @@ export class OrderService {
       };
     }
 
+    console.log('=== ORDER CREATION DEBUG ===');
+    console.log(
+      'Input addressDetails:',
+      JSON.stringify(createOrderDto.addressDetails, null, 2),
+    );
+
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
@@ -118,7 +124,18 @@ export class OrderService {
       coordinates,
     });
 
+    console.log(
+      'Created order addressDetails:',
+      JSON.stringify(order.addressDetails, null, 2),
+    );
+
     const savedOrder = await this.orderRepository.save(order);
+
+    console.log(
+      'Saved order addressDetails:',
+      JSON.stringify(savedOrder.addressDetails, null, 2),
+    );
+    console.log('=== END DEBUG ===');
 
     // Обновляем счетчик использованных заказов в подписке
     await this.subscriptionLimitsService.incrementUsedOrders(
@@ -361,6 +378,7 @@ export class OrderService {
       customer: order?.customer || null,
       currier: order?.currier || null,
       address: order?.address || '',
+      addressDetails: order?.addressDetails || undefined,
       description: order?.description || '',
       price: order?.price || 0,
       status: order?.status || null,
