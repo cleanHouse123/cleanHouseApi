@@ -13,6 +13,38 @@ import {
 } from 'class-validator';
 import { ScheduleFrequency, ScheduledOrder } from '../entities/scheduled-order.entity';
 
+export class AddressDetailsDto {
+  @ApiProperty({ description: 'Номер дома/здания', example: 10, required: false })
+  @IsOptional()
+  @IsNumber()
+  building?: number;
+
+  @ApiProperty({ description: 'Корпус/блок', example: 'А', required: false })
+  @IsOptional()
+  @IsString()
+  buildingBlock?: string;
+
+  @ApiProperty({ description: 'Подъезд', example: '2', required: false })
+  @IsOptional()
+  @IsString()
+  entrance?: string;
+
+  @ApiProperty({ description: 'Этаж', example: 5, required: false })
+  @IsOptional()
+  @IsNumber()
+  floor?: number;
+
+  @ApiProperty({ description: 'Квартира/офис', example: 25, required: false })
+  @IsOptional()
+  @IsNumber()
+  apartment?: number;
+
+  @ApiProperty({ description: 'Домофон', example: '123#45', required: false })
+  @IsOptional()
+  @IsString()
+  domophone?: string;
+}
+
 export class CreateScheduledOrderDto {
   @ApiProperty({
     description: 'Адрес для уборки',
@@ -21,6 +53,10 @@ export class CreateScheduledOrderDto {
   @IsString()
   @MaxLength(500)
   address: string;
+
+  @ApiProperty({ description: 'Детали адреса', type: AddressDetailsDto, required: false })
+  @IsOptional()
+  addressDetails?: AddressDetailsDto;
 
   @ApiProperty({
     description: 'Описание заказа',
@@ -119,6 +155,27 @@ export class ScheduledOrderResponseDto {
     example: 'ул. Пушкина, д. 10, кв. 5',
   })
   address: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Детали адреса',
+    example: {
+      building: 10,
+      buildingBlock: 'А',
+      entrance: '2',
+      floor: 5,
+      apartment: 25,
+      domophone: '123#45',
+    },
+  })
+  addressDetails?: {
+    building?: number;
+    buildingBlock?: string;
+    entrance?: string;
+    floor?: number;
+    apartment?: number;
+    domophone?: string;
+  };
 
   @ApiProperty({
     description: 'Описание заказа',

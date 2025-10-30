@@ -52,6 +52,11 @@ export class AddressDetailsDto {
   @IsOptional()
   @IsNumber()
   apartment?: number;
+
+  @ApiProperty({ description: 'Домофон', example: '123#45', required: false })
+  @IsOptional()
+  @IsString()
+  domophone?: string;
 }
 
 export class CreateOrderDto {

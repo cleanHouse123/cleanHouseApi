@@ -31,6 +31,16 @@ export class ScheduledOrder {
   @Column({ type: 'text' })
   address: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  addressDetails?: {
+    building?: number;
+    buildingBlock?: string;
+    entrance?: string;
+    floor?: number;
+    apartment?: number;
+    domophone?: string;
+  };
+
   @Column({ type: 'text', nullable: true })
   description?: string;
 

@@ -50,6 +50,7 @@ export class Order {
     entrance?: string;
     floor?: number;
     apartment?: number;
+    domophone?: string;
   };
 
   @Column({ type: 'text', nullable: true })

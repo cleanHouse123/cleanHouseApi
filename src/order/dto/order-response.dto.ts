@@ -76,6 +76,7 @@ export class OrderResponseDto {
       entrance: '2',
       floor: 5,
       apartment: 25,
+      domophone: '123#45',
     },
   })
   @Expose()
@@ -85,6 +86,7 @@ export class OrderResponseDto {
     entrance?: string;
     floor?: number;
     apartment?: number;
+    domophone?: string;
   };
 
   @ApiProperty({ required: false })

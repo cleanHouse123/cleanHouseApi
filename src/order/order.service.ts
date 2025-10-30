@@ -359,7 +359,7 @@ export class OrderService {
         OrderStatus.CANCELED,
       ],
       [OrderStatus.PAID]: [OrderStatus.ASSIGNED, OrderStatus.CANCELED],
-      [OrderStatus.ASSIGNED]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED],
+      [OrderStatus.ASSIGNED]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED, OrderStatus.ASSIGNED],
       [OrderStatus.IN_PROGRESS]: [OrderStatus.DONE, OrderStatus.CANCELED],
       [OrderStatus.DONE]: [],
       [OrderStatus.CANCELED]: [],

@@ -54,6 +54,7 @@ export class ScheduledOrdersService {
     const scheduledOrder = this.scheduledOrderRepository.create({
       customerId: customerId,
       address: dto.address,
+      addressDetails: dto.addressDetails,
       description: dto.description,
       notes: dto.notes,
       frequency: dto.frequency,
@@ -234,6 +235,7 @@ export class ScheduledOrdersService {
       const order = this.orderRepository.create({
         customerId: schedule.customerId,
         address: schedule.address,
+        addressDetails: schedule.addressDetails,
         description: schedule.description,
         notes: schedule.notes,
         price: orderPrice,
@@ -426,6 +428,7 @@ export class ScheduledOrdersService {
       customerId: schedule.customerId,
       customer: schedule.customer || null,
       address: schedule.address,
+      addressDetails: schedule.addressDetails,
       description: schedule.description,
       notes: schedule.notes,
       frequency: schedule.frequency,
