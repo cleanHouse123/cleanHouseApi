@@ -172,11 +172,23 @@ export class SubscriptionLimitsService {
     });
 
     if (subscription && subscription.ordersLimit !== -1) {
+      const newUsedOrders = subscription.usedOrders + 1;
+      const reachedOrExceededLimit = newUsedOrders >= subscription.ordersLimit;
+
       await this.subscriptionRepository.update(subscription.id, {
-        usedOrders: subscription.usedOrders + 1
+        usedOrders: newUsedOrders,
+        ...(reachedOrExceededLimit ? { status: SubscriptionStatus.EXPIRED } : {}),
       });
-      
-      this.logger.log(`Увеличен счетчик заказов для пользователя ${userId}: ${subscription.usedOrders + 1}/${subscription.ordersLimit}`);
+
+      this.logger.log(
+        `Увеличен счетчик заказов для пользователя ${userId}: ${newUsedOrders}/${subscription.ordersLimit}`,
+      );
+
+      if (reachedOrExceededLimit) {
+        this.logger.log(
+          `Подписка ${subscription.id} автоматически завершена по причине: limit (достигнут лимит заказов)`,
+        );
+      }
     }
   }
 
