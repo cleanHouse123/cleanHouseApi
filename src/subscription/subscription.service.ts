@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, DataSource, In } from 'typeorm';
 import {
   Subscription,
   SubscriptionStatus,
@@ -270,8 +270,35 @@ export class SubscriptionService {
       }
 
       const oldStatus = subscription.status;
-      subscription.status =
+      const newStatus =
         updateSubscriptionStatusDto.status as SubscriptionStatus;
+
+      // Валидация при активации подписки
+      if (newStatus === SubscriptionStatus.ACTIVE) {
+        // Проверяем, что подписка не отменена
+        if (oldStatus === SubscriptionStatus.CANCELED) {
+          throw new BadRequestException(
+            'Невозможно активировать отмененную подписку',
+          );
+        }
+
+        // Проверяем, что подписка не истекла
+        if (oldStatus === SubscriptionStatus.EXPIRED) {
+          throw new BadRequestException(
+            'Невозможно активировать истекшую подписку',
+          );
+        }
+
+        // Проверяем дату окончания подписки
+        const now = new Date();
+        if (subscription.endDate < now) {
+          throw new BadRequestException(
+            'Невозможно активировать подписку: дата окончания уже прошла',
+          );
+        }
+      }
+
+      subscription.status = newStatus;
 
       if (
         updateSubscriptionStatusDto.status === 'canceled' &&
@@ -353,9 +380,10 @@ export class SubscriptionService {
       }
     }
 
+    // Обновляем все истекшие подписки, а не только первую
     if (expiredIds.length > 0) {
       await this.subscriptionRepository.update(
-        { id: expiredIds[0] },
+        { id: In(expiredIds) },
         { status: SubscriptionStatus.EXPIRED },
       );
     }

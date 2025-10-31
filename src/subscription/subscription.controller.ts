@@ -264,16 +264,23 @@ export class SubscriptionController {
     );
 
     if (paymentCallbackDto.status === 'success') {
-      // Активируем подписку
-      await this.subscriptionService.updateStatus(payment.subscriptionId, {
-        status: SubscriptionStatus.ACTIVE,
-      });
+      try {
+        // Активируем подписку (с валидацией внутри updateStatus)
+        await this.subscriptionService.updateStatus(payment.subscriptionId, {
+          status: SubscriptionStatus.ACTIVE,
+        });
 
-      // Отправляем уведомление через WebSocket
-      this.paymentGateway.notifyPaymentSuccess(
-        paymentCallbackDto.paymentId,
-        payment.subscriptionId,
-      );
+        // Отправляем уведомление через WebSocket
+        this.paymentGateway.notifyPaymentSuccess(
+          paymentCallbackDto.paymentId,
+          payment.subscriptionId,
+        );
+      } catch (error) {
+        // Если не удалось активировать (подписка истекла/отменена), выбрасываем ошибку
+        throw new BadRequestException(
+          `Не удалось активировать подписку: ${error.message}`,
+        );
+      }
     } else {
       // Отправляем уведомление об ошибке
       this.paymentGateway.notifyPaymentError(
@@ -296,16 +303,24 @@ export class SubscriptionController {
         await this.paymentService.handleYookassaWebhook(webhookData);
 
       if (payment && payment.status === 'success') {
-        // Активируем подписку
-        await this.subscriptionService.updateStatus(payment.subscriptionId, {
-          status: SubscriptionStatus.ACTIVE,
-        });
+        try {
+          // Активируем подписку (с валидацией внутри updateStatus)
+          await this.subscriptionService.updateStatus(payment.subscriptionId, {
+            status: SubscriptionStatus.ACTIVE,
+          });
 
-        // Отправляем уведомление через WebSocket
-        this.paymentGateway.notifyPaymentSuccess(
-          payment.id,
-          payment.subscriptionId,
-        );
+          // Отправляем уведомление через WebSocket
+          this.paymentGateway.notifyPaymentSuccess(
+            payment.id,
+            payment.subscriptionId,
+          );
+        } catch (error) {
+          // Логируем предупреждение, если подписку нельзя активировать
+          console.warn(
+            `Не удалось активировать подписку ${payment.subscriptionId}: ${error.message}`,
+          );
+          // Не пробрасываем ошибку дальше, чтобы webhook был обработан
+        }
       } else if (payment && payment.status === 'failed') {
         // Отправляем уведомление об ошибке
         this.paymentGateway.notifyPaymentError(
@@ -353,13 +368,16 @@ export class SubscriptionController {
         throw new NotFoundException('Платеж не найден или уже обработан');
       }
 
-      // Активируем подписку (если она существует)
+      // Активируем подписку (с валидацией внутри updateStatus)
       try {
         await this.subscriptionService.updateStatus(payment.subscriptionId, {
           status: SubscriptionStatus.ACTIVE,
         });
       } catch (error) {
-        console.log('Подписка не найдена, но платеж обработан:', error.message);
+        // Логируем предупреждение, если подписку нельзя активировать
+        console.warn(
+          `Не удалось активировать подписку ${payment.subscriptionId}: ${error.message}`,
+        );
       }
 
       // Отправляем уведомление через WebSocket

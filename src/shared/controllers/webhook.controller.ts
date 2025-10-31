@@ -338,15 +338,23 @@ export class WebhookController {
         );
 
       if (payment && payment.status === SubscriptionPaymentStatus.SUCCESS) {
-        // Активируем подписку
-        await this.subscriptionService.updateStatus(payment.subscriptionId, {
-          status: SubscriptionStatus.ACTIVE,
-        });
+        try {
+          // Активируем подписку (с валидацией внутри updateStatus)
+          await this.subscriptionService.updateStatus(payment.subscriptionId, {
+            status: SubscriptionStatus.ACTIVE,
+          });
 
-        // Отправляем уведомление через WebSocket (пока используем заглушку)
-        this.logger.log(
-          `Подписка ${payment.subscriptionId} активирована успешно`,
-        );
+          // Отправляем уведомление через WebSocket (пока используем заглушку)
+          this.logger.log(
+            `Подписка ${payment.subscriptionId} активирована успешно`,
+          );
+        } catch (error) {
+          // Логируем предупреждение, если подписку нельзя активировать
+          this.logger.warn(
+            `Не удалось активировать подписку ${payment.subscriptionId}: ${error.message}`,
+          );
+          // Не пробрасываем ошибку дальше, чтобы webhook был обработан
+        }
       } else if (
         payment &&
         payment.status === SubscriptionPaymentStatus.FAILED
