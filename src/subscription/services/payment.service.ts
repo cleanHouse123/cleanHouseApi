@@ -182,7 +182,7 @@ export class PaymentService {
         };
 
         // Создаем чек - используем email пользователя или резервный
-        const receiptEmail = customerEmail || 'shuminskiy23@gmail.com';
+        const receiptEmail = customerEmail || 'Chisto.doma1@mail.ru';
         const receipt = this.createSubscriptionReceipt(
           subscriptionType,
           amount,
