@@ -21,6 +21,7 @@ import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
+import { FindNearbyOrdersDto } from './dto/find-nearby-orders.dto';
 import {
   CreateOrderPaymentDto,
   OrderPaymentResponseDto,
@@ -117,6 +118,78 @@ export class OrderController {
       customerId,
       currierId,
     );
+  }
+
+  @Get('nearby')
+  @ApiOperation({
+    summary: 'Получить ближайшие заказы по местоположению (PostGIS)',
+  })
+  @ApiQuery({
+    name: 'lat',
+    required: true,
+    description: 'Широта местоположения пользователя',
+    example: 55.7558,
+  })
+  @ApiQuery({
+    name: 'lon',
+    required: true,
+    description: 'Долгота местоположения пользователя',
+    example: 37.6176,
+  })
+  @ApiQuery({
+    name: 'maxDistance',
+    required: false,
+    description: 'Максимальное расстояние в метрах',
+    example: 5000,
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Номер страницы',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Количество на странице',
+    example: 10,
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: OrderStatus,
+    description: 'Фильтр по статусу',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Список ближайших заказов с расстоянием',
+    schema: {
+      type: 'object',
+      properties: {
+        orders: {
+          type: 'array',
+          items: {
+            allOf: [
+              { $ref: '#/components/schemas/OrderResponseDto' },
+              {
+                type: 'object',
+                properties: {
+                  distance: {
+                    type: 'number',
+                    description: 'Расстояние в метрах',
+                    example: 1234.56,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        total: { type: 'number' },
+      },
+    },
+  })
+  async findAllNearby(@Query() query: FindNearbyOrdersDto) {
+    return this.orderService.findAllNearby(query);
   }
 
   @Get('customer/:customerId')

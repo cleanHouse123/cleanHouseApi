@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere } from 'typeorm';
+import { Repository, FindOptionsWhere, DataSource, In } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import {
   Payment,
@@ -14,6 +14,7 @@ import {
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
+import { FindNearbyOrdersDto } from './dto/find-nearby-orders.dto';
 import { User } from '../user/entities/user.entity';
 import { UserRole } from '../shared/types/user.role';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -34,6 +35,7 @@ export class OrderService {
     private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
     private priceService: PriceService,
+    private dataSource: DataSource,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -240,6 +242,113 @@ export class OrderService {
 
     return {
       orders: orders.map((order) => this.transformToResponseDto(order)),
+      total,
+    };
+  }
+
+  async findAllNearby(
+    findNearbyOrdersDto: FindNearbyOrdersDto,
+  ): Promise<{
+    orders: (OrderResponseDto & { distance: number })[];
+    total: number;
+  }> {
+    const { lat, lon, maxDistance = 10000, page = 1, limit = 10, status } =
+      findNearbyOrdersDto;
+
+    // Строим SQL запрос с использованием PostGIS и параметризованных запросов
+    let query = `
+      SELECT 
+        o.*,
+        ST_Distance(
+          ST_SetSRID(ST_MakePoint((o.coordinates->>'lon')::float, (o.coordinates->>'lat')::float), 4326)::geography,
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+        ) as distance
+      FROM "order" o
+      WHERE o.coordinates IS NOT NULL
+        AND o.coordinates->>'lat' IS NOT NULL
+        AND o.coordinates->>'lon' IS NOT NULL
+        AND ST_Distance(
+          ST_SetSRID(ST_MakePoint((o.coordinates->>'lon')::float, (o.coordinates->>'lat')::float), 4326)::geography,
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+        ) <= $3
+    `;
+
+    const params: any[] = [lon, lat, maxDistance];
+
+    // Добавляем фильтр по статусу, если указан
+    if (status) {
+      query += ` AND o.status = $${params.length + 1}`;
+      params.push(status);
+    }
+
+    // Добавляем сортировку по расстоянию и пагинацию
+    const limitParam = params.length + 1;
+    const offsetParam = params.length + 2;
+    query += `
+      ORDER BY distance ASC
+      LIMIT $${limitParam} OFFSET $${offsetParam}
+    `;
+    params.push(limit, (page - 1) * limit);
+
+    // Выполняем запрос
+    const rawOrders = await this.dataSource.query(query, params);
+
+    // Получаем общее количество для пагинации
+    let countQuery = `
+      SELECT COUNT(*) as total
+      FROM "order" o
+      WHERE o.coordinates IS NOT NULL
+        AND o.coordinates->>'lat' IS NOT NULL
+        AND o.coordinates->>'lon' IS NOT NULL
+        AND ST_Distance(
+          ST_SetSRID(ST_MakePoint((o.coordinates->>'lon')::float, (o.coordinates->>'lat')::float), 4326)::geography,
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+        ) <= $3
+    `;
+    const countParams: any[] = [lon, lat, maxDistance];
+
+    if (status) {
+      countQuery += ` AND o.status = $${countParams.length + 1}`;
+      countParams.push(status);
+    }
+
+    const countResult = await this.dataSource.query(countQuery, countParams);
+    const total = parseInt(countResult[0]?.total || '0', 10);
+
+    // Получаем полные данные заказов с отношениями
+    const orderIds = rawOrders.map((row: any) => row.id);
+    
+    if (orderIds.length === 0) {
+      return {
+        orders: [],
+        total: 0,
+      };
+    }
+
+    const orders = await this.orderRepository.find({
+      where: { id: In(orderIds) },
+      relations: ['customer', 'currier', 'payments'],
+    });
+
+    // Создаем мапу для быстрого доступа к расстояниям
+    const distanceMap = new Map(
+      rawOrders.map((row: any) => [row.id, parseFloat(row.distance)]),
+    );
+
+    // Сортируем заказы по расстоянию и добавляем distance к каждому
+    const ordersWithDistance: (OrderResponseDto & { distance: number })[] =
+      orders
+        .map((order) => {
+          const distance = distanceMap.get(order.id);
+          return {
+            ...this.transformToResponseDto(order),
+            distance: typeof distance === 'number' ? distance : 0,
+          };
+        })
+        .sort((a, b) => a.distance - b.distance);
+
+    return {
+      orders: ordersWithDistance,
       total,
     };
   }
