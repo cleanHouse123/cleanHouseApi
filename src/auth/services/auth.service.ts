@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -22,6 +23,8 @@ import { TelegramSendCodeDto } from '../dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from '../dto/telegram-verify-code.dto';
 import { VerificationCode } from '../entities/verification-code.entity';
 import { AdTokenService } from '../../ad-tokens/ad-token.service';
+import { AdToken } from 'src/ad-tokens/ad-token.entity';
+import { UserMetadata } from 'src/shared/decorators/get-user.decorator';
 
 @Injectable()
 export class AuthService {
@@ -536,5 +539,25 @@ export class AuthService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async getMe(authenticatedUser: UserMetadata): Promise<AuthResponseDto & { adToken: AdToken  | null}> {
+    const user = await this.userService.findById(authenticatedUser.userId);
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+    const adToken = await this.adTokenService.findByUserId(user.id);
+    return {
+      accessToken: '',
+      refreshToken: '',
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+      },
+      adToken,
+    };
   }
 }

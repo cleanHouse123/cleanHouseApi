@@ -2,11 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdToken } from './ad-token.entity';
 import { AdTokenService } from './ad-token.service';
-import { AdTokenController } from './ad-token.controller';
+import { AdTokenAdminController } from './controlers/ad-token.admin.controller';
+import { AdTokenController } from './controlers/ad-token.client.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([AdToken])],
-  controllers: [AdTokenController],
+  controllers: [AdTokenAdminController, AdTokenController],
   providers: [AdTokenService],
   exports: [AdTokenService],
 })

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdToken } from './ad-token.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { AdTokenType } from 'src/shared/types/ad-token';
 
 @Injectable()
 export class AdTokenService {
@@ -11,18 +12,27 @@ export class AdTokenService {
     private readonly adTokenRepository: Repository<AdToken>,
   ) {}
 
-  async create(reference: string): Promise<AdToken> {
+  async create(reference: string, type: AdTokenType): Promise<AdToken> {
     const token = uuidv4();
     const adToken = this.adTokenRepository.create({
       token,
       reference,
+      type,
     });
     return this.adTokenRepository.save(adToken);
+  }
+
+  async findByUserId(userId: string): Promise<AdToken | null> {
+    return this.adTokenRepository.findOne({
+      where: { reference: userId, type: AdTokenType.REFERRAL },
+      relations: ['users'],
+    });
   }
 
   async findAll(): Promise<AdToken[]> {
     return this.adTokenRepository.find({
       order: { createdAt: 'DESC' },
+      where: { type: AdTokenType.ADS },
       relations: ['users'],
       select: {
         id: true,

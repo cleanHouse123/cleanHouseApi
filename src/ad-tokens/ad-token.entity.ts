@@ -6,6 +6,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { User } from '../user/entities/user.entity';
+import { AdTokenType } from 'src/shared/types/ad-token';
 
 @Entity()
 export class AdToken {
@@ -15,8 +16,12 @@ export class AdToken {
   @Column({ unique: true })
   token: string;
 
-  @Column({ default: 'ad' })
-  type: string;
+  @Column({
+    type: 'enum',
+    enum: AdTokenType,
+    default: AdTokenType.ADS,
+  })
+  type: AdTokenType;
 
   @Column({ nullable: true })
   reference: string;

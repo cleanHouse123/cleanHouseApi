@@ -27,6 +27,8 @@ import { TelegramSendCodeDto } from './dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from './dto/telegram-verify-code.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './services/auth.service';
+import { AdToken } from 'src/ad-tokens/ad-token.entity';
+import { GetUserMetadata, UserMetadata } from 'src/shared/decorators/get-user.decorator';
 
 interface AuthenticatedRequest extends Request {
   user: AuthResponseDto;
@@ -231,7 +233,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Получить данные текущего пользователя' })
   @ApiResponse({ status: 200, description: 'Данные пользователя' })
-  getProfile(@Req() req: AuthenticatedRequest): AuthResponseDto {
-    return req.user;
+  getProfile(@GetUserMetadata() user: UserMetadata): Promise<AuthResponseDto & { adToken: AdToken | null}> {
+    return this.authService.getMe(user);
   }
 }
