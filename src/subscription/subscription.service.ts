@@ -24,6 +24,12 @@ import {
   SubscriptionPayment,
   SubscriptionPaymentStatus,
 } from './entities/subscription-payment.entity';
+import { FreeSubscriptionService } from './services/free-subscription.service';
+import { SubscriptionPriceDto } from './dto/subscription-price.dto';
+import { PriceValidationService } from './services/price-validation.service';
+import { SubscriptionPlanWithPriceDto } from './dto/subscription-plan-with-price.dto';
+import { SubscriptionPlanResponseDto } from './dto/subscription-plan-response.dto';
+import { SubscriptionPlansService } from './services/subscription-plans.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -36,6 +42,9 @@ export class SubscriptionService {
     private subscriptionPlanRepository: Repository<SubscriptionPlan>,
     private auditService: AuditService,
     private dataSource: DataSource,
+    private freeSubscriptionService: FreeSubscriptionService,
+    private priceValidationService: PriceValidationService,
+    private subscriptionPlansService: SubscriptionPlansService,
   ) {}
 
   async create(
@@ -153,14 +162,42 @@ export class SubscriptionService {
         endDate.setFullYear(endDate.getFullYear() + 1);
       }
 
+      // Проверяем право на бесплатную подписку
+      const freeSubscriptionCheck =
+        await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
+          userId,
+        );
+
+      // Вычисляем финальную цену на сервере
+      let finalPrice = plan.priceInKopecks;
+      let subscriptionStatus = SubscriptionStatus.PENDING;
+
+      if (freeSubscriptionCheck.eligible) {
+        finalPrice = 0;
+        subscriptionStatus = SubscriptionStatus.ACTIVE; // Бесплатная подписка активируется сразу
+        // Помечаем, что использована бесплатная подписка (в транзакции для атомарности)
+        // Если пользователь уже использовал, выбросит ошибку и транзакция откатится
+        try {
+          await this.freeSubscriptionService.markFreeSubscriptionUsed(
+            userId,
+            manager,
+          );
+        } catch (error) {
+          // Если уже использовал, выбрасываем понятную ошибку
+          throw new BadRequestException(
+            error.message || 'Не удалось активировать бесплатную подписку',
+          );
+        }
+      }
+
       // Создаем новую подписку на основе плана
       const subscription = manager.create(Subscription, {
         userId: userId,
         type: plan.type as any, // Приводим к SubscriptionType
-        price: plan.priceInKopecks,
+        price: finalPrice,
         startDate: startDate,
         endDate: endDate,
-        status: SubscriptionStatus.PENDING,
+        status: subscriptionStatus,
         ordersLimit: plan.ordersLimit,
         usedOrders: 0,
       });
@@ -179,6 +216,8 @@ export class SubscriptionService {
             startDate: savedSubscription.startDate,
             endDate: savedSubscription.endDate,
             planId: planId,
+            isFreeReferralSubscription: freeSubscriptionCheck.eligible,
+            referralCount: freeSubscriptionCheck.referralCount,
           },
         },
       );
@@ -496,5 +535,82 @@ export class SubscriptionService {
       updatedAt: subscription?.updatedAt || new Date(),
       paymentUrl,
     };
+  }
+
+  /**
+   * Получает предварительную финальную цену подписки с учетом прав на бесплатную подписку
+   */
+  async getSubscriptionPrice(
+    planId: string,
+    userId: string,
+  ): Promise<SubscriptionPriceDto> {
+    // Получаем план подписки
+    const plan = await this.priceValidationService.getSubscriptionPlanById(
+      planId,
+    );
+
+    // Получаем пользователя для проверки, использовал ли он уже бесплатную подписку
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    // Проверяем право на бесплатную подписку
+    const freeSubscriptionCheck =
+      await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
+        userId,
+      );
+
+    // Вычисляем финальную цену
+    const finalPrice = freeSubscriptionCheck.eligible
+      ? 0
+      : plan.priceInKopecks;
+
+    return {
+      basePrice: plan.priceInKopecks,
+      finalPrice,
+      isEligibleForFree: freeSubscriptionCheck.eligible,
+      referralCount: freeSubscriptionCheck.referralCount,
+      reason: freeSubscriptionCheck.reason,
+      hasUsedFreeSubscription: user?.hasUsedFreeReferralSubscription || false,
+    };
+  }
+
+  /**
+   * Получает все планы подписок с финальными ценами для конкретного пользователя
+   */
+  async getAllPlansWithPrices(
+    userId: string,
+  ): Promise<SubscriptionPlanWithPriceDto[]> {
+    // Получаем все планы
+    const plans = await this.subscriptionPlansService.findAll();
+
+    // Получаем пользователя для проверки, использовал ли он уже бесплатную подписку
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    // Проверяем право на бесплатную подписку один раз
+    const freeSubscriptionCheck =
+      await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
+        userId,
+      );
+
+    // Для каждого плана рассчитываем финальную цену
+    const plansWithPrices = await Promise.all(
+      plans.map(async (plan) => {
+        // Вычисляем финальную цену (одинаковая для всех планов, если есть право)
+        const finalPrice = freeSubscriptionCheck.eligible
+          ? 0
+          : plan.priceInKopecks;
+
+        return {
+          ...plan,
+          finalPriceInKopecks: finalPrice,
+          finalPriceInRubles: finalPrice / 100,
+          isEligibleForFree: freeSubscriptionCheck.eligible,
+          referralCount: freeSubscriptionCheck.referralCount,
+          hasUsedFreeSubscription:
+            user?.hasUsedFreeReferralSubscription || false,
+        } as SubscriptionPlanWithPriceDto;
+      }),
+    );
+
+    return plansWithPrices;
   }
 }

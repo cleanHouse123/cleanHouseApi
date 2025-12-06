@@ -45,6 +45,9 @@ export class User {
   @Column({ nullable: true })
   lastLoginAt: Date;
 
+  @Column({ default: false })
+  hasUsedFreeReferralSubscription: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

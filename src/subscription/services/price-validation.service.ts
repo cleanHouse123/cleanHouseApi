@@ -80,12 +80,9 @@ export class PriceValidationService {
   }
 
   /**
-   * Валидирует платеж по ID плана подписки
+   * Получает план подписки по ID
    */
-  async validatePaymentByPlanId(
-    planId: string,
-    amount: number,
-  ): Promise<SubscriptionPlan> {
+  async getSubscriptionPlanById(planId: string): Promise<SubscriptionPlan> {
     const plan = await this.subscriptionPlanRepository.findOne({
       where: { id: planId },
     });
@@ -93,6 +90,18 @@ export class PriceValidationService {
     if (!plan) {
       throw new NotFoundException(`План подписки с ID ${planId} не найден`);
     }
+
+    return plan;
+  }
+
+  /**
+   * Валидирует платеж по ID плана подписки
+   */
+  async validatePaymentByPlanId(
+    planId: string,
+    amount: number,
+  ): Promise<SubscriptionPlan> {
+    const plan = await this.getSubscriptionPlanById(planId);
 
     if (amount !== plan.priceInKopecks) {
       throw new BadRequestException(

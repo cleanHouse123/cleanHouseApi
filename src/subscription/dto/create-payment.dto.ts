@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsUUID, IsNumber, Min, Max, IsEnum } from 'class-validator';
+import { IsString, IsUUID, IsEnum, IsOptional } from 'class-validator';
 import { SubscriptionType } from '../entities/subscription.entity';
 
 export class CreatePaymentDto {
@@ -25,26 +25,18 @@ export class CreatePaymentDto {
   @IsEnum(SubscriptionType)
   subscriptionType: SubscriptionType;
 
-  @ApiProperty({
-    example: 100000,
-    description:
-      'Сумма к оплате в копейках (минимум 100 копеек, максимум 10000000 копеек)',
-  })
-  @IsNumber()
-  @Min(100, { message: 'Минимальная сумма платежа 1 рубль (100 копеек)' })
-  @Max(10000000, {
-    message: 'Максимальная сумма платежа 100000 рублей (10000000 копеек)',
-  })
-  amount: number;
+  // amount убран - цена вычисляется на сервере на основе плана и прав на бесплатную подписку
 }
 
 export class SubscriptionPaymentResponseDto {
   @ApiProperty({
     example:
       'https://mock-payment.example.com/pay/123e4567-e89b-12d3-a456-426614174000',
-    description: 'Ссылка на страницу оплаты',
+    description: 'Ссылка на страницу оплаты (null если подписка активирована бесплатно)',
+    nullable: true,
   })
-  paymentUrl: string;
+  @IsOptional()
+  paymentUrl: string | null;
 
   @ApiProperty({
     example: '123e4567-e89b-12d3-a456-426614174000',
@@ -54,7 +46,7 @@ export class SubscriptionPaymentResponseDto {
 
   @ApiProperty({
     example: 'pending',
-    description: 'Статус платежа',
+    description: 'Статус платежа (success если подписка активирована бесплатно)',
   })
   status: string;
 }

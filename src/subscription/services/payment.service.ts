@@ -14,10 +14,14 @@ import {
   SubscriptionPayment,
   SubscriptionPaymentStatus,
 } from '../entities/subscription-payment.entity';
-import { Subscription } from '../entities/subscription.entity';
+import {
+  Subscription,
+  SubscriptionStatus,
+} from '../entities/subscription.entity';
 import { PriceValidationService } from './price-validation.service';
 import { AuditService } from './audit.service';
 import { PaymentAuditAction } from '../entities/payment-audit.entity';
+import { FreeSubscriptionService } from './free-subscription.service';
 import {
   ReceiptDto,
   ReceiptItemDto,
@@ -39,6 +43,7 @@ export class PaymentService {
     private auditService: AuditService,
     private dataSource: DataSource,
     private yookassaService: YookassaService,
+    private freeSubscriptionService: FreeSubscriptionService,
   ) {}
 
   // Создание данных для чека подписки
@@ -71,9 +76,9 @@ export class PaymentService {
   }
 
   // Создание ссылки на оплату с проверками безопасности
+  // amount больше не принимается от пользователя - вычисляется на сервере
   async createPaymentLink(
     subscriptionId: string,
-    amount: number,
     subscriptionType: string,
     planId: string,
     userId: string,
@@ -95,13 +100,123 @@ export class PaymentService {
         throw new ForbiddenException('Нет прав доступа к данной подписке');
       }
 
-      // Валидируем цену по плану подписки
-      this.priceValidationService.validateAmountRange(amount);
-      const subscriptionPlan =
-        await this.priceValidationService.validatePaymentByPlanId(
-          planId,
-          amount,
+      // Проверяем статус подписки - нельзя активировать отмененную или истекшую
+      if (subscription.status === SubscriptionStatus.CANCELED) {
+        throw new BadRequestException(
+          'Невозможно активировать отмененную подписку',
         );
+      }
+
+      if (subscription.status === SubscriptionStatus.EXPIRED) {
+        throw new BadRequestException(
+          'Невозможно активировать истекшую подписку',
+        );
+      }
+
+      // Проверяем дату окончания подписки
+      const now = new Date();
+      if (subscription.endDate < now) {
+        throw new BadRequestException(
+          'Невозможно активировать подписку: дата окончания уже прошла',
+        );
+      }
+
+      // Получаем план подписки для получения базовой цены
+      const subscriptionPlan =
+        await this.priceValidationService.getSubscriptionPlanById(planId);
+
+      // Проверяем, нет ли уже активной подписки у пользователя (проверяем сначала, чтобы не тратить ресурсы)
+      const existingActiveSubscription = await manager.findOne(Subscription, {
+        where: {
+          userId: userId,
+          status: SubscriptionStatus.ACTIVE,
+        },
+      });
+
+      if (existingActiveSubscription) {
+        throw new BadRequestException(
+          'У пользователя уже есть активная подписка',
+        );
+      }
+
+      // Проверяем право на бесплатную подписку
+      const freeSubscriptionCheck =
+        await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
+          userId,
+        );
+
+      // Вычисляем финальную сумму на сервере
+      let finalAmount = subscriptionPlan.priceInKopecks;
+      if (freeSubscriptionCheck.eligible) {
+        finalAmount = 0;
+        // Помечаем, что использована бесплатная подписка (в транзакции для атомарности)
+        // Если пользователь уже использовал, выбросит ошибку и транзакция откатится
+        try {
+          await this.freeSubscriptionService.markFreeSubscriptionUsed(
+            userId,
+            manager,
+          );
+        } catch (error) {
+          // Если уже использовал, выбрасываем понятную ошибку
+          throw new BadRequestException(
+            error.message || 'Не удалось активировать бесплатную подписку',
+          );
+        }
+      }
+
+      // Если сумма = 0, сразу активируем подписку без платежа
+      if (finalAmount === 0) {
+        // Обновляем цену подписки на 0 и активируем одним запросом
+        await manager.update(
+          Subscription,
+          { id: subscriptionId },
+          {
+            price: 0,
+            status: SubscriptionStatus.ACTIVE,
+          },
+        );
+
+        // Создаем запись о "бесплатном" платеже для аудита
+        const paymentId = uuidv4();
+        const payment = manager.create(SubscriptionPayment, {
+          id: paymentId,
+          subscriptionId,
+          amount: 0,
+          subscriptionType,
+          status: SubscriptionPaymentStatus.SUCCESS,
+          paidAt: new Date(),
+        });
+        await manager.save(payment);
+
+        // Логируем активацию бесплатной подписки
+        await this.auditService.logPaymentAction(
+          PaymentAuditAction.PAYMENT_PAID,
+          userId,
+          {
+            paymentId,
+            subscriptionId,
+            amount: 0,
+            metadata: {
+              subscriptionType,
+              planId,
+              planName: subscriptionPlan.name,
+              isFreeReferralSubscription: true,
+              referralCount: freeSubscriptionCheck.referralCount,
+            },
+            ipAddress,
+            userAgent,
+          },
+        );
+
+        return {
+          paymentUrl: null, // Нет ссылки, т.к. уже активировано
+          paymentId,
+          status: 'success',
+        };
+      }
+
+      // Валидируем диапазон суммы для платных подписок
+      this.priceValidationService.validateAmountRange(finalAmount);
 
       // Проверяем, нет ли активных платежей для этой подписки
       const existingPayment = await manager.findOne(SubscriptionPayment, {
@@ -147,8 +262,8 @@ export class PaymentService {
       } else {
         // Создаем реальный платеж в YooKassa
         console.log('Creating real YooKassa payment for subscription');
-        console.log('AMOUNTTTTT', amount, subscriptionType);
-        console.log('Converted amount for YooKassa:', amount / 100);
+        console.log('Final amount:', finalAmount, subscriptionType);
+        console.log('Converted amount for YooKassa:', finalAmount / 100);
         console.log('Payment metadata:', {
           subscriptionId,
           paymentId,
@@ -166,7 +281,7 @@ export class PaymentService {
         // Создаем данные для платежа
         const paymentData: any = {
           amount: {
-            value: amount / 100,
+            value: finalAmount / 100,
             currency: CurrencyEnum.RUB,
           },
           confirmation: {
@@ -185,7 +300,7 @@ export class PaymentService {
         const receiptEmail = customerEmail || 'Chisto.doma1@mail.ru';
         const receipt = this.createSubscriptionReceipt(
           subscriptionType,
-          amount,
+          finalAmount,
           receiptEmail,
         );
         paymentData.receipt = receipt as any;
@@ -234,7 +349,7 @@ export class PaymentService {
       const payment = manager.create(SubscriptionPayment, {
         id: paymentId,
         subscriptionId,
-        amount,
+        amount: finalAmount,
         subscriptionType,
         status: SubscriptionPaymentStatus.PENDING,
         yookassaId: yookassaPayment.id,
@@ -252,11 +367,12 @@ export class PaymentService {
         {
           paymentId,
           subscriptionId,
-          amount,
+          amount: finalAmount,
           metadata: {
             subscriptionType,
             planId,
             planName: subscriptionPlan.name,
+            isFreeReferralSubscription: false,
           },
           ipAddress,
           userAgent,

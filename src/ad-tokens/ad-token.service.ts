@@ -59,4 +59,15 @@ export class AdTokenService {
   async save(adToken: AdToken): Promise<AdToken> {
     return this.adTokenRepository.save(adToken);
   }
+
+  /**
+   * Подсчитывает количество приглашенных пользователей по реферальному токену
+   */
+  async getReferralCount(userId: string): Promise<number> {
+    const referralToken = await this.findByUserId(userId);
+    if (!referralToken || !referralToken.users) {
+      return 0;
+    }
+    return referralToken.users.length;
+  }
 }

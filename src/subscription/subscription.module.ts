@@ -19,6 +19,8 @@ import { User } from '../user/entities/user.entity';
 import { Order } from '../order/entities/order.entity';
 import { UserModule } from '../user/user.module';
 import { SubscriptionLimitsService } from './services/subscription-limits.service';
+import { FreeSubscriptionService } from './services/free-subscription.service';
+import { AdTokenModule } from '../ad-tokens/ad-token.module';
 
 @Module({
   imports: [
@@ -31,6 +33,7 @@ import { SubscriptionLimitsService } from './services/subscription-limits.servic
       Order,
     ]),
     UserModule,
+    AdTokenModule,
   ],
   controllers: [
     SubscriptionController,
@@ -45,6 +48,7 @@ import { SubscriptionLimitsService } from './services/subscription-limits.servic
     PriceValidationService,
     SubscriptionPlansService,
     SubscriptionLimitsService,
+    FreeSubscriptionService,
     PaymentGateway,
     SharedConfigService,
   ],

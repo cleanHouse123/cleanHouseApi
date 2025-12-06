@@ -40,6 +40,8 @@ import { SubscriptionStatus } from './entities/subscription.entity';
 import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
 import { PaymentInfoDto } from '../shared/dto/payment-info.dto';
+import { GetUserMetadata, UserMetadata } from '../shared/decorators/get-user.decorator';
+import { SubscriptionPriceDto } from './dto/subscription-price.dto';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -78,16 +80,27 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'План подписки не найден' })
   async createByPlan(
     @Body() createSubscriptionByPlanDto: CreateSubscriptionByPlanDto,
-    @Request() req,
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<SubscriptionResponseDto> {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new BadRequestException('Пользователь не авторизован');
-    }
     return this.subscriptionService.createByPlan(
       createSubscriptionByPlanDto.planId,
-      userId,
+      user.userId,
     );
+  }
+
+  @Get('price/:planId')
+  @ApiOperation({ summary: 'Получить предварительную финальную цену подписки' })
+  @ApiResponse({
+    status: 200,
+    description: 'Предварительная цена подписки с учетом прав на бесплатную подписку',
+    type: SubscriptionPriceDto,
+  })
+  @ApiResponse({ status: 404, description: 'План подписки не найден' })
+  async getSubscriptionPrice(
+    @Param('planId', ParseUUIDPipe) planId: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<SubscriptionPriceDto> {
+    return this.subscriptionService.getSubscriptionPrice(planId, user.userId);
   }
 
   @Get()
@@ -231,7 +244,6 @@ export class SubscriptionController {
 
     return await this.paymentService.createPaymentLink(
       createPaymentDto.subscriptionId,
-      createPaymentDto.amount,
       createPaymentDto.subscriptionType,
       createPaymentDto.planId,
       userId,
