@@ -229,7 +229,9 @@ export class ScheduledOrdersService {
 
     // Проверяем частоту создания заказов
     if (this.shouldCreateOrder(schedule)) {
-      const orderPrice = await this.priceService.getOrderPrice();
+      const orderPrice = await this.priceService.getOrderPrice(
+        schedule.customerId,
+      );
       
       // Создаем заказ со статусом PAID
       const order = this.orderRepository.create({

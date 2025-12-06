@@ -94,7 +94,9 @@ export class OrderService {
       );
     }
 
-    const orderPrice = await this.priceService.getOrderPrice();
+    const orderPrice = await this.priceService.getOrderPrice(
+      createOrderDto.customerId,
+    );
 
     // Преобразуем координаты из фронта в нужный формат
     let coordinates: { lat: number; lon: number } | undefined;

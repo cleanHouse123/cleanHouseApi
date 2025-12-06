@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../user/entities/user.entity';
+import { Order } from '../order/entities/order.entity';
 
 export enum PriceType {
   ORDER_SINGLE = 'order_single',
@@ -9,9 +13,30 @@ export enum PriceType {
 @Injectable()
 export class PriceService {
   private readonly ORDER_PRICE = 14900;
+  private readonly FIRST_ORDER_PRICE = 100;
 
-  async getOrderPrice(): Promise<number> {
-    return this.ORDER_PRICE;
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(Order)
+    private readonly orderRepository: Repository<Order>,
+  ) {}
+
+  async getOrderPrice(userId?: string): Promise<number> {
+    if (!userId) {
+      return this.ORDER_PRICE;
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      return this.ORDER_PRICE;
+    }
+
+    const ordersCount = await this.orderRepository.count({
+      where: { customerId: userId },
+    });
+
+    return ordersCount === 0 ? this.FIRST_ORDER_PRICE : this.ORDER_PRICE;
   }
 
   async getPriceByType(type: PriceType): Promise<number> {
