@@ -160,6 +160,12 @@ export class OrderController {
     enum: OrderStatus,
     description: 'Фильтр по статусу',
   })
+  @ApiQuery({
+    name: 'currierId',
+    required: false,
+    description: 'Фильтр по ID курьера',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список ближайших заказов с расстоянием',

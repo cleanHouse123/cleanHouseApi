@@ -254,7 +254,7 @@ export class OrderService {
     orders: (OrderResponseDto & { distance: number })[];
     total: number;
   }> {
-    const { lat, lon, maxDistance = 10000, page = 1, limit = 10, status } =
+    const { lat, lon, maxDistance = 10000, page = 1, limit = 10, status, currierId } =
       findNearbyOrdersDto;
 
     // Строим SQL запрос с использованием PostGIS и параметризованных запросов
@@ -281,6 +281,12 @@ export class OrderService {
     if (status) {
       query += ` AND o.status = $${params.length + 1}`;
       params.push(status);
+    }
+
+    // Добавляем фильтр по currierId, если указан
+    if (currierId) {
+      query += ` AND o."currierId" = $${params.length + 1}`;
+      params.push(currierId);
     }
 
     // Добавляем сортировку по расстоянию и пагинацию
@@ -312,6 +318,11 @@ export class OrderService {
     if (status) {
       countQuery += ` AND o.status = $${countParams.length + 1}`;
       countParams.push(status);
+    }
+
+    if (currierId) {
+      countQuery += ` AND o."currierId" = $${countParams.length + 1}`;
+      countParams.push(currierId);
     }
 
     const countResult = await this.dataSource.query(countQuery, countParams);

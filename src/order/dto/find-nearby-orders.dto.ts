@@ -67,5 +67,13 @@ export class FindNearbyOrdersDto {
   })
   @IsOptional()
   status?: OrderStatus;
+
+  @ApiProperty({
+    description: 'Фильтр по ID курьера',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  currierId?: string;
 }
 
