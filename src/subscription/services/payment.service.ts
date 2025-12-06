@@ -123,9 +123,19 @@ export class PaymentService {
 
       // ДОБАВЛЯЕМ ПРОВЕРКУ: Если подписка уже активна и бесплатна, возвращаем без ссылки
       if (subscription.status === SubscriptionStatus.ACTIVE && subscription.price === 0) {
+        // Ищем существующий успешный платеж для этой подписки
+        const existingPayment = await manager.findOne(SubscriptionPayment, {
+          where: {
+            subscriptionId,
+            status: SubscriptionPaymentStatus.SUCCESS,
+            amount: 0,
+          },
+          order: { createdAt: 'DESC' },
+        });
+
         return {
           paymentUrl: null,
-          paymentId: null,
+          paymentId: existingPayment?.id || '',
           status: 'success',
         };
       }
