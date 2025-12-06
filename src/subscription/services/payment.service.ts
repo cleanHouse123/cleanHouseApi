@@ -121,6 +121,15 @@ export class PaymentService {
         );
       }
 
+      // ДОБАВЛЯЕМ ПРОВЕРКУ: Если подписка уже активна и бесплатна, возвращаем без ссылки
+      if (subscription.status === SubscriptionStatus.ACTIVE && subscription.price === 0) {
+        return {
+          paymentUrl: null,
+          paymentId: null,
+          status: 'success',
+        };
+      }
+
       // Получаем план подписки для получения базовой цены
       const subscriptionPlan =
         await this.priceValidationService.getSubscriptionPlanById(planId);
