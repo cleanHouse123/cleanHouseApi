@@ -125,20 +125,6 @@ export class PaymentService {
       const subscriptionPlan =
         await this.priceValidationService.getSubscriptionPlanById(planId);
 
-      // Проверяем, нет ли уже активной подписки у пользователя (проверяем сначала, чтобы не тратить ресурсы)
-      const existingActiveSubscription = await manager.findOne(Subscription, {
-        where: {
-          userId: userId,
-          status: SubscriptionStatus.ACTIVE,
-        },
-      });
-
-      if (existingActiveSubscription) {
-        throw new BadRequestException(
-          'У пользователя уже есть активная подписка',
-        );
-      }
-
       // Проверяем право на бесплатную подписку
       const freeSubscriptionCheck =
         await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
