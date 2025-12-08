@@ -8,6 +8,7 @@ import {
   ManyToOne,
 } from 'typeorm';
 import { AdToken } from '../../ad-tokens/ad-token.entity';
+import { UsageFeaturesEnum } from 'src/shared/types/user-feutures';
 
 @Entity()
 export class User {
@@ -45,8 +46,13 @@ export class User {
   @Column({ nullable: true })
   lastLoginAt: Date;
 
-  @Column({ default: false })
-  hasUsedFreeReferralSubscription: boolean;
+  @Column({
+    type: 'enum',
+    enum: UsageFeaturesEnum,
+    array: true,
+    default: [],
+  })
+  usageFeatures: UsageFeaturesEnum[];
 
   @CreateDateColumn()
   createdAt: Date;

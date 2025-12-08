@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { AdTokenService } from '../../ad-tokens/ad-token.service';
+import { UsageFeaturesEnum } from 'src/shared/types/user-feutures';
 
 export interface FreeSubscriptionEligibility {
   eligible: boolean;
@@ -32,7 +33,11 @@ export class FreeSubscriptionService {
     }
 
     // Проверяем, использовал ли уже бесплатную подписку
-    if (user.hasUsedFreeReferralSubscription) {
+    if (
+      user.usageFeatures?.includes(
+        UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
+      )
+    ) {
       return {
         eligible: false,
         reason: 'Бесплатная подписка уже была использована',
@@ -75,13 +80,25 @@ export class FreeSubscriptionService {
     }
 
     // Проверяем еще раз, не использовал ли уже (защита от race condition)
-    if (user.hasUsedFreeReferralSubscription) {
+    if (
+      user.usageFeatures?.includes(
+        UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
+      )
+    ) {
       throw new Error('Бесплатная подписка уже была использована');
+    }
+
+    // Добавляем в массив usageFeatures, если еще нет
+    const updatedFeatures = user.usageFeatures || [];
+    if (
+      !updatedFeatures.includes(UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION)
+    ) {
+      updatedFeatures.push(UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION);
     }
 
     await repository.update(
       { id: userId },
-      { hasUsedFreeReferralSubscription: true },
+      { usageFeatures: updatedFeatures },
     );
   }
 
@@ -89,9 +106,12 @@ export class FreeSubscriptionService {
    * Подсчитывает количество использованных бесплатных подписок (для будущих ограничений)
    */
   async countUsedFreeSubscriptions(): Promise<number> {
-    return await this.userRepository.count({
-      where: { hasUsedFreeReferralSubscription: true },
-    });
+    const users = await this.userRepository.find();
+    return users.filter((user) =>
+      user.usageFeatures?.includes(
+        UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
+      ),
+    ).length;
   }
 }
 

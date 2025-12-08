@@ -1,0 +1,3 @@
+export enum UsageFeaturesEnum {
+  FREE_REFERRAL_SUBSCRIPTION = 'FREE_REFERRAL_SUBSCRIPTION',
+}

@@ -30,6 +30,7 @@ import { PriceValidationService } from './services/price-validation.service';
 import { SubscriptionPlanWithPriceDto } from './dto/subscription-plan-with-price.dto';
 import { SubscriptionPlanResponseDto } from './dto/subscription-plan-response.dto';
 import { SubscriptionPlansService } from './services/subscription-plans.service';
+import { UsageFeaturesEnum } from 'src/shared/types/user-feutures';
 
 @Injectable()
 export class SubscriptionService {
@@ -569,7 +570,10 @@ export class SubscriptionService {
       isEligibleForFree: freeSubscriptionCheck.eligible,
       referralCount: freeSubscriptionCheck.referralCount,
       reason: freeSubscriptionCheck.reason,
-      hasUsedFreeSubscription: user?.hasUsedFreeReferralSubscription || false,
+      hasUsedFreeSubscription:
+        user?.usageFeatures?.includes(
+          UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
+        ) || false,
     };
   }
 
@@ -606,7 +610,9 @@ export class SubscriptionService {
           isEligibleForFree: freeSubscriptionCheck.eligible,
           referralCount: freeSubscriptionCheck.referralCount,
           hasUsedFreeSubscription:
-            user?.hasUsedFreeReferralSubscription || false,
+            user?.usageFeatures?.includes(
+              UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
+            ) || false,
         } as SubscriptionPlanWithPriceDto;
       }),
     );
