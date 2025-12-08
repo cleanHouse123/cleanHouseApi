@@ -254,10 +254,11 @@ export class OrderService {
     orders: (OrderResponseDto & { distance: number })[];
     total: number;
   }> {
-    const { lat, lon, maxDistance = 10000, page = 1, limit = 10, status, currierId } =
+    const { lat, lon, page = 1, limit = 10, status, currierId } =
       findNearbyOrdersDto;
 
     // Строим SQL запрос с использованием PostGIS и параметризованных запросов
+    // Вычисляем расстояние для всех заказов, но не фильтруем по maxDistance
     let query = `
       SELECT 
         o.*,
@@ -269,13 +270,9 @@ export class OrderService {
       WHERE o.coordinates IS NOT NULL
         AND o.coordinates->>'lat' IS NOT NULL
         AND o.coordinates->>'lon' IS NOT NULL
-        AND ST_Distance(
-          ST_SetSRID(ST_MakePoint((o.coordinates->>'lon')::float, (o.coordinates->>'lat')::float), 4326)::geography,
-          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-        ) <= $3
     `;
 
-    const params: any[] = [lon, lat, maxDistance];
+    const params: any[] = [lon, lat];
 
     // Добавляем фильтр по статусу, если указан
     if (status) {
@@ -308,12 +305,8 @@ export class OrderService {
       WHERE o.coordinates IS NOT NULL
         AND o.coordinates->>'lat' IS NOT NULL
         AND o.coordinates->>'lon' IS NOT NULL
-        AND ST_Distance(
-          ST_SetSRID(ST_MakePoint((o.coordinates->>'lon')::float, (o.coordinates->>'lat')::float), 4326)::geography,
-          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-        ) <= $3
     `;
-    const countParams: any[] = [lon, lat, maxDistance];
+    const countParams: any[] = [];
 
     if (status) {
       countQuery += ` AND o.status = $${countParams.length + 1}`;
