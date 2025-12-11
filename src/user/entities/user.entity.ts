@@ -6,9 +6,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
 } from 'typeorm';
 import { AdToken } from '../../ad-tokens/ad-token.entity';
 import { UsageFeaturesEnum } from 'src/shared/types/user-feutures';
+import { UserAddress } from '../../address/entities/user-address';
 
 @Entity()
 export class User {
@@ -62,4 +64,7 @@ export class User {
 
   @ManyToOne(() => AdToken, (adToken) => adToken.users, { nullable: true })
   adToken: AdToken;
+
+  @OneToMany(() => UserAddress, (address) => address.user)
+  addresses: UserAddress[];
 }

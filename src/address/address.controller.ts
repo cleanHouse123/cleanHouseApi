@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Delete, Post, Body, Param } from '@nestjs/common';
-import { AddressService } from './address.service';
+import { AddressService } from './service/address.service';
 import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AddressResponseDto } from './dto/address-response.dto';
 import { CreateLocationDto, LocationDto } from './dto/location.dto';
@@ -148,5 +148,17 @@ export class AddressController {
       message: `Обслуживание кэша завершено. Удалено ${result.totalDeleted} записей`,
       ...result
     };
+  }
+
+  @ApiOperation({ summary: 'Проверить, поддерживается ли адрес' })
+  @ApiBody({ type: AddressResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Адрес поддерживается',
+    type: Boolean,
+  })
+  @Post('is-supportable')
+  async isSupportableAddress(@Body() address: AddressResponseDto): Promise<boolean> {
+    return this.addressService.isSupportableAddress(address);
   }
 }

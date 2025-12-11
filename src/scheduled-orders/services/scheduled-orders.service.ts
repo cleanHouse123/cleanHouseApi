@@ -175,15 +175,15 @@ export class ScheduledOrdersService {
   /**
    * Cron job для автоматического создания заказов по расписанию
    */
-  @Cron(CronExpression.EVERY_30_MINUTES)
-  async handleDailyScheduledOrders() {
-    try {
-      await this.processScheduledOrders();
-      this.logger.log(`[CRON] ${new Date().toISOString()} - Обработка расписаний заказов завершена`);
-    } catch (error) {
-      this.logger.error(`[CRON] ${new Date().toISOString()} - Ошибка при обработке расписаний заказов:`, error);
-    }
-  }
+  // @Cron(CronExpression.EVERY_30_MINUTES)
+  // async handleDailyScheduledOrders() {
+  //   try {
+  //     await this.processScheduledOrders();
+  //     this.logger.log(`[CRON] ${new Date().toISOString()} - Обработка расписаний заказов завершена`);
+  //   } catch (error) {
+  //     this.logger.error(`[CRON] ${new Date().toISOString()} - Ошибка при обработке расписаний заказов:`, error);
+  //   }
+  // }
 
   /**
    * Обрабатывает все активные расписания и создает заказы

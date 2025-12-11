@@ -29,6 +29,7 @@ import { ScheduledOrder } from './scheduled-orders/entities/scheduled-order.enti
 import { getYookassaConfig } from './shared/config/yookassa.config';
 import { PriceModule } from './price/price.module';
 import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.module';
+import { UserAddress } from './address/entities/user-address';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.modul
             Location,
             AdToken,
             ScheduledOrder,
+            UserAddress,
           ],
         };
       },

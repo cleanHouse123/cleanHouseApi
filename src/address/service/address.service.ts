@@ -1,14 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
-import { AddressResponseDto } from './dto/address-response.dto';
-import { AddressCache } from './entities/address-cache.entity';
-import {
-  DaDataAddressResponse,
-  DaDataAddressSuggestion,
-} from './interfaces/address-data.interface';
-import { Location } from './entities/location.entity';
-import { CreateLocationDto, LocationDto } from './dto/location.dto';
+import { Repository } from 'typeorm';
+import { AddressResponseDto } from '../dto/address-response.dto';
+import { AddressCache } from '../entities/address-cache.entity';
+import { Location } from '../entities/location.entity';
+import { CreateLocationDto, LocationDto } from '../dto/location.dto';
+import { DaDataService } from './dadata.service';
 
 @Injectable()
 export class AddressService {
@@ -17,6 +14,7 @@ export class AddressService {
     private readonly addressCacheRepository: Repository<AddressCache>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
+    private readonly daDataService: DaDataService,
   ) {}
 
   async getLocations(): Promise<LocationDto[]> {
@@ -102,7 +100,7 @@ export class AddressService {
     normalizedQuery: string,
   ): Promise<AddressResponseDto[]> {
     try {
-      const apiResults = await this.searchInDaData(query);
+      const apiResults = await this.daDataService.searchAddresses(query, false);
 
       if (apiResults.length > 0) {
         await this.saveToCache(normalizedQuery, apiResults);
@@ -180,101 +178,6 @@ export class AddressService {
     }
   }
 
-  private async searchInDaData(query: string): Promise<AddressResponseDto[]> {
-    try {
-      const url =
-        'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
-      const token = '8c514de4553ad490a0c95f2c8a51385ecb1afd31'; // Замените на ваш API-ключ
-
-      // const locations = [
-      //   { city: 'Кудрово' },
-      //   { city: 'Колтуши' },
-      //   { settlement: "Янино-1" },
-      //   { settlement: "Янино-2" },
-      // ];
-
-      const locations = await this.locationRepository.find();
-      const locationsData = locations.map((location) => ({
-        city: location.city,
-        settlement: location.settlement,
-        area: location.area,
-        region: location.region,
-        street: location.street,
-      }));
-
-      const options = {
-        method: 'POST',
-        mode: 'cors' as RequestMode,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: 'Token ' + token,
-        },
-        body: JSON.stringify({
-          query: query,
-          locations: locationsData,
-          from_bound: { value: 'street' },
-          to_bound: { value: 'house' },
-          restrict_value: false,
-        }),
-      };
-
-      const response = await fetch(url, options);
-      const result: DaDataAddressResponse = await response.json();
-
-      if (!result || !Array.isArray(result.suggestions)) return [];
-
-      // Нормализуем ответ под привязку адреса на фронте, учитываем случаи без city (только settlement/мкр)
-      return result.suggestions.map(
-        (s: DaDataAddressSuggestion): AddressResponseDto => {
-          const d = s?.data ?? {};
-          const cityOrSettlement = d.city || d.settlement || null;
-          const cityOrSettlementWithType =
-            d.city_with_type || d.settlement_with_type || null;
-          const isMicroDistrict = d.settlement_type === 'мкр';
-          const display = [
-            d.region_with_type,
-            d.area_with_type,
-            cityOrSettlementWithType,
-            d.street_with_type,
-            d.house,
-          ]
-            .filter(Boolean)
-            .join(', ');
-
-          return {
-            value: s.value,
-            unrestricted_value: s.unrestricted_value,
-            display,
-            region: d.region,
-            region_with_type: d.region_with_type,
-            area: d.area,
-            area_with_type: d.area_with_type,
-            city: d.city,
-            city_with_type: d.city_with_type,
-            settlement: d.settlement,
-            settlement_with_type: d.settlement_with_type,
-            is_microdistrict: isMicroDistrict,
-            city_or_settlement: cityOrSettlement,
-            street: d.street,
-            street_with_type: d.street_with_type,
-            house: d.house,
-            postal_code: d.postal_code,
-            geo_lat: d.geo_lat,
-            geo_lon: d.geo_lon,
-            fias_id: d.fias_id,
-            fias_level: d.fias_level,
-            kladr_id: d.kladr_id,
-            okato: d.okato,
-            oktmo: d.oktmo,
-            tax_office: d.tax_office,
-          };
-        },
-      );
-    } catch (error) {
-      throw new Error('Не удалось получить адреса');
-    }
-  }
 
   async cleanOldCache(daysOld: number = 30): Promise<{ deletedCount: number }> {
     try {
@@ -293,6 +196,10 @@ export class AddressService {
       console.error('Ошибка при очистке старого кэша:', error);
       throw new Error('Не удалось очистить кэш');
     }
+  }
+
+  async isSupportableAddress(address: AddressResponseDto): Promise<boolean> {
+    return this.daDataService.isSupportableAddressByDaData(address);
   }
 
   async limitCacheSize(
