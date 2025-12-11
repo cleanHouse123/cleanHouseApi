@@ -30,6 +30,8 @@ import { getYookassaConfig } from './shared/config/yookassa.config';
 import { PriceModule } from './price/price.module';
 import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.module';
 import { UserAddress } from './address/entities/user-address';
+import { WorkTimeModule } from './work-time/work-time.module';
+import { WorkTime } from './work-time/entities/work-time.entity';
 
 @Module({
   imports: [
@@ -71,6 +73,7 @@ import { UserAddress } from './address/entities/user-address';
             AdToken,
             ScheduledOrder,
             UserAddress,
+            WorkTime,
           ],
         };
       },
@@ -91,6 +94,7 @@ import { UserAddress } from './address/entities/user-address';
     AdTokenModule,
     PriceModule,
     ScheduledOrdersModule,
+    WorkTimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
