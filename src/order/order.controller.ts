@@ -18,6 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { OrderService } from './order.service';
+import { FindOrdersQueryDto } from './dto/find-orders-query.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
@@ -62,34 +63,6 @@ export class OrderController {
 
   @Get()
   @ApiOperation({ summary: 'Получить список заказов' })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    description: 'Номер страницы',
-    example: 1,
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Количество на странице',
-    example: 10,
-  })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    enum: OrderStatus,
-    description: 'Фильтр по статусу',
-  })
-  @ApiQuery({
-    name: 'customerId',
-    required: false,
-    description: 'Фильтр по клиенту',
-  })
-  @ApiQuery({
-    name: 'currierId',
-    required: false,
-    description: 'Фильтр по курьеру',
-  })
   @ApiResponse({
     status: 200,
     description: 'Список заказов',
@@ -104,20 +77,8 @@ export class OrderController {
       },
     },
   })
-  async findAll(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-    @Query('status') status?: OrderStatus,
-    @Query('customerId') customerId?: string,
-    @Query('currierId') currierId?: string,
-  ) {
-    return this.orderService.findAll(
-      page,
-      limit,
-      status,
-      customerId,
-      currierId,
-    );
+  async findAll(@Query() query: FindOrdersQueryDto) {
+    return this.orderService.findAll(query);
   }
 
   @Get('nearby')

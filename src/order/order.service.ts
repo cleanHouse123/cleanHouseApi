@@ -15,6 +15,8 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
 import { FindNearbyOrdersDto } from './dto/find-nearby-orders.dto';
+import { FindOrdersQueryDto, SortOrder } from './dto/find-orders-query.dto';
+import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../shared/constants';
 import { User } from '../user/entities/user.entity';
 import { UserRole } from '../shared/types/user.role';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -214,33 +216,58 @@ export class OrderService {
   }
 
   async findAll(
-    page: number = 1,
-    limit: number = 10,
-    status?: OrderStatus,
-    customerId?: string,
-    currierId?: string,
+    query: FindOrdersQueryDto,
   ): Promise<{ orders: OrderResponseDto[]; total: number }> {
-    const where: FindOptionsWhere<Order> = {};
+    const {
+      page = DEFAULT_PAGE,
+      limit = DEFAULT_LIMIT,
+      status,
+      customerId,
+      currierId,
+      startScheduledAtDate,
+      endScheduledAtDate,
+      sortOrder = SortOrder.ASC,
+    } = query;
+
+    const queryBuilder = this.orderRepository
+      .createQueryBuilder('order')
+      .leftJoinAndSelect('order.customer', 'customer')
+      .leftJoinAndSelect('order.currier', 'currier')
+      .leftJoinAndSelect('order.payments', 'payments');
 
     if (status) {
-      where.status = status;
+      queryBuilder.andWhere('order.status = :status', { status });
     }
 
     if (customerId) {
-      where.customerId = customerId;
+      queryBuilder.andWhere('order.customerId = :customerId', { customerId });
     }
 
     if (currierId) {
-      where.currierId = currierId;
+      queryBuilder.andWhere('order.currierId = :currierId', { currierId });
     }
 
-    const [orders, total] = await this.orderRepository.findAndCount({
-      where,
-      relations: ['customer', 'currier', 'payments'],
-      order: { scheduledAt: 'ASC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    if (startScheduledAtDate) {
+      queryBuilder.andWhere('order.scheduledAt >= :startScheduledAtDate', {
+        startScheduledAtDate,
+      });
+    }
+
+    if (endScheduledAtDate) {
+      queryBuilder.andWhere('order.scheduledAt <= :endScheduledAtDate', {
+        endScheduledAtDate,
+      });
+    }
+
+    // Сортировка по scheduledAt (null значения идут в конец)
+    queryBuilder
+      .orderBy('order.scheduledAt', sortOrder)
+      .addOrderBy('order.createdAt', 'DESC'); // Дополнительная сортировка для заказов без scheduledAt
+
+    // Пагинация
+    queryBuilder.skip((page - 1) * limit).take(limit);
+
+    const [orders, total] = await queryBuilder.getManyAndCount();
 
     return {
       orders: orders.map((order) => this.transformToResponseDto(order)),
