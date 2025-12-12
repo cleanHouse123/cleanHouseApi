@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { RolesGuard } from 'src/shared/guards/roles.guard';
@@ -10,6 +20,7 @@ import { UserService } from './user.service';
 import { UsersListDto } from './dto/users-list.dto';
 import { FindUsersQueryDto } from './dto/filter-users.dto';
 import { CreateCurrierDto } from './dto/create-currier.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @ApiTags('user')
 @Controller('user')
@@ -67,5 +78,32 @@ export class UserController {
     limit: number;
   }> {
     return await this.userService.getAllUsers(query);
+  }
+
+  @Delete('admin/:id')
+  async removeAdmin(@Param('id') id: string): Promise<{ message: string }> {
+    await this.userService.removeAdmin(id);
+    return { message: 'Администратор успешно удален' };
+  }
+
+  @Patch(':id')
+  @ApiBearerAuth()
+  @ApiBody({
+    type: UpdateUserDto,
+    description: 'Данные для обновления пользователя',
+  })
+  async updateUser(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<UsersListDto> {
+    const user = await this.userService.update(id, updateUserDto);
+    const { hash_password, refreshTokenHash, ...userResponse } = user;
+    return userResponse as UsersListDto;
+  }
+
+  @Delete(':id')
+  async removeUser(@Param('id') id: string): Promise<{ message: string }> {
+    await this.userService.remove(id);
+    return { message: 'Пользователь успешно удален' };
   }
 }

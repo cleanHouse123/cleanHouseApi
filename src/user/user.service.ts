@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -54,15 +54,15 @@ export class UserService {
   }
 
   async findById(id: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { id } });
+    return this.userRepository.findOne({ where: { id, deletedAt: IsNull() } });
   }
 
   async findByPhone(phone: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { phone } });
+    return this.userRepository.findOne({ where: { phone, deletedAt: IsNull() } });
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email } });
+    return this.userRepository.findOne({ where: { email, deletedAt: IsNull() } });
   }
 
   async updatePhoneVerification(
@@ -101,11 +101,67 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Проверяем уникальность телефона, если он обновляется
+    if (updateUserDto.phone && updateUserDto.phone !== user.phone) {
+      const existingUserByPhone = await this.userRepository.findOne({
+        where: { phone: updateUserDto.phone, deletedAt: IsNull() },
+      });
+      if (existingUserByPhone && existingUserByPhone.id !== id) {
+        throw new ConflictException(
+          'Пользователь с таким номером телефона уже существует',
+        );
+      }
+      // Сбрасываем верификацию телефона при изменении
+      updateUserDto.isPhoneVerified = false;
+    }
+
+    // Проверяем уникальность email, если он обновляется
+    if (updateUserDto.email && updateUserDto.email !== user.email) {
+      const existingUserByEmail = await this.userRepository.findOne({
+        where: { email: updateUserDto.email, deletedAt: IsNull() },
+      });
+      if (existingUserByEmail && existingUserByEmail.id !== id) {
+        throw new ConflictException(
+          'Пользователь с таким email уже существует',
+        );
+      }
+      // Сбрасываем верификацию email при изменении
+      updateUserDto.isEmailVerified = false;
+    }
+
     return this.userRepository.save({ ...user, ...updateUserDto });
   }
 
   async remove(id: string): Promise<void> {
-    await this.userRepository.delete(id);
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.id = :id', { id })
+      .andWhere('user.deletedAt IS NULL')
+      .getOne();
+
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    // Мягкое удаление - устанавливаем флаг deletedAt
+    await this.userRepository.update(id, { deletedAt: new Date() });
+  }
+
+  async removeAdmin(id: string): Promise<void> {
+    const admin = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.id = :id', { id })
+      .andWhere('user.role = :role', { role: UserRole.ADMIN })
+      .andWhere('user.deletedAt IS NULL')
+      .getOne();
+
+    if (!admin) {
+      throw new NotFoundException('Администратор не найден');
+    }
+
+    // Мягкое удаление - устанавливаем флаг deletedAt
+    await this.userRepository.update(id, { deletedAt: new Date() });
   }
 
   async createAdmin(createAdminDto: CreateAdminDto): Promise<User> {
@@ -162,9 +218,11 @@ export class UserService {
   }
 
   async getAdmins(): Promise<AdminResponseDto[]> {
-    const admins = await this.userRepository.find({
-      where: { role: UserRole.ADMIN },
-    });
+    const admins = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.role = :role', { role: UserRole.ADMIN })
+      .andWhere('user.deletedAt IS NULL')
+      .getMany();
     return admins.map((admin) => ({
       id: admin.id,
       role: admin.role,
@@ -186,9 +244,11 @@ export class UserService {
   }> {
     const queryBuilder = this.userRepository.createQueryBuilder('user');
 
-    queryBuilder.where('user.role != :adminRole', {
-      adminRole: UserRole.ADMIN,
-    });
+    queryBuilder
+      .where('user.role != :adminRole', {
+        adminRole: UserRole.ADMIN,
+      })
+      .andWhere('user.deletedAt IS NULL');
 
     if (query.name) {
       queryBuilder.andWhere('user.name ILIKE :name', {
