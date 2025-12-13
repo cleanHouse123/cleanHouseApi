@@ -171,9 +171,6 @@ export class OrderService {
       numberPackages,
     );
 
-    // Отправляем push-уведомления всем курьерам
-    await this.notifyCouriersAboutNewOrder(savedOrder);
-
     // Если заказ оплачен через подписку, создаем автоматический платеж
     if (
       orderStatus === OrderStatus.PAID &&
@@ -186,6 +183,9 @@ export class OrderService {
         method: PaymentMethod.SUBSCRIPTION,
       });
       await this.paymentRepository.save(payment);
+
+      // Отправляем push-уведомления курьерам о новом оплаченном заказе
+      await this.notifyCouriersAboutPaidOrder(savedOrder);
     } else if (orderStatus === OrderStatus.NEW) {
       // Для новых заказов создаем ссылку на оплату
       try {
@@ -709,9 +709,9 @@ export class OrderService {
   }
 
   /**
-   * Отправляет push-уведомления всем курьерам о новом заказе
+   * Отправляет push-уведомления всем курьерам о том, что заказ оплачен и готов к работе
    */
-  private async notifyCouriersAboutNewOrder(order: Order): Promise<void> {
+  private async notifyCouriersAboutPaidOrder(order: Order): Promise<void> {
     try {
       const couriers = await this.userRepository.find({
         where: {
@@ -722,21 +722,26 @@ export class OrderService {
       });
 
       if (couriers.length === 0) {
-        console.log('[OrderService] No couriers with device tokens found');
+        console.log(
+          '[OrderService] No couriers with device tokens found for paid order',
+        );
         return;
       }
 
       const priceInRubles = (order.price / 100).toFixed(2);
-      const title = 'Новый заказ';
-      const body = `Адрес: ${order.address}\nЦена: ${priceInRubles} ₽`;
-      const payload = JSON.stringify({ orderId: order.id, type: 'new_order' });
+      const title = 'Новый оплаченный заказ';
+      const body = `Заказ оплачен и готов к работе!\nАдрес: ${order.address}\nЦена: ${priceInRubles} ₽`;
+      const payload = JSON.stringify({
+        orderId: order.id,
+        type: 'order_paid_ready',
+      });
 
       const validTokens = couriers
         .map((courier) => courier.deviceToken)
         .filter((token): token is string => !!token);
 
       if (validTokens.length === 0) {
-        console.log('[OrderService] No valid device tokens found');
+        console.log('[OrderService] No valid device tokens found for couriers');
         return;
       }
 
@@ -753,11 +758,11 @@ export class OrderService {
       const failureCount = results.length - successCount;
 
       console.log(
-        `[OrderService] Push notifications sent to couriers: ${successCount} success, ${failureCount} failed`,
+        `[OrderService] Push notifications sent to couriers about paid order ${order.id}: ${successCount} success, ${failureCount} failed`,
       );
     } catch (error) {
       console.error(
-        '[OrderService] Error sending push notifications to couriers:',
+        '[OrderService] Error sending push notifications to couriers about paid order:',
         error,
       );
       // Не блокируем создание заказа из-за ошибки уведомлений
