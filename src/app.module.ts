@@ -32,6 +32,7 @@ import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.modul
 import { UserAddress } from './address/entities/user-address';
 import { WorkTimeModule } from './work-time/work-time.module';
 import { WorkTime } from './work-time/entities/work-time.entity';
+import { FcmModule } from './fcm/fcm.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { WorkTime } from './work-time/entities/work-time.entity';
     PriceModule,
     ScheduledOrdersModule,
     WorkTimeModule,
+    FcmModule,
   ],
   controllers: [AppController],
   providers: [AppService],

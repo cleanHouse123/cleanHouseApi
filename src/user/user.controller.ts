@@ -21,23 +21,30 @@ import { UsersListDto } from './dto/users-list.dto';
 import { FindUsersQueryDto } from './dto/filter-users.dto';
 import { CreateCurrierDto } from './dto/create-currier.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AddDeviceTokenDto } from './dto/add-device-token.dto';
+import {
+  GetUserMetadata,
+  UserMetadata,
+} from 'src/shared/decorators/get-user.decorator';
 
 @ApiTags('user')
 @Controller('user')
-@ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get('admins')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async getAdmins(): Promise<AdminResponseDto[]> {
     const admins = await this.userService.getAdmins();
     return admins;
   }
 
   @Post('admin')
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBody({
     type: CreateAdminDto,
     description: 'Данные для создания нового администратора',
@@ -54,7 +61,9 @@ export class UserController {
   }
 
   @Post('currier')
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBody({
     type: CreateCurrierDto,
     description: 'Данные для создания нового курьера',
@@ -71,6 +80,9 @@ export class UserController {
   }
 
   @Get('all')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async getAllUsers(@Query() query: FindUsersQueryDto): Promise<{
     data: UsersListDto[];
     total: number;
@@ -81,13 +93,18 @@ export class UserController {
   }
 
   @Delete('admin/:id')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async removeAdmin(@Param('id') id: string): Promise<{ message: string }> {
     await this.userService.removeAdmin(id);
     return { message: 'Администратор успешно удален' };
   }
 
   @Patch(':id')
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiBody({
     type: UpdateUserDto,
     description: 'Данные для обновления пользователя',
@@ -102,8 +119,29 @@ export class UserController {
   }
 
   @Delete(':id')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async removeUser(@Param('id') id: string): Promise<{ message: string }> {
     await this.userService.remove(id);
     return { message: 'Пользователь успешно удален' };
+  }
+
+  @Patch('add-device-token')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
+  @ApiBody({
+    type: AddDeviceTokenDto,
+    description: 'Добавить/обновить FCM device token',
+  })
+  async addDeviceToken(
+    @GetUserMetadata() user: UserMetadata,
+    @Body() addDeviceTokenDto: AddDeviceTokenDto,
+  ): Promise<{ message: string }> {
+    await this.userService.updateDeviceToken(
+      user.userId,
+      addDeviceTokenDto.token,
+    );
+    return { message: 'Device token успешно обновлен' };
   }
 }

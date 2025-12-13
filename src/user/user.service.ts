@@ -58,11 +58,15 @@ export class UserService {
   }
 
   async findByPhone(phone: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { phone, deletedAt: IsNull() } });
+    return this.userRepository.findOne({
+      where: { phone, deletedAt: IsNull() },
+    });
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email, deletedAt: IsNull() } });
+    return this.userRepository.findOne({
+      where: { email, deletedAt: IsNull() },
+    });
   }
 
   async updatePhoneVerification(
@@ -94,6 +98,10 @@ export class UserService {
     await this.userRepository.update(userId, {
       lastLoginAt: new Date(),
     });
+  }
+
+  async updateDeviceToken(userId: string, deviceToken: string): Promise<void> {
+    await this.userRepository.update(userId, { deviceToken });
   }
 
   async update(id: string, updateUserDto: Partial<User>): Promise<User> {

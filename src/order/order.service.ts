@@ -4,7 +4,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, DataSource, In } from 'typeorm';
+import {
+  Repository,
+  FindOptionsWhere,
+  DataSource,
+  In,
+  IsNull,
+  Not,
+} from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import {
   Payment,
@@ -23,6 +30,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitsService } from '../subscription/services/subscription-limits.service';
 import { OrderPaymentService } from './services/order-payment.service';
 import { PriceService } from '../price/price.service';
+import { FcmService } from '../fcm/fcm.service';
 
 @Injectable()
 export class OrderService {
@@ -37,6 +45,7 @@ export class OrderService {
     private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
     private priceService: PriceService,
+    private fcmService: FcmService,
     private dataSource: DataSource,
   ) {}
 
@@ -148,11 +157,6 @@ export class OrderService {
       numberPackages,
     });
 
-    console.log(
-      'Created order addressDetails:',
-      JSON.stringify(order.addressDetails, null, 2),
-    );
-
     const savedOrder = await this.orderRepository.save(order);
 
     console.log(
@@ -166,6 +170,9 @@ export class OrderService {
       createOrderDto.customerId,
       numberPackages,
     );
+
+    // Отправляем push-уведомления всем курьерам
+    await this.notifyCouriersAboutNewOrder(savedOrder);
 
     // Если заказ оплачен через подписку, создаем автоматический платеж
     if (
@@ -699,5 +706,61 @@ export class OrderService {
 
     payment.status = status;
     await this.paymentRepository.save(payment);
+  }
+
+  /**
+   * Отправляет push-уведомления всем курьерам о новом заказе
+   */
+  private async notifyCouriersAboutNewOrder(order: Order): Promise<void> {
+    try {
+      const couriers = await this.userRepository.find({
+        where: {
+          role: UserRole.CURRIER,
+          deviceToken: Not(IsNull()),
+          deletedAt: IsNull(),
+        },
+      });
+
+      if (couriers.length === 0) {
+        console.log('[OrderService] No couriers with device tokens found');
+        return;
+      }
+
+      const priceInRubles = (order.price / 100).toFixed(2);
+      const title = 'Новый заказ';
+      const body = `Адрес: ${order.address}\nЦена: ${priceInRubles} ₽`;
+      const payload = JSON.stringify({ orderId: order.id, type: 'new_order' });
+
+      const validTokens = couriers
+        .map((courier) => courier.deviceToken)
+        .filter((token): token is string => !!token);
+
+      if (validTokens.length === 0) {
+        console.log('[OrderService] No valid device tokens found');
+        return;
+      }
+
+      // Отправляем уведомления всем курьерам
+      const results = await Promise.allSettled(
+        validTokens.map((token) =>
+          this.fcmService.sendNotificationToDevice(token, title, body, payload),
+        ),
+      );
+
+      const successCount = results.filter(
+        (r) => r.status === 'fulfilled' && r.value.success,
+      ).length;
+      const failureCount = results.length - successCount;
+
+      console.log(
+        `[OrderService] Push notifications sent to couriers: ${successCount} success, ${failureCount} failed`,
+      );
+    } catch (error) {
+      console.error(
+        '[OrderService] Error sending push notifications to couriers:',
+        error,
+      );
+      // Не блокируем создание заказа из-за ошибки уведомлений
+    }
   }
 }

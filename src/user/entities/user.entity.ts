@@ -48,6 +48,9 @@ export class User {
   @Column({ nullable: true })
   lastLoginAt: Date;
 
+  @Column({ nullable: true })
+  deviceToken?: string;
+
   @Column({
     type: 'enum',
     enum: UsageFeaturesEnum,
