@@ -302,6 +302,22 @@ export class WebhookController {
         await this.orderPaymentService.handleYookassaWebhook(webhookData);
 
       if (payment && payment.status === 'paid') {
+        // Получаем заказ для проверки текущего статуса
+        const order = await this.orderRepository.findOne({
+          where: { id: payment.orderId },
+          relations: ['customer'],
+        });
+
+        if (!order) {
+          this.logger.warn(
+            `Заказ ${payment.orderId} не найден при обработке webhook`,
+          );
+          return { message: 'Заказ не найден', type: 'order' };
+        }
+
+        // Проверяем, был ли заказ уже оплачен
+        const wasAlreadyPaid = order.status === OrderStatus.PAID;
+
         try {
           // Обновляем статус заказа на "оплачен" (только если еще не оплачен)
           await this.orderService.updateStatus(payment.orderId, {
@@ -326,22 +342,24 @@ export class WebhookController {
           payment.orderId,
         );
 
-        // Отправляем push-уведомления всем курьерам о том, что заказ оплачен и готов к работе
-        try {
-          const order = await this.orderRepository.findOne({
-            where: { id: payment.orderId },
-            relations: ['customer'],
-          });
-
-          if (order) {
-            // Уведомляем всех курьеров о оплаченном заказе
+        // Отправляем push-уведомления всем курьерам ТОЛЬКО если заказ был оплачен впервые
+        if (!wasAlreadyPaid) {
+          try {
+            // Уведомляем всех курьеров о оплаченном заказе (только при первой оплате)
             await this.notifyCouriersAboutPaidOrder(order);
+            this.logger.log(
+              `Push-уведомления отправлены курьерам о первой оплате заказа ${order.id}`,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Ошибка отправки push-уведомлений курьерам: ${error.message}`,
+            );
+            // Не пробрасываем ошибку, чтобы не блокировать обработку webhook
           }
-        } catch (error) {
-          this.logger.error(
-            `Ошибка отправки push-уведомлений курьерам: ${error.message}`,
+        } else {
+          this.logger.log(
+            `Заказ ${payment.orderId} уже был оплачен ранее, пропускаем отправку push-уведомлений курьерам`,
           );
-          // Не пробрасываем ошибку, чтобы не блокировать обработку webhook
         }
       } else if (payment && payment.status === 'failed') {
         // Отправляем уведомление об ошибке
