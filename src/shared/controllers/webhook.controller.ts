@@ -10,6 +10,12 @@ import { PaymentGateway } from '../../subscription/gateways/payment.gateway';
 import { OrderStatus } from '../../order/entities/order.entity';
 import { SubscriptionStatus } from '../../subscription/entities/subscription.entity';
 import { SubscriptionPaymentStatus } from '../../subscription/entities/subscription-payment.entity';
+import { FcmService } from '../../fcm/fcm.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Not, IsNull } from 'typeorm';
+import { Order } from '../../order/entities/order.entity';
+import { User } from '../../user/entities/user.entity';
+import { UserRole } from '../types/user.role';
 
 @ApiTags('Webhooks')
 @Controller('webhooks')
@@ -23,6 +29,11 @@ export class WebhookController {
     private readonly subscriptionService: SubscriptionService,
     private readonly orderPaymentGateway: OrderPaymentGateway,
     private readonly paymentGateway: PaymentGateway,
+    private readonly fcmService: FcmService,
+    @InjectRepository(Order)
+    private readonly orderRepository: Repository<Order>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   @Post('test')
@@ -314,6 +325,24 @@ export class WebhookController {
           payment.id,
           payment.orderId,
         );
+
+        // Отправляем push-уведомления всем курьерам о том, что заказ оплачен и готов к работе
+        try {
+          const order = await this.orderRepository.findOne({
+            where: { id: payment.orderId },
+            relations: ['customer'],
+          });
+
+          if (order) {
+            // Уведомляем всех курьеров о оплаченном заказе
+            await this.notifyCouriersAboutPaidOrder(order);
+          }
+        } catch (error) {
+          this.logger.error(
+            `Ошибка отправки push-уведомлений курьерам: ${error.message}`,
+          );
+          // Не пробрасываем ошибку, чтобы не блокировать обработку webhook
+        }
       } else if (payment && payment.status === 'failed') {
         // Отправляем уведомление об ошибке
         this.orderPaymentGateway.notifyPaymentError(
@@ -370,6 +399,69 @@ export class WebhookController {
     } catch (error) {
       this.logger.error('Ошибка обработки webhook подписки:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Отправляет push-уведомления всем курьерам о том, что заказ оплачен и готов к работе
+   */
+  private async notifyCouriersAboutPaidOrder(order: Order): Promise<void> {
+    try {
+      const couriers = await this.userRepository.find({
+        where: {
+          role: UserRole.CURRIER,
+          deviceToken: Not(IsNull()),
+          deletedAt: IsNull(),
+        },
+      });
+
+      if (couriers.length === 0) {
+        this.logger.log(
+          '[WebhookController] No couriers with device tokens found',
+        );
+        return;
+      }
+
+      const priceInRubles = (order.price / 100).toFixed(2);
+      const title = 'Новый оплаченный заказ';
+      const body = `Заказ оплачен и готов к работе!\nАдрес: ${order.address}\nЦена: ${priceInRubles} ₽`;
+      const payload = JSON.stringify({
+        orderId: order.id,
+        type: 'order_paid_ready',
+      });
+
+      const validTokens = couriers
+        .map((courier) => courier.deviceToken)
+        .filter((token): token is string => !!token);
+
+      if (validTokens.length === 0) {
+        this.logger.log(
+          '[WebhookController] No valid device tokens found for couriers',
+        );
+        return;
+      }
+
+      // Отправляем уведомления всем курьерам
+      const results = await Promise.allSettled(
+        validTokens.map((token) =>
+          this.fcmService.sendNotificationToDevice(token, title, body, payload),
+        ),
+      );
+
+      const successCount = results.filter(
+        (r) => r.status === 'fulfilled' && r.value.success,
+      ).length;
+      const failureCount = results.length - successCount;
+
+      this.logger.log(
+        `[WebhookController] Push notifications sent to couriers about paid order ${order.id}: ${successCount} success, ${failureCount} failed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[WebhookController] Error sending push notifications to couriers about paid order:',
+        error,
+      );
+      // Не пробрасываем ошибку, чтобы не блокировать обработку webhook
     }
   }
 }
