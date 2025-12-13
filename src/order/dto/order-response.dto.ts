@@ -121,6 +121,14 @@ export class OrderResponseDto {
   @Expose()
   coordinates?: { lat: number; lon: number };
 
+  @ApiProperty({
+    description: 'Количество пакетов',
+    example: 1,
+    default: 1,
+  })
+  @Expose()
+  numberPackages: number;
+
   @ApiProperty({ type: [PaymentResponseDto] })
   @Expose()
   @Type(() => PaymentResponseDto)

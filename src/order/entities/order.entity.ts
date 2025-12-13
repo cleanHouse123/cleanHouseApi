@@ -86,6 +86,9 @@ export class Order {
   @Column({ type: 'jsonb', nullable: true })
   coordinates?: { lat: number; lon: number };
 
+  @Column({ type: 'integer', default: 1 })
+  numberPackages: number;
+
   @OneToMany(() => Payment, (payment) => payment.order, {
     cascade: true,
   })

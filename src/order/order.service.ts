@@ -50,9 +50,12 @@ export class OrderService {
       throw new NotFoundException('Клиент не найден');
     }
 
-    // Проверяем лимиты заказов для пользователя
+    const numberPackages = createOrderDto.numberPackages || 1;
+
+    // Проверяем лимиты заказов для пользователя с учетом количества пакетов
     const limits = await this.subscriptionLimitsService.checkOrderLimits(
       createOrderDto.customerId,
+      numberPackages,
     );
 
     if (
@@ -64,7 +67,7 @@ export class OrderService {
         : 'Превышен лимит заказов для вашей подписки';
 
       throw new BadRequestException(
-        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}`,
+        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}, требуется: ${numberPackages}`,
       );
     }
 
@@ -96,9 +99,11 @@ export class OrderService {
       );
     }
 
-    const orderPrice = await this.priceService.getOrderPrice(
+    const baseOrderPrice = await this.priceService.getOrderPrice(
       createOrderDto.customerId,
     );
+
+    const orderPrice = baseOrderPrice * numberPackages;
 
     // Преобразуем координаты из фронта в нужный формат
     let coordinates: { lat: number; lon: number } | undefined;
@@ -128,6 +133,7 @@ export class OrderService {
       scheduledAt: createOrderDto.scheduledAt,
       status: orderStatus,
       coordinates,
+      numberPackages,
     });
 
     console.log(
@@ -143,9 +149,10 @@ export class OrderService {
     );
     console.log('=== END DEBUG ===');
 
-    // Обновляем счетчик использованных заказов в подписке
+    // Обновляем счетчик использованных заказов в подписке с учетом количества пакетов
     await this.subscriptionLimitsService.incrementUsedOrders(
       createOrderDto.customerId,
+      numberPackages,
     );
 
     // Если заказ оплачен через подписку, создаем автоматический платеж
@@ -170,7 +177,7 @@ export class OrderService {
 
         const paymentData = await this.orderPaymentService.createPaymentLink(
           savedOrder.id,
-          savedOrder.price * 100, // Конвертируем в копейки
+          savedOrder.price, // Цена уже в копейках
           customer?.email, // Передаем email если есть, иначе undefined
         );
 
@@ -200,7 +207,7 @@ export class OrderService {
 
       const paymentData = await this.orderPaymentService.createPaymentLink(
         orderId,
-        order.price * 100, // Конвертируем в копейки
+        order.price, // Цена уже в копейках
         order.customer?.email, // Передаем email если есть, иначе undefined
       );
 
@@ -275,14 +282,18 @@ export class OrderService {
     };
   }
 
-  async findAllNearby(
-    findNearbyOrdersDto: FindNearbyOrdersDto,
-  ): Promise<{
+  async findAllNearby(findNearbyOrdersDto: FindNearbyOrdersDto): Promise<{
     orders: (OrderResponseDto & { distance: number })[];
     total: number;
   }> {
-    const { lat, lon, page = 1, limit = 10, status, currierId } =
-      findNearbyOrdersDto;
+    const {
+      lat,
+      lon,
+      page = 1,
+      limit = 10,
+      status,
+      currierId,
+    } = findNearbyOrdersDto;
 
     // Строим SQL запрос с использованием PostGIS и параметризованных запросов
     // Вычисляем расстояние для всех заказов, но не фильтруем по maxDistance
@@ -350,7 +361,7 @@ export class OrderService {
 
     // Получаем полные данные заказов с отношениями
     const orderIds = rawOrders.map((row: any) => row.id);
-    
+
     if (orderIds.length === 0) {
       return {
         orders: [],
@@ -501,7 +512,11 @@ export class OrderService {
         OrderStatus.CANCELED,
       ],
       [OrderStatus.PAID]: [OrderStatus.ASSIGNED, OrderStatus.CANCELED],
-      [OrderStatus.ASSIGNED]: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELED, OrderStatus.ASSIGNED],
+      [OrderStatus.ASSIGNED]: [
+        OrderStatus.IN_PROGRESS,
+        OrderStatus.CANCELED,
+        OrderStatus.ASSIGNED,
+      ],
       [OrderStatus.IN_PROGRESS]: [OrderStatus.DONE, OrderStatus.CANCELED],
       [OrderStatus.DONE]: [],
       [OrderStatus.CANCELED]: [],
@@ -528,6 +543,7 @@ export class OrderService {
       notes: order?.notes || '',
       paymentUrl: order?.paymentUrl || undefined,
       coordinates: order?.coordinates || undefined,
+      numberPackages: order?.numberPackages || 1,
       payments: order?.payments || [],
       createdAt: order?.createdAt || new Date(),
       updatedAt: order?.updatedAt || new Date(),

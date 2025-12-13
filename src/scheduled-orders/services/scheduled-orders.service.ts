@@ -243,6 +243,7 @@ export class ScheduledOrdersService {
         price: orderPrice,
         scheduledAt: this.calculateNextOrderTime(schedule),
         status: OrderStatus.PAID, // Сразу оплачен через подписку
+        numberPackages: 1, // По умолчанию 1 пакет для автоматических заказов
       });
 
       const savedOrder = await this.orderRepository.save(order);

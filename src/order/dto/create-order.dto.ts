@@ -8,6 +8,7 @@ import {
   IsObject,
   ValidateNested,
   IsNumber,
+  Min,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { PaymentMethod } from '../entities/payment.entity';
@@ -134,4 +135,16 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => CoordinatesDto)
   coordinates?: CoordinatesDto;
+
+  @ApiProperty({
+    description: 'Количество пакетов',
+    example: 1,
+    required: false,
+    default: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Type(() => Number)
+  numberPackages?: number;
 }
