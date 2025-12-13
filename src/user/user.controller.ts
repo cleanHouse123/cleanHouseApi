@@ -26,6 +26,7 @@ import {
   GetUserMetadata,
   UserMetadata,
 } from 'src/shared/decorators/get-user.decorator';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 @ApiTags('user')
 @Controller('user')
@@ -101,6 +102,24 @@ export class UserController {
     return { message: 'Администратор успешно удален' };
   }
 
+  @Patch('add-device-token')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
+  @ApiBody({
+    type: AddDeviceTokenDto,
+    description: 'Добавить/обновить FCM device token',
+  })
+  async addDeviceToken(
+    @GetUserMetadata() user: UserMetadata,
+    @Body() addDeviceTokenDto: AddDeviceTokenDto,
+  ): Promise<{ message: string }> {
+    await this.userService.updateDeviceToken(
+      user.userId,
+      addDeviceTokenDto.token,
+    );
+    return { message: 'Device token успешно обновлен' };
+  }
+
   @Patch(':id')
   @ApiBearerAuth('JWT')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -125,23 +144,5 @@ export class UserController {
   async removeUser(@Param('id') id: string): Promise<{ message: string }> {
     await this.userService.remove(id);
     return { message: 'Пользователь успешно удален' };
-  }
-
-  @Patch('add-device-token')
-  @ApiBearerAuth('JWT')
-  @UseGuards(JwtAuthGuard)
-  @ApiBody({
-    type: AddDeviceTokenDto,
-    description: 'Добавить/обновить FCM device token',
-  })
-  async addDeviceToken(
-    @GetUserMetadata() user: UserMetadata,
-    @Body() addDeviceTokenDto: AddDeviceTokenDto,
-  ): Promise<{ message: string }> {
-    await this.userService.updateDeviceToken(
-      user.userId,
-      addDeviceTokenDto.token,
-    );
-    return { message: 'Device token успешно обновлен' };
   }
 }
