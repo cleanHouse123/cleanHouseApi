@@ -285,10 +285,8 @@ export class OrderService {
       });
     }
 
-    // Сортировка по scheduledAt (null значения идут в конец)
-    queryBuilder
-      .orderBy('order.scheduledAt', sortOrder)
-      .addOrderBy('order.createdAt', 'DESC'); // Дополнительная сортировка для заказов без scheduledAt
+    // Сортировка по дате создания от новых к старым
+    queryBuilder.orderBy('order.createdAt', 'DESC');
 
     // Пагинация
     queryBuilder.skip((page - 1) * limit).take(limit);
@@ -398,17 +396,30 @@ export class OrderService {
       rawOrders.map((row: any) => [row.id, parseFloat(row.distance)]),
     );
 
-    // Сортируем заказы по расстоянию и добавляем distance к каждому
+    // Сортируем заказы по расстоянию, затем по дате создания (от новых к старым)
+    // Сначала сортируем исходные заказы
+    orders.sort((a, b) => {
+      const distanceA = distanceMap.get(a.id);
+      const distanceB = distanceMap.get(b.id);
+      const numDistanceA = typeof distanceA === 'number' ? distanceA : 0;
+      const numDistanceB = typeof distanceB === 'number' ? distanceB : 0;
+      // Сначала по расстоянию
+      if (numDistanceA !== numDistanceB) {
+        return numDistanceA - numDistanceB;
+      }
+      // Если расстояния равны, сортируем по дате создания (от новых к старым)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    // Затем преобразуем в DTO и добавляем distance
     const ordersWithDistance: (OrderResponseDto & { distance: number })[] =
-      orders
-        .map((order) => {
-          const distance = distanceMap.get(order.id);
-          return {
-            ...this.transformToResponseDto(order),
-            distance: typeof distance === 'number' ? distance : 0,
-          };
-        })
-        .sort((a, b) => a.distance - b.distance);
+      orders.map((order) => {
+        const distance = distanceMap.get(order.id);
+        return {
+          ...this.transformToResponseDto(order),
+          distance: typeof distance === 'number' ? distance : 0,
+        };
+      });
 
     return {
       orders: ordersWithDistance,
