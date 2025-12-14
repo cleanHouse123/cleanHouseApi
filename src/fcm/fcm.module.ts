@@ -1,6 +1,7 @@
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FcmService } from './fcm.service';
+import { FcmController } from './fcm.controller';
 import * as admin from 'firebase-admin';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,6 +9,7 @@ import * as path from 'path';
 @Global()
 @Module({
   imports: [ConfigModule],
+  controllers: [FcmController],
   providers: [
     {
       provide: 'FIREBASE_APP',
