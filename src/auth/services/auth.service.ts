@@ -541,7 +541,11 @@ export class AuthService {
     }
   }
 
-  async getMe(authenticatedUser: UserMetadata): Promise<AuthResponseDto & { adToken: AdToken  | null}> {
+  async getMe(
+    authenticatedUser: UserMetadata,
+  ): Promise<
+    AuthResponseDto & { adToken: AdToken | null; deviceToken?: string }
+  > {
     const user = await this.userService.findById(authenticatedUser.userId);
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
@@ -558,6 +562,7 @@ export class AuthService {
         role: user.role,
       },
       adToken,
+      deviceToken: user.deviceToken || undefined,
     };
   }
 }

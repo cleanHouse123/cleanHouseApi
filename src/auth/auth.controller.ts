@@ -233,7 +233,9 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Получить данные текущего пользователя' })
   @ApiResponse({ status: 200, description: 'Данные пользователя' })
-  getProfile(@GetUserMetadata() user: UserMetadata): Promise<AuthResponseDto & { adToken: AdToken | null}> {
+  getProfile(
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<AuthResponseDto & { adToken: AdToken | null; deviceToken?: string }> {
     return this.authService.getMe(user);
   }
 }
