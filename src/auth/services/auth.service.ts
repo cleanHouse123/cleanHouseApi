@@ -164,7 +164,11 @@ export class AuthService {
       }
 
       // Отправляем через новый SMS провайдер (WhatsApp с fallback на SMS)
-      const result = await this.smsProviderService.sendVerificationCode(phone, code, channel);
+      const result = await this.smsProviderService.sendVerificationCode(
+        phone,
+        code,
+        channel,
+      );
 
       if (result.success) {
         // Сохраняем код в базе данных для проверки

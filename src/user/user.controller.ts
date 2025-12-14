@@ -117,6 +117,8 @@ export class UserController {
       user.userId,
       addDeviceTokenDto.token,
     );
+    console.log('addDeviceTokenDto', addDeviceTokenDto);
+    console.log('user', user);
     return { message: 'Device token успешно обновлен' };
   }
 

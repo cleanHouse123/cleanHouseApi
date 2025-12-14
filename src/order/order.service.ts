@@ -414,11 +414,11 @@ export class OrderService {
     // Затем преобразуем в DTO и добавляем distance
     const ordersWithDistance: (OrderResponseDto & { distance: number })[] =
       orders.map((order) => {
-        const distance = distanceMap.get(order.id);
-        return {
-          ...this.transformToResponseDto(order),
-          distance: typeof distance === 'number' ? distance : 0,
-        };
+          const distance = distanceMap.get(order.id);
+          return {
+            ...this.transformToResponseDto(order),
+            distance: typeof distance === 'number' ? distance : 0,
+          };
       });
 
     return {

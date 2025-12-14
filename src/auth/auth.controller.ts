@@ -28,7 +28,10 @@ import { TelegramVerifyCodeDto } from './dto/telegram-verify-code.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './services/auth.service';
 import { AdToken } from 'src/ad-tokens/ad-token.entity';
-import { GetUserMetadata, UserMetadata } from 'src/shared/decorators/get-user.decorator';
+import {
+  GetUserMetadata,
+  UserMetadata,
+} from 'src/shared/decorators/get-user.decorator';
 
 interface AuthenticatedRequest extends Request {
   user: AuthResponseDto;
@@ -76,9 +79,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Отправить SMS с кодом верификации' })
   async sendSms(@Body() sendSmsDto: SendSmsDto) {
     return this.authService.sendSms(
-      sendSmsDto.phoneNumber, 
-      sendSmsDto.isDev, 
-      sendSmsDto.channel || 'auto'
+      sendSmsDto.phoneNumber,
+      sendSmsDto.isDev,
+      sendSmsDto.channel || 'auto',
     );
   }
 
@@ -235,7 +238,9 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Данные пользователя' })
   getProfile(
     @GetUserMetadata() user: UserMetadata,
-  ): Promise<AuthResponseDto & { adToken: AdToken | null; deviceToken?: string }> {
+  ): Promise<
+    AuthResponseDto & { adToken: AdToken | null; deviceToken?: string }
+  > {
     return this.authService.getMe(user);
   }
 }
