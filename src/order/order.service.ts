@@ -689,8 +689,22 @@ export class OrderService {
       throw new NotFoundException('Заказ не найден');
     }
 
-    if (order.currierId !== courierId) {
-      throw new BadRequestException('Заказ назначен другому курьеру');
+    // if (order.currierId !== courierId) {
+    //   throw new BadRequestException('Заказ назначен другому курьеру');
+    // }
+
+    // Проверяем, что до времени выполнения заказа осталось больше двух часов
+    if (order.scheduledAt) {
+      const now = new Date();
+      const scheduledAt = new Date(order.scheduledAt);
+      const diffMs = scheduledAt.getTime() - now.getTime();
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+
+      if (diffMs <= twoHoursMs) {
+        throw new BadRequestException(
+          'Заказ можно отменить только более чем за 2 часа до запланированного времени',
+        );
+      }
     }
 
     if (order.status === OrderStatus.DONE) {
