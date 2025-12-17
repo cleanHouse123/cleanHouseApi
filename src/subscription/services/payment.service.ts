@@ -144,10 +144,11 @@ export class PaymentService {
       const subscriptionPlan =
         await this.priceValidationService.getSubscriptionPlanById(planId);
 
-      // Проверяем право на бесплатную подписку
+      // Проверяем право на бесплатную подписку для конкретного плана
       const freeSubscriptionCheck =
         await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
           userId,
+          planId,
         );
 
       // Вычисляем финальную сумму на сервере
@@ -159,6 +160,7 @@ export class PaymentService {
         try {
           await this.freeSubscriptionService.markFreeSubscriptionUsed(
             userId,
+            planId,
             manager,
           );
         } catch (error) {

@@ -53,6 +53,11 @@ export class SubscriptionPlansService {
     }
 
     Object.assign(plan, updateDto);
+
+    // Если реферальная бесплатная подписка отключена, сбрасываем минимальное количество рефералов
+    if (plan.isReferralFreeEnabled === false) {
+      plan.minReferralsForFree = 0;
+    }
     const savedPlan = await this.subscriptionPlanRepository.save(plan);
     return new SubscriptionPlanResponseDto(savedPlan);
   }

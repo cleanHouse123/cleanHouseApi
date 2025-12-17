@@ -39,6 +39,12 @@ export class SubscriptionPlanResponseDto {
   ordersLimit: number;
 
   @Expose()
+  isReferralFreeEnabled: boolean;
+
+  @Expose()
+  minReferralsForFree: number;
+
+  @Expose()
   createdAt: Date;
 
   @Expose()
@@ -57,6 +63,9 @@ export class SubscriptionPlanResponseDto {
     this.badgeColor = subscriptionPlan?.badgeColor || '';
     this.popular = subscriptionPlan?.popular || false;
     this.ordersLimit = subscriptionPlan?.ordersLimit || 0;
+    this.isReferralFreeEnabled =
+      subscriptionPlan?.isReferralFreeEnabled || false;
+    this.minReferralsForFree = subscriptionPlan?.minReferralsForFree || 0;
     this.createdAt = subscriptionPlan?.createdAt || new Date();
     this.updatedAt = subscriptionPlan?.updatedAt || new Date();
   }
