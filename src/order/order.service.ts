@@ -108,23 +108,10 @@ export class OrderService {
       );
     }
 
-    const baseOrderPrice = await this.priceService.getOrderPrice(
+    const orderPrice = await this.priceService.getOrderPrice(
       createOrderDto.customerId,
+      numberPackages,
     );
-
-    // Если это первый заказ (скидка), скидка применяется только к первому пакету
-    // Остальные пакеты по полной цене (149 руб)
-    const isFirstOrder = baseOrderPrice === 100; // 100 копеек = первый заказ
-    const fullPrice = 14900; // 149 рублей в копейках
-
-    let orderPrice: number;
-    if (isFirstOrder && numberPackages > 1) {
-      // Первый пакет со скидкой (1 руб) + остальные по полной цене
-      orderPrice = baseOrderPrice + (numberPackages - 1) * fullPrice;
-    } else {
-      // Обычный расчет: цена * количество пакетов
-      orderPrice = baseOrderPrice * numberPackages;
-    }
 
     // Преобразуем координаты из фронта в нужный формат
     let coordinates: { lat: number; lon: number } | undefined;
