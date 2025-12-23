@@ -9,10 +9,11 @@ import { UserAddress } from './entities/user-address';
 import { UserAddressController } from './controller/user-address.controller';
 import { UserAddressService } from './service/user-address.service';
 import { User } from '../user/entities/user.entity';
+import { AdminAddressController } from './controller/admin-address.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([AddressCache, Location, UserAddress, User])],
-  controllers: [AddressController, UserAddressController],
+  controllers: [AddressController, UserAddressController, AdminAddressController],
   providers: [AddressService, DaDataService, UserAddressService],
   exports: [AddressService, DaDataService, UserAddressService],
 })
