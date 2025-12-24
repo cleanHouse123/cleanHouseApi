@@ -31,6 +31,8 @@ import { SubscriptionLimitsService } from '../subscription/services/subscription
 import { OrderPaymentService } from './services/order-payment.service';
 import { PriceService } from '../price/price.service';
 import { FcmService } from '../fcm/fcm.service';
+import { UserAddress } from '../address/entities/user-address';
+import { AddressUsageFeature } from '../shared/types/address-features';
 
 @Injectable()
 export class OrderService {
@@ -41,6 +43,8 @@ export class OrderService {
     private paymentRepository: Repository<Payment>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(UserAddress)
+    private userAddressRepository: Repository<UserAddress>,
     private subscriptionService: SubscriptionService,
     private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
@@ -108,10 +112,30 @@ export class OrderService {
       );
     }
 
-    const orderPrice = await this.priceService.getOrderPrice(
-      createOrderDto.customerId,
+    // Если передан addressId, находим user-address и проверяем принадлежность пользователю
+    let userAddress: UserAddress | null = null;
+    if (createOrderDto.addressId) {
+      userAddress = await this.userAddressRepository.findOne({
+        where: {
+          id: createOrderDto.addressId,
+          userId: createOrderDto.customerId,
+        },
+      });
+
+      if (!userAddress) {
+        throw new BadRequestException(
+          'Адрес не найден или не принадлежит данному пользователю',
+        );
+      }
+    }
+
+    const orderPrice = await this.priceService.getOrderPrice({
+      userId: createOrderDto.customerId,
       numberPackages,
-    );
+      addressId: createOrderDto.addressId,
+      address: createOrderDto.address,
+      addressDetails: createOrderDto.addressDetails,
+    });
 
     // Преобразуем координаты из фронта в нужный формат
     let coordinates: { lat: number; lon: number } | undefined;
@@ -134,6 +158,7 @@ export class OrderService {
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
+      addressId: createOrderDto.addressId,
       addressDetails: createOrderDto.addressDetails,
       description: createOrderDto.description,
       price: orderPrice,
@@ -151,6 +176,9 @@ export class OrderService {
       JSON.stringify(savedOrder.addressDetails, null, 2),
     );
     console.log('=== END DEBUG ===');
+
+    // Флаг FIRST_ORDER_USED теперь устанавливается только после оплаты заказа
+    // в методе updateStatus при переходе статуса на PAID
 
     // Обновляем счетчик использованных заказов в подписке с учетом количества пакетов
     await this.subscriptionLimitsService.incrementUsedOrders(
@@ -466,9 +494,36 @@ export class OrderService {
       order.currierId = updateOrderStatusDto.currierId;
     }
 
+    const previousStatus = order.status;
     order.status = updateOrderStatusDto.status;
 
     await this.orderRepository.save(order);
+
+    // Если заказ переходит в статус PAID и это первый заказ за 1 рубль, устанавливаем флаг
+    if (
+      updateOrderStatusDto.status === OrderStatus.PAID &&
+      previousStatus !== OrderStatus.PAID &&
+      order.price === 100 && // 1 рубль в копейках
+      order.addressId
+    ) {
+      const userAddress = await this.userAddressRepository.findOne({
+        where: {
+          id: order.addressId,
+          userId: order.customerId,
+        },
+      });
+
+      if (
+        userAddress &&
+        !userAddress.usageFeatures.includes(AddressUsageFeature.FIRST_ORDER_USED)
+      ) {
+        userAddress.usageFeatures = [
+          ...userAddress.usageFeatures,
+          AddressUsageFeature.FIRST_ORDER_USED,
+        ];
+        await this.userAddressRepository.save(userAddress);
+      }
+    }
 
     // Если заказ отменен, уменьшаем счетчик использованных заказов
     // if (updateOrderStatusDto.status === OrderStatus.CANCELED) {

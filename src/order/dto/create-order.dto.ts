@@ -147,4 +147,13 @@ export class CreateOrderDto {
   @Min(1)
   @Type(() => Number)
   numberPackages?: number;
+
+  @ApiProperty({
+    description: 'ID адреса из user-address (для точного сравнения адресов)',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  addressId?: string;
 }

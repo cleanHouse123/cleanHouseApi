@@ -1,13 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { User } from '../user/entities/user.entity';
-import { Order } from '../order/entities/order.entity';
+import { Order, OrderStatus } from '../order/entities/order.entity';
+import { UserAddress } from '../address/entities/user-address';
+import { AddressUsageFeature } from '../shared/types/address-features';
+import { DaDataAddressDataNormalized } from '../address/interfaces/address-data.interface';
+import {
+  AddressDetailsComparable,
+  normalizeAddressForComparison,
+  compareDaDataAddresses,
+} from '../shared/utils/address-normalizer.util';
 
 export enum PriceType {
   ORDER_SINGLE = 'order_single',
   SUBSCRIPTION_MONTHLY = 'subscription_monthly',
   SUBSCRIPTION_YEARLY = 'subscription_yearly',
+}
+
+export interface GetOrderPriceParams {
+  userId?: string;
+  numberPackages?: number;
+  addressId?: string;
+  address?: string;
+  addressDetails?: AddressDetailsComparable | null;
 }
 
 @Injectable()
@@ -25,27 +41,68 @@ export class PriceService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    @InjectRepository(UserAddress)
+    private readonly userAddressRepository: Repository<UserAddress>,
   ) {}
 
-  async getOrderPrice(
-    userId?: string,
-    numberPackages: number = 1,
-  ): Promise<number> {
+  async getOrderPrice(params: GetOrderPriceParams = {}): Promise<number> {
+    const {
+      userId,
+      numberPackages = 1,
+      addressId,
+      address,
+      addressDetails,
+    } = params;
+
     // Определяем базовую цену за один пакет
-    let basePricePerPackage: number;
-    
-    if (!userId) {
-      basePricePerPackage = this.ORDER_PRICE;
-    } else {
+    let basePricePerPackage: number = this.ORDER_PRICE;
+
+    // Проверяем, может ли адрес получить скидку первого заказа
+    let isAddressEligible = false;
+
+    if (addressId) {
+      // Если передан addressId, проверяем флаг в user-address
+      const userAddress = await this.userAddressRepository.findOne({
+        where: { id: addressId },
+      });
+
+      if (userAddress) {
+        // Проверяем, не использован ли уже первый заказ для этого конкретного адреса
+        const hasFirstOrderFlag = userAddress.usageFeatures.includes(
+          AddressUsageFeature.FIRST_ORDER_USED,
+        );
+
+        if (hasFirstOrderFlag) {
+          // Флаг уже стоит - адрес не может получить скидку
+          isAddressEligible = false;
+        } else {
+          // Флага нет, но нужно проверить, нет ли других адресов с таким же DaData,
+          // у которых уже использован первый заказ (защита от дублирования адресов)
+          const hasOtherAddressWithFlag = await this.hasFirstOrderForDaDataAddress(
+            userAddress.address,
+            userAddress.addressDetails as AddressDetailsComparable,
+          );
+          isAddressEligible = !hasOtherAddressWithFlag;
+        }
+      }
+    } else if (address) {
+      // Fallback: проверяем по текстовому адресу (старая логика)
+      isAddressEligible = !(await this.hasFirstOrderForAddress(address, addressDetails));
+    }
+
+    if (userId) {
       const user = await this.userRepository.findOne({ where: { id: userId } });
-      if (!user) {
-        basePricePerPackage = this.ORDER_PRICE;
-      } else {
+      if (user) {
         const ordersCount = await this.orderRepository.count({
-          where: { customerId: userId },
+          where: { 
+            customerId: userId,
+            status: Not(OrderStatus.NEW),
+          },
         });
-        basePricePerPackage =
-          ordersCount === 0 ? this.FIRST_ORDER_PRICE : this.ORDER_PRICE;
+        const isUserFirstOrder = ordersCount === 0;
+        if (isUserFirstOrder && isAddressEligible) {
+          basePricePerPackage = this.FIRST_ORDER_PRICE;
+        }
       }
     }
 
@@ -99,5 +156,75 @@ export class PriceService {
       default:
         return this.ORDER_PRICE;
     }
+  }
+
+  /**
+   * Проверяет, был ли уже первый заказ на адрес (по текстовому адресу).
+   * Используется как fallback, когда addressId не передан.
+   */
+  private async hasFirstOrderForAddress(
+    address: string,
+    addressDetails?: AddressDetailsComparable | null,
+  ): Promise<boolean> {
+    const normalizedInput = normalizeAddressForComparison(
+      address,
+      addressDetails,
+    );
+
+    const firstOrders = await this.orderRepository.find({
+      where: { price: this.FIRST_ORDER_PRICE },
+      select: ['address', 'addressDetails'],
+    });
+
+    for (const order of firstOrders) {
+      const normalizedExisting = normalizeAddressForComparison(
+        order.address,
+        order.addressDetails as AddressDetailsComparable,
+      );
+      if (normalizedExisting === normalizedInput) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Проверяет, был ли уже первый заказ на адрес по DaData (для сравнения с другими адресами).
+   * Используется для поиска совпадений по всем user-address с флагом FIRST_ORDER_USED.
+   */
+  async hasFirstOrderForDaDataAddress(
+    address: DaDataAddressDataNormalized | null,
+    addressDetails: AddressDetailsComparable | null | undefined,
+  ): Promise<boolean> {
+    if (!address) {
+      return false;
+    }
+
+    // Находим все адреса с флагом FIRST_ORDER_USED
+    // Используем оператор @> для проверки наличия значения в массиве enum
+    // Используем правильный синтаксис для PostgreSQL enum массивов с параметризованным запросом
+    const addressesWithFlag = await this.userAddressRepository
+      .createQueryBuilder('userAddress')
+      .where('userAddress.usageFeatures @> ARRAY[CAST(:feature AS address_usage_feature_enum)]', {
+        feature: AddressUsageFeature.FIRST_ORDER_USED,
+      })
+      .getMany();
+
+    // Сравниваем с каждым адресом
+    for (const userAddress of addressesWithFlag) {
+      if (
+        compareDaDataAddresses(
+          address,
+          addressDetails,
+          userAddress.address,
+          userAddress.addressDetails as AddressDetailsComparable,
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }

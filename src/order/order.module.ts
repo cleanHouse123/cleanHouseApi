@@ -12,10 +12,11 @@ import { Order } from './entities/order.entity';
 import { Payment } from './entities/payment.entity';
 import { Review } from './entities/review.entity';
 import { User } from '../user/entities/user.entity';
+import { UserAddress } from '../address/entities/user-address';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, Payment, Review, User]),
+    TypeOrmModule.forFeature([Order, Payment, Review, User, UserAddress]),
     SubscriptionModule,
     PriceModule,
   ],

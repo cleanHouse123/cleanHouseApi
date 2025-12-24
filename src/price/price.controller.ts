@@ -11,10 +11,19 @@ export class PriceController {
   @UseGuards(OptionalJwtAuthGuard)
   @ApiBearerAuth('JWT')
   @ApiQuery({ name: 'numberPackages', required: false, type: Number, description: 'Количество пакетов' })
-  async getOrderPrice(@Request() req, @Query('numberPackages') numberPackages?: number) {
+  @ApiQuery({ name: 'addressId', required: false, type: String, description: 'ID адреса из user-address' })
+  async getOrderPrice(
+    @Request() req,
+    @Query('numberPackages') numberPackages?: number,
+    @Query('addressId') addressId?: string,
+  ) {
     const userId = req.user?.userId || req.user?.id;
     const packagesCount = numberPackages ? Number(numberPackages) : 1;
-    const price = await this.priceService.getOrderPrice(userId, packagesCount);
+    const price = await this.priceService.getOrderPrice({
+      userId,
+      numberPackages: packagesCount,
+      addressId,
+    });
     return {
       priceInKopecks: price,
       priceInRubles: price / 100,

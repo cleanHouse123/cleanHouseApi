@@ -43,6 +43,9 @@ export class Order {
   @Column({ type: 'text' })
   address: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  addressId?: string;
+
   @Column({ type: 'jsonb', nullable: true })
   addressDetails?: {
     building?: number;
