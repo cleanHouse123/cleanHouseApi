@@ -156,17 +156,18 @@ export class SubscriptionService {
       // Вычисляем даты начала и окончания
       const startDate = new Date();
       const endDate = new Date();
-      
+
       if (plan.type === 'monthly') {
         endDate.setMonth(endDate.getMonth() + 1);
       } else if (plan.type === 'yearly') {
         endDate.setFullYear(endDate.getFullYear() + 1);
       }
 
-      // Проверяем право на бесплатную подписку
+      // Проверяем право на бесплатную подписку для конкретного плана
       const freeSubscriptionCheck =
         await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
           userId,
+          planId,
         );
 
       // Вычисляем финальную цену на сервере
@@ -176,15 +177,15 @@ export class SubscriptionService {
       if (freeSubscriptionCheck.eligible) {
         finalPrice = 0;
         subscriptionStatus = SubscriptionStatus.ACTIVE; // Бесплатная подписка активируется сразу
-        // Помечаем, что использована бесплатная подписка (в транзакции для атомарности)
-        // Если пользователь уже использовал, выбросит ошибку и транзакция откатится
+
+        // Помечаем, что использована бесплатная подписка по этому плану
         try {
           await this.freeSubscriptionService.markFreeSubscriptionUsed(
             userId,
+            planId,
             manager,
           );
         } catch (error) {
-          // Если уже использовал, выбрасываем понятную ошибку
           throw new BadRequestException(
             error.message || 'Не удалось активировать бесплатную подписку',
           );
@@ -550,13 +551,11 @@ export class SubscriptionService {
       planId,
     );
 
-    // Получаем пользователя для проверки, использовал ли он уже бесплатную подписку
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-
-    // Проверяем право на бесплатную подписку
+    // Проверяем право на бесплатную подписку для конкретного плана
     const freeSubscriptionCheck =
       await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
         userId,
+        planId,
       );
 
     // Вычисляем финальную цену
@@ -564,16 +563,16 @@ export class SubscriptionService {
       ? 0
       : plan.priceInKopecks;
 
+    const hasUsedFreeSubscription =
+      await this.freeSubscriptionService.hasAnyUsedFreeSubscription(userId);
+
     return {
       basePrice: plan.priceInKopecks,
       finalPrice,
       isEligibleForFree: freeSubscriptionCheck.eligible,
       referralCount: freeSubscriptionCheck.referralCount,
       reason: freeSubscriptionCheck.reason,
-      hasUsedFreeSubscription:
-        user?.usageFeatures?.includes(
-          UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
-        ) || false,
+      hasUsedFreeSubscription,
     };
   }
 
@@ -586,19 +585,19 @@ export class SubscriptionService {
     // Получаем все планы
     const plans = await this.subscriptionPlansService.findAll();
 
-    // Получаем пользователя для проверки, использовал ли он уже бесплатную подписку
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-
-    // Проверяем право на бесплатную подписку один раз
-    const freeSubscriptionCheck =
-      await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
-        userId,
-      );
+    // Флаг, использовал ли пользователь когда-либо бесплатную подписку
+    const hasUsedFreeSubscription =
+      await this.freeSubscriptionService.hasAnyUsedFreeSubscription(userId);
 
     // Для каждого плана рассчитываем финальную цену
     const plansWithPrices = await Promise.all(
       plans.map(async (plan) => {
-        // Вычисляем финальную цену (одинаковая для всех планов, если есть право)
+        const freeSubscriptionCheck =
+          await this.freeSubscriptionService.checkEligibilityForFreeSubscription(
+            userId,
+            plan.id,
+          );
+
         const finalPrice = freeSubscriptionCheck.eligible
           ? 0
           : plan.priceInKopecks;
@@ -609,10 +608,7 @@ export class SubscriptionService {
           finalPriceInRubles: finalPrice / 100,
           isEligibleForFree: freeSubscriptionCheck.eligible,
           referralCount: freeSubscriptionCheck.referralCount,
-          hasUsedFreeSubscription:
-            user?.usageFeatures?.includes(
-              UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION,
-            ) || false,
+          hasUsedFreeSubscription,
         } as SubscriptionPlanWithPriceDto;
       }),
     );

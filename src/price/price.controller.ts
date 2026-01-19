@@ -1,5 +1,5 @@
-import { Controller, Get, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Request, UseGuards, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PriceService } from './price.service';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 
@@ -10,9 +10,20 @@ export class PriceController {
   @Get('order')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiBearerAuth('JWT')
-  async getOrderPrice(@Request() req) {
+  @ApiQuery({ name: 'numberPackages', required: false, type: Number, description: 'Количество пакетов' })
+  @ApiQuery({ name: 'addressId', required: false, type: String, description: 'ID адреса из user-address' })
+  async getOrderPrice(
+    @Request() req,
+    @Query('numberPackages') numberPackages?: number,
+    @Query('addressId') addressId?: string,
+  ) {
     const userId = req.user?.userId || req.user?.id;
-    const price = await this.priceService.getOrderPrice(userId);
+    const packagesCount = numberPackages ? Number(numberPackages) : 1;
+    const price = await this.priceService.getOrderPrice({
+      userId,
+      numberPackages: packagesCount,
+      addressId,
+    });
     return {
       priceInKopecks: price,
       priceInRubles: price / 100,

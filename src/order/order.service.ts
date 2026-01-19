@@ -31,6 +31,8 @@ import { SubscriptionLimitsService } from '../subscription/services/subscription
 import { OrderPaymentService } from './services/order-payment.service';
 import { PriceService } from '../price/price.service';
 import { FcmService } from '../fcm/fcm.service';
+import { UserAddress } from '../address/entities/user-address';
+import { AddressUsageFeature } from '../shared/types/address-features';
 
 @Injectable()
 export class OrderService {
@@ -41,6 +43,8 @@ export class OrderService {
     private paymentRepository: Repository<Payment>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(UserAddress)
+    private userAddressRepository: Repository<UserAddress>,
     private subscriptionService: SubscriptionService,
     private subscriptionLimitsService: SubscriptionLimitsService,
     private orderPaymentService: OrderPaymentService,
@@ -108,23 +112,30 @@ export class OrderService {
       );
     }
 
-    const baseOrderPrice = await this.priceService.getOrderPrice(
-      createOrderDto.customerId,
-    );
+    // Если передан addressId, находим user-address и проверяем принадлежность пользователю
+    let userAddress: UserAddress | null = null;
+    if (createOrderDto.addressId) {
+      userAddress = await this.userAddressRepository.findOne({
+        where: {
+          id: createOrderDto.addressId,
+          userId: createOrderDto.customerId,
+        },
+      });
 
-    // Если это первый заказ (скидка), скидка применяется только к первому пакету
-    // Остальные пакеты по полной цене (149 руб)
-    const isFirstOrder = baseOrderPrice === 100; // 100 копеек = первый заказ
-    const fullPrice = 14900; // 149 рублей в копейках
-
-    let orderPrice: number;
-    if (isFirstOrder && numberPackages > 1) {
-      // Первый пакет со скидкой (1 руб) + остальные по полной цене
-      orderPrice = baseOrderPrice + (numberPackages - 1) * fullPrice;
-    } else {
-      // Обычный расчет: цена * количество пакетов
-      orderPrice = baseOrderPrice * numberPackages;
+      if (!userAddress) {
+        throw new BadRequestException(
+          'Адрес не найден или не принадлежит данному пользователю',
+        );
+      }
     }
+
+    const orderPrice = await this.priceService.getOrderPrice({
+      userId: createOrderDto.customerId,
+      numberPackages,
+      addressId: createOrderDto.addressId,
+      address: createOrderDto.address,
+      addressDetails: createOrderDto.addressDetails,
+    });
 
     // Преобразуем координаты из фронта в нужный формат
     let coordinates: { lat: number; lon: number } | undefined;
@@ -166,6 +177,7 @@ export class OrderService {
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
+      addressId: createOrderDto.addressId,
       addressDetails: createOrderDto.addressDetails,
       description: createOrderDto.description,
       price: orderPrice,
@@ -183,6 +195,9 @@ export class OrderService {
       JSON.stringify(savedOrder.addressDetails, null, 2),
     );
     console.log('=== END DEBUG ===');
+
+    // Флаг FIRST_ORDER_USED теперь устанавливается только после оплаты заказа
+    // в методе updateStatus при переходе статуса на PAID
 
     // Обновляем счетчик использованных заказов в подписке с учетом количества пакетов
     await this.subscriptionLimitsService.incrementUsedOrders(
@@ -585,9 +600,36 @@ export class OrderService {
       order.currierId = updateOrderStatusDto.currierId;
     }
 
+    const previousStatus = order.status;
     order.status = updateOrderStatusDto.status;
 
     await this.orderRepository.save(order);
+
+    // Если заказ переходит в статус PAID и это первый заказ за 1 рубль, устанавливаем флаг
+    if (
+      updateOrderStatusDto.status === OrderStatus.PAID &&
+      previousStatus !== OrderStatus.PAID &&
+      order.price === 100 && // 1 рубль в копейках
+      order.addressId
+    ) {
+      const userAddress = await this.userAddressRepository.findOne({
+        where: {
+          id: order.addressId,
+          userId: order.customerId,
+        },
+      });
+
+      if (
+        userAddress &&
+        !userAddress.usageFeatures.includes(AddressUsageFeature.FIRST_ORDER_USED)
+      ) {
+        userAddress.usageFeatures = [
+          ...userAddress.usageFeatures,
+          AddressUsageFeature.FIRST_ORDER_USED,
+        ];
+        await this.userAddressRepository.save(userAddress);
+      }
+    }
 
     // Если заказ отменен, уменьшаем счетчик использованных заказов
     // if (updateOrderStatusDto.status === OrderStatus.CANCELED) {
@@ -843,6 +885,20 @@ export class OrderService {
       throw new BadRequestException(
         'Завершенный или отмененный заказ не может быть отменен',
       );
+    }
+
+    // Проверяем, что до времени выполнения заказа осталось больше двух часов
+    if (order.scheduledAt) {
+      const now = new Date();
+      const scheduledAt = new Date(order.scheduledAt);
+      const diffMs = scheduledAt.getTime() - now.getTime();
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+
+      if (diffMs <= twoHoursMs) {
+        throw new BadRequestException(
+          'Заказ можно отменить только более чем за 2 часа до запланированного времени',
+        );
+      }
     }
 
     if (order.currierId && order.currierId !== courierId) {

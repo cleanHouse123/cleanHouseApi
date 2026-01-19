@@ -41,6 +41,19 @@ export class SubscriptionPlan {
   @Column({ default: false })
   popular: boolean;
 
+  /**
+   * Разрешено ли получать этот план бесплатно по реферальной программе
+   */
+  @Column({ default: false })
+  isReferralFreeEnabled: boolean;
+
+  /**
+   * Минимальное количество рефералов для бесплатного получения этого плана
+   * Актуально только если isReferralFreeEnabled = true
+   */
+  @Column({ type: 'integer', default: 0 })
+  minReferralsForFree: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -32,6 +32,7 @@ import { ScheduledOrdersModule } from './scheduled-orders/scheduled-orders.modul
 import { UserAddress } from './address/entities/user-address';
 import { WorkTimeModule } from './work-time/work-time.module';
 import { WorkTime } from './work-time/entities/work-time.entity';
+import { ReferralFreeSubscriptionUsage } from './subscription/entities/referral-free-subscription-usage.entity';
 import { FcmModule } from './fcm/fcm.module';
 
 @Module({
@@ -75,6 +76,7 @@ import { FcmModule } from './fcm/fcm.module';
             ScheduledOrder,
             UserAddress,
             WorkTime,
+            ReferralFreeSubscriptionUsage,
           ],
         };
       },

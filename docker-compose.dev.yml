@@ -12,6 +12,7 @@ services:
       - ./package.json:/app/package.json
       - ./tsconfig.json:/app/tsconfig.json
       - ./nest-cli.json:/app/nest-cli.json
+      - ./firebase-service-account.json.base64:/app/firebase-service-account.json.base64
       # Убираем монтирование node_modules для решения проблемы с bcrypt
       # - ./node_modules:/app/node_modules
     depends_on:

@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { DaDataAddressDataNormalized } from '../interfaces/address-data.interface';
 import { User } from '../../user/entities/user.entity';
+import { AddressUsageFeature } from '../../shared/types/address-features';
 
 @Entity('user-address')
 export class UserAddress {
@@ -34,6 +35,15 @@ export class UserAddress {
     apartment?: number;
     domophone?: string;
   } | null;
+
+  @Column({
+    type: 'enum',
+    enum: AddressUsageFeature,
+    enumName: 'address_usage_feature_enum',
+    array: true,
+    default: [],
+  })
+  usageFeatures: AddressUsageFeature[];
 
   @CreateDateColumn()
   created_at: Date;

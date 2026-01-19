@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserAddress } from '../entities/user-address';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -25,6 +25,17 @@ export class UserAddressController {
     return this.userAddressService.getUserAddresses(userId);
   }
 
+  @ApiOperation({ summary: 'Получить адрес пользователя по id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Адрес пользователя',
+    type: UserAddress,
+  })
+  @Get(':id')
+  async getUserAddressById(@Param('id') id: string, @GetUserMetadata() user: UserMetadata): Promise<UserAddress[]> {
+    return this.userAddressService.getUserAddresses(id);
+  }
+
   @ApiOperation({ summary: 'Создать адрес пользователя' })
   @ApiBody({ type: CreateUserAddressDto })
   @ApiResponse({
@@ -39,5 +50,18 @@ export class UserAddressController {
   ): Promise<UserAddress> {
     const userId = user.userId;
     return this.userAddressService.createUserAddress(userId, createUserAddressDto);
+  }
+
+  @ApiOperation({ summary: 'Удалить адрес пользователя' })
+  @ApiResponse({
+    status: 200,
+    description: 'Адрес успешно удален',
+  })
+  @Delete(':id')
+  async deleteUserAddress(
+    @Param('id') id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<void> {
+    return this.userAddressService.deleteUserAddress(id);
   }
 }

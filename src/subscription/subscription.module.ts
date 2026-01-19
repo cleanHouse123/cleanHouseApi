@@ -15,6 +15,7 @@ import { Subscription } from './entities/subscription.entity';
 import { SubscriptionPayment } from './entities/subscription-payment.entity';
 import { PaymentAudit } from './entities/payment-audit.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
+import { ReferralFreeSubscriptionUsage } from './entities/referral-free-subscription-usage.entity';
 import { User } from '../user/entities/user.entity';
 import { Order } from '../order/entities/order.entity';
 import { UserModule } from '../user/user.module';
@@ -29,6 +30,7 @@ import { AdTokenModule } from '../ad-tokens/ad-token.module';
       SubscriptionPayment,
       PaymentAudit,
       SubscriptionPlan,
+      ReferralFreeSubscriptionUsage,
       User,
       Order,
     ]),
