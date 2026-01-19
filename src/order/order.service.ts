@@ -138,11 +138,30 @@ export class OrderService {
       };
     }
 
+    // Обработка времени выноса заказа (scheduledAt)
+    let scheduledAt: Date | undefined;
+    if (createOrderDto.scheduledAt) {
+      // Если время указано, используем его
+      scheduledAt = new Date(createOrderDto.scheduledAt);
+      
+      // Проверяем, что дата валидна
+      if (isNaN(scheduledAt.getTime())) {
+        throw new BadRequestException(
+          'Некорректный формат времени запланированной доставки',
+        );
+      }
+    } else {
+      // Если время не указано, устанавливаем текущее время + 1 час
+      const now = new Date();
+      scheduledAt = new Date(now.getTime() + 60 * 60 * 1000); // +1 час
+    }
+
     console.log('=== ORDER CREATION DEBUG ===');
     console.log(
       'Input addressDetails:',
       JSON.stringify(createOrderDto.addressDetails, null, 2),
     );
+    console.log('ScheduledAt:', scheduledAt);
 
     const order = this.orderRepository.create({
       customerId: createOrderDto.customerId,
@@ -151,7 +170,7 @@ export class OrderService {
       description: createOrderDto.description,
       price: orderPrice,
       notes: createOrderDto.notes,
-      scheduledAt: createOrderDto.scheduledAt,
+      scheduledAt,
       status: orderStatus,
       coordinates,
       numberPackages,
@@ -253,6 +272,8 @@ export class OrderService {
       startScheduledAtDate,
       endScheduledAtDate,
       sortOrder = SortOrder.ASC,
+      isOverdue,
+      customerSearch,
     } = query;
 
     const queryBuilder = this.orderRepository
@@ -285,6 +306,41 @@ export class OrderService {
       });
     }
 
+    // Фильтр по просроченным заказам
+    if (isOverdue !== undefined) {
+      const now = new Date();
+      if (isOverdue) {
+        // Просроченные: есть scheduledAt, он в прошлом, статус не DONE и не CANCELED
+        queryBuilder
+          .andWhere('order.scheduledAt IS NOT NULL')
+          .andWhere('order.scheduledAt < :now', { now })
+          .andWhere('order.status != :doneStatus', {
+            doneStatus: OrderStatus.DONE,
+          })
+          .andWhere('order.status != :canceledStatus', {
+            canceledStatus: OrderStatus.CANCELED,
+          });
+      } else {
+        // Не просроченные: нет scheduledAt ИЛИ он в будущем ИЛИ статус DONE/CANCELED
+        queryBuilder.andWhere(
+          '(order.scheduledAt IS NULL OR order.scheduledAt >= :now OR order.status = :doneStatus OR order.status = :canceledStatus)',
+          {
+            now,
+            doneStatus: OrderStatus.DONE,
+            canceledStatus: OrderStatus.CANCELED,
+          },
+        );
+      }
+    }
+
+    // Поиск по email, телефону или имени клиента
+    if (customerSearch) {
+      queryBuilder.andWhere(
+        '(customer.name ILIKE :customerSearch OR customer.phone ILIKE :customerSearch OR customer.email ILIKE :customerSearch)',
+        { customerSearch: `%${customerSearch}%` },
+      );
+    }
+
     // Сортировка по дате создания от новых к старым
     queryBuilder.orderBy('order.createdAt', 'DESC');
 
@@ -310,6 +366,8 @@ export class OrderService {
       limit = 10,
       status,
       currierId,
+      isOverdue,
+      customerSearch,
     } = findNearbyOrdersDto;
 
     // Строим SQL запрос с использованием PostGIS и параметризованных запросов
@@ -322,6 +380,7 @@ export class OrderService {
           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
         ) as distance
       FROM "order" o
+      LEFT JOIN "user" customer ON o."customerId" = customer.id
       WHERE o.coordinates IS NOT NULL
         AND o.coordinates->>'lat' IS NOT NULL
         AND o.coordinates->>'lon' IS NOT NULL
@@ -341,6 +400,29 @@ export class OrderService {
       params.push(currierId);
     }
 
+    // Фильтр по просроченным заказам
+    if (isOverdue !== undefined) {
+      const now = new Date().toISOString();
+      if (isOverdue) {
+        query += ` AND o."scheduledAt" IS NOT NULL`;
+        query += ` AND o."scheduledAt" < $${params.length + 1}`;
+        params.push(now);
+        query += ` AND o.status != $${params.length + 1}`;
+        params.push(OrderStatus.DONE);
+        query += ` AND o.status != $${params.length + 1}`;
+        params.push(OrderStatus.CANCELED);
+      } else {
+        query += ` AND (o."scheduledAt" IS NULL OR o."scheduledAt" >= $${params.length + 1} OR o.status = $${params.length + 2} OR o.status = $${params.length + 3})`;
+        params.push(now, OrderStatus.DONE, OrderStatus.CANCELED);
+      }
+    }
+
+    // Поиск по email, телефону или имени клиента
+    if (customerSearch) {
+      query += ` AND (customer.name ILIKE $${params.length + 1} OR customer.phone ILIKE $${params.length + 1} OR customer.email ILIKE $${params.length + 1})`;
+      params.push(`%${customerSearch}%`);
+    }
+
     // Добавляем сортировку по расстоянию и пагинацию
     const limitParam = params.length + 1;
     const offsetParam = params.length + 2;
@@ -357,6 +439,7 @@ export class OrderService {
     let countQuery = `
       SELECT COUNT(*) as total
       FROM "order" o
+      LEFT JOIN "user" customer ON o."customerId" = customer.id
       WHERE o.coordinates IS NOT NULL
         AND o.coordinates->>'lat' IS NOT NULL
         AND o.coordinates->>'lon' IS NOT NULL
@@ -371,6 +454,29 @@ export class OrderService {
     if (currierId) {
       countQuery += ` AND o."currierId" = $${countParams.length + 1}`;
       countParams.push(currierId);
+    }
+
+    // Фильтр по просроченным заказам для count
+    if (isOverdue !== undefined) {
+      const now = new Date().toISOString();
+      if (isOverdue) {
+        countQuery += ` AND o."scheduledAt" IS NOT NULL`;
+        countQuery += ` AND o."scheduledAt" < $${countParams.length + 1}`;
+        countParams.push(now);
+        countQuery += ` AND o.status != $${countParams.length + 1}`;
+        countParams.push(OrderStatus.DONE);
+        countQuery += ` AND o.status != $${countParams.length + 1}`;
+        countParams.push(OrderStatus.CANCELED);
+      } else {
+        countQuery += ` AND (o."scheduledAt" IS NULL OR o."scheduledAt" >= $${countParams.length + 1} OR o.status = $${countParams.length + 2} OR o.status = $${countParams.length + 3})`;
+        countParams.push(now, OrderStatus.DONE, OrderStatus.CANCELED);
+      }
+    }
+
+    // Поиск по клиенту для count
+    if (customerSearch) {
+      countQuery += ` AND (customer.name ILIKE $${countParams.length + 1} OR customer.phone ILIKE $${countParams.length + 1} OR customer.email ILIKE $${countParams.length + 1})`;
+      countParams.push(`%${customerSearch}%`);
     }
 
     const countResult = await this.dataSource.query(countQuery, countParams);
@@ -559,7 +665,43 @@ export class OrderService {
     }
   }
 
+  private isOrderOverdue(order: Order): {
+    isOverdue: boolean;
+    overdueMinutes?: number;
+  } {
+    // Если нет запланированного времени - не просрочен
+    if (!order.scheduledAt) {
+      return { isOverdue: false };
+    }
+
+    // Если заказ уже завершен или отменен - не просрочен
+    if (
+      order.status === OrderStatus.DONE ||
+      order.status === OrderStatus.CANCELED
+    ) {
+      return { isOverdue: false };
+    }
+
+    const now = new Date();
+    const scheduledTime = new Date(order.scheduledAt);
+
+    // Проверяем, прошло ли запланированное время
+    if (scheduledTime < now) {
+      const diffMs = now.getTime() - scheduledTime.getTime();
+      const overdueMinutes = Math.floor(diffMs / (1000 * 60)); // минуты
+
+      return {
+        isOverdue: true,
+        overdueMinutes,
+      };
+    }
+
+    return { isOverdue: false };
+  }
+
   private transformToResponseDto(order: Order): OrderResponseDto {
+    const overdueInfo = this.isOrderOverdue(order);
+
     return {
       id: order?.id || '',
       customer: order?.customer || null,
@@ -577,6 +719,8 @@ export class OrderService {
       payments: order?.payments || [],
       createdAt: order?.createdAt || new Date(),
       updatedAt: order?.updatedAt || new Date(),
+      isOverdue: overdueInfo.isOverdue,
+      overdueMinutes: overdueInfo.overdueMinutes,
     };
   }
 
@@ -595,7 +739,10 @@ export class OrderService {
       throw new NotFoundException('Заказ не найден');
     }
 
-    if (order.status !== OrderStatus.NEW) {
+    if (
+      order.status !== OrderStatus.NEW &&
+      order.status !== OrderStatus.PAID
+    ) {
       throw new BadRequestException('Заказ уже взят или недоступен');
     }
 
@@ -689,12 +836,17 @@ export class OrderService {
       throw new NotFoundException('Заказ не найден');
     }
 
-    if (order.currierId !== courierId) {
-      throw new BadRequestException('Заказ назначен другому курьеру');
+    if (
+      order.status === OrderStatus.DONE ||
+      order.status === OrderStatus.CANCELED
+    ) {
+      throw new BadRequestException(
+        'Завершенный или отмененный заказ не может быть отменен',
+      );
     }
 
-    if (order.status === OrderStatus.DONE) {
-      throw new BadRequestException('Завершенный заказ не может быть отменен');
+    if (order.currierId && order.currierId !== courierId) {
+      throw new BadRequestException('Заказ назначен другому курьеру');
     }
 
     order.status = OrderStatus.CANCELED;

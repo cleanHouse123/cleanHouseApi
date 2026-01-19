@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsNumber, IsOptional, Min, Max, IsString, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderStatus } from '../entities/order.entity';
 
@@ -75,5 +75,24 @@ export class FindNearbyOrdersDto {
   })
   @IsOptional()
   currierId?: string;
+
+  @ApiProperty({
+    description: 'Фильтр по просроченным заказам',
+    required: false,
+    example: true,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isOverdue?: boolean;
+
+  @ApiProperty({
+    description: 'Поиск по email, телефону или имени клиента',
+    required: false,
+    example: 'Иван',
+  })
+  @IsOptional()
+  @IsString()
+  customerSearch?: string;
 }
 

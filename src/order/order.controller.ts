@@ -47,7 +47,10 @@ export class OrderController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Создать новый заказ (фиксированная цена 200 руб)' })
+  @ApiOperation({
+    summary:
+      'Создать новый заказ. Если scheduledAt не указан, автоматически устанавливается текущее время + 1 час',
+  })
   @ApiResponse({
     status: 201,
     description: 'Заказ успешно создан',
@@ -63,6 +66,18 @@ export class OrderController {
 
   @Get()
   @ApiOperation({ summary: 'Получить список заказов' })
+  @ApiQuery({
+    name: 'isOverdue',
+    required: false,
+    type: Boolean,
+    description: 'Фильтр по просроченным заказам',
+  })
+  @ApiQuery({
+    name: 'customerSearch',
+    required: false,
+    type: String,
+    description: 'Поиск по email, телефону или имени клиента',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список заказов',
@@ -126,6 +141,18 @@ export class OrderController {
     required: false,
     description: 'Фильтр по ID курьера',
     example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiQuery({
+    name: 'isOverdue',
+    required: false,
+    type: Boolean,
+    description: 'Фильтр по просроченным заказам',
+  })
+  @ApiQuery({
+    name: 'customerSearch',
+    required: false,
+    type: String,
+    description: 'Поиск по email, телефону или имени клиента',
   })
   @ApiResponse({
     status: 200,
@@ -230,7 +257,9 @@ export class OrderController {
   // ==================== COURIER METHODS ====================
 
   @Patch(':id/take')
-  @ApiOperation({ summary: 'Курьер берет заказ' })
+  @ApiOperation({
+    summary: 'Курьер берет заказ (включая просроченные)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Заказ успешно взят курьером',
@@ -370,10 +399,21 @@ export class OrderController {
     );
 
     if (paymentCallbackDto.status === 'success') {
-      // Обновляем статус заказа на "оплачен"
-      await this.orderService.updateStatus(payment.orderId, {
-        status: OrderStatus.PAID,
-      });
+      // Проверяем текущий статус заказа перед обновлением
+      try {
+        const order = await this.orderService.findOne(payment.orderId);
+        if (order.status !== OrderStatus.PAID) {
+          // Обновляем статус заказа на "оплачен"
+          await this.orderService.updateStatus(payment.orderId, {
+            status: OrderStatus.PAID,
+          });
+        }
+      } catch (error) {
+        console.error(
+          `Ошибка обновления статуса заказа ${payment.orderId}:`,
+          error.message,
+        );
+      }
 
       // Отправляем уведомление через WebSocket
       this.orderPaymentGateway.notifyPaymentSuccess(
@@ -403,21 +443,24 @@ export class OrderController {
 
       if (payment && payment.status === 'paid') {
         try {
-          // Обновляем статус заказа на "оплачен"
-          await this.orderService.updateStatus(payment.orderId, {
-            status: OrderStatus.PAID,
-          });
-        } catch (error) {
-          // Игнорируем ошибку, если заказ уже оплачен
-          if (
-            error.message?.includes('Невозможно изменить статус с paid на paid')
-          ) {
+          // Проверяем текущий статус заказа перед обновлением
+          const order = await this.orderService.findOne(payment.orderId);
+          if (order.status !== OrderStatus.PAID) {
+            // Обновляем статус заказа на "оплачен"
+            await this.orderService.updateStatus(payment.orderId, {
+              status: OrderStatus.PAID,
+            });
+          } else {
             console.log(
               `Заказ ${payment.orderId} уже оплачен, пропускаем обновление статуса`,
             );
-          } else {
-            throw error;
           }
+        } catch (error) {
+          // Если заказ не найден или другая ошибка - логируем
+          console.error(
+            `Ошибка обновления статуса заказа ${payment.orderId}:`,
+            error.message,
+          );
         }
 
         // Отправляем уведомление через WebSocket
@@ -484,9 +527,12 @@ export class OrderController {
 
         // Обновляем статус заказа
         try {
-          await this.orderService.updateStatus(payment.orderId, {
-            status: OrderStatus.PAID,
-          });
+          const order = await this.orderService.findOne(payment.orderId);
+          if (order.status !== OrderStatus.PAID) {
+            await this.orderService.updateStatus(payment.orderId, {
+              status: OrderStatus.PAID,
+            });
+          }
         } catch (error) {
           console.log('Заказ не найден, но платеж обработан:', error.message);
         }
@@ -574,9 +620,12 @@ export class OrderController {
 
       // Обновляем статус заказа (если он существует)
       try {
-        await this.orderService.updateStatus(payment.orderId, {
-          status: OrderStatus.PAID,
-        });
+        const order = await this.orderService.findOne(payment.orderId);
+        if (order.status !== OrderStatus.PAID) {
+          await this.orderService.updateStatus(payment.orderId, {
+            status: OrderStatus.PAID,
+          });
+        }
       } catch (error) {
         console.log('Заказ не найден, но платеж обработан:', error.message);
       }

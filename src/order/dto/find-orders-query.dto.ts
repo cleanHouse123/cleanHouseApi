@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsEnum, IsString, IsDateString, IsInt, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsDateString, IsInt, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderStatus } from '../entities/order.entity';
 
@@ -85,4 +85,23 @@ export class FindOrdersQueryDto {
   @IsOptional()
   @IsEnum(SortOrder)
   sortOrder?: SortOrder;
+
+  @ApiProperty({
+    description: 'Фильтр по просроченным заказам',
+    required: false,
+    example: true,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isOverdue?: boolean;
+
+  @ApiProperty({
+    description: 'Поиск по email, телефону или имени клиента',
+    required: false,
+    example: 'Иван',
+  })
+  @IsOptional()
+  @IsString()
+  customerSearch?: string;
 }

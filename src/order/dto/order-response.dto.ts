@@ -141,4 +141,20 @@ export class OrderResponseDto {
   @ApiProperty()
   @Expose()
   updatedAt: Date;
+
+  @ApiProperty({
+    description: 'Флаг просроченности заказа',
+    example: false,
+    default: false,
+  })
+  @Expose()
+  isOverdue: boolean;
+
+  @ApiProperty({
+    description: 'Количество минут просрочки (только если isOverdue = true)',
+    example: 120,
+    required: false,
+  })
+  @Expose()
+  overdueMinutes?: number;
 }
