@@ -448,6 +448,15 @@ export class WebhookController {
         type: 'order_paid_ready',
       });
 
+      // Логируем информацию о роуте навигации
+      const navigationRoute = `/(protected)/order-details?orderId=${order.id}`;
+      this.logger.log(
+        `[WebhookController] 📍 Sending notification with navigation route: ${navigationRoute} for order ${order.id}`,
+      );
+      this.logger.log(
+        `[WebhookController] Notification payload: ${payload}`,
+      );
+
       const validTokens = couriers
         .map((courier) => courier.deviceToken)
         .filter((token): token is string => !!token);

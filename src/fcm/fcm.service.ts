@@ -84,6 +84,29 @@ export class FcmService {
       },
     };
 
+    // Логируем информацию о роуте/маршруте навигации
+    const routeInfo: any = {};
+    if (orderId) {
+      routeInfo.orderId = orderId;
+      routeInfo.navigationRoute = `/(protected)/order-details?orderId=${orderId}`;
+    }
+    if (notificationType) {
+      routeInfo.type = notificationType;
+    }
+    if (payload && !orderId) {
+      routeInfo.legacyRoute = payload;
+    }
+    
+    if (Object.keys(routeInfo).length > 0) {
+      console.log(
+        `[sendNotificationToDevice] 📍 Navigation route info: ${JSON.stringify(routeInfo)}`,
+      );
+    } else {
+      console.log(
+        `[sendNotificationToDevice] ⚠️ No navigation route data in notification`,
+      );
+    }
+
     // Определяем тип устройства по формату токена (iOS FCM токены обычно длиннее)
     const isLikelyIOS = deviceToken.length > 150;
 
