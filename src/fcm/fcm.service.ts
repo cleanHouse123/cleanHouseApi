@@ -9,6 +9,13 @@ export class FcmService {
   /**
    * Отправка уведомления на одно устройство
    * Send notification to a single device
+   * 
+   * @param deviceToken - FCM device token
+   * @param title - Заголовок уведомления
+   * @param body - Текст уведомления
+   * @param payload - JSON строка с данными (например, '{"orderId": "123", "type": "order_paid_ready"}')
+   *                  Парсится для извлечения orderId и type, которые отправляются как отдельные поля в data
+   *                  Поддерживает обратную совместимость: если payload не JSON, отправляется как route
    */
   async sendNotificationToDevice(
     deviceToken: string,
@@ -31,11 +38,34 @@ export class FcmService {
       return { success: false, error: 'Invalid device token' };
     }
 
+    // Парсим payload для извлечения orderId и type
+    let orderId: string | undefined;
+    let notificationType: string | undefined;
+    
+    if (payload) {
+      try {
+        const payloadData = JSON.parse(payload);
+        if (typeof payloadData === 'object' && payloadData !== null) {
+          orderId = payloadData.orderId;
+          notificationType = payloadData.type;
+        }
+      } catch (error) {
+        // Если payload не JSON, оставляем как есть (для обратной совместимости)
+        console.warn(
+          `[sendNotificationToDevice] Failed to parse payload as JSON, using legacy format: ${error}`,
+        );
+      }
+    }
+
     const message: Message = {
       data: {
         title: title,
         body: body,
-        ...(payload && { route: payload }),
+        // Новый формат: orderId и type как отдельные поля
+        ...(orderId && { orderId: orderId }),
+        ...(notificationType && { type: notificationType }),
+        // Legacy формат: сохраняем для обратной совместимости
+        ...(payload && !orderId && { route: payload }),
       },
       token: deviceToken.trim(),
       android: {
