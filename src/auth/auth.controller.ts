@@ -25,6 +25,7 @@ import { SendSmsDto } from './dto/send-sms.dto';
 import { VerifySmsDto } from './dto/verify-sms.dto';
 import { TelegramSendCodeDto } from './dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from './dto/telegram-verify-code.dto';
+import { TelegramLoginWidgetDto } from './dto/telegram-login-widget.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './services/auth.service';
 import { AdToken } from 'src/ad-tokens/ad-token.entity';
@@ -191,6 +192,30 @@ export class AuthController {
   })
   async checkTelegramSendAbility(@Body() body: { phoneNumber: string }) {
     return this.authService.checkTelegramSendAbility(body.phoneNumber);
+  }
+
+  @Post('telegram/login-widget/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Верификация Telegram Login Widget и авторизация',
+    description:
+      'Проверяет данные от Telegram Login Widget (hash, auth_date) и выполняет авторизацию пользователя.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Успешная авторизация через Telegram Login Widget',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Неверный hash или данные устарели',
+  })
+  async verifyTelegramLoginWidget(
+    @Body() loginWidgetDto: TelegramLoginWidgetDto,
+    @Req() req: Request,
+  ) {
+    const ipAddress =
+      req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    return this.authService.verifyTelegramLoginWidget(loginWidgetDto, ipAddress);
   }
 
   // ==================== TOKEN MANAGEMENT ====================

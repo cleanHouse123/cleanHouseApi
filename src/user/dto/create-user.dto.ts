@@ -42,4 +42,9 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   adToken?: string;
+
+  @ApiProperty({ description: 'Telegram ID пользователя', required: false })
+  @IsOptional()
+  @IsString()
+  telegramId?: string;
 }

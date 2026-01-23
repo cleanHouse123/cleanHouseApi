@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { compare, hash } from 'bcrypt';
+import * as crypto from 'crypto';
 import { TokenService } from './token.service';
 import { UserService } from '../../user/user.service';
 import { User } from '../../user/entities/user.entity';
@@ -21,6 +22,7 @@ import { EmailLoginDto } from '../dto/email-login.dto';
 import { CreateUserDto } from '../../user/dto/create-user.dto';
 import { TelegramSendCodeDto } from '../dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from '../dto/telegram-verify-code.dto';
+import { TelegramLoginWidgetDto } from '../dto/telegram-login-widget.dto';
 import { VerificationCode } from '../entities/verification-code.entity';
 import { AdTokenService } from '../../ad-tokens/ad-token.service';
 import { AdToken } from 'src/ad-tokens/ad-token.entity';
@@ -568,5 +570,140 @@ export class AuthService {
       adToken,
       deviceToken: user.deviceToken || undefined,
     };
+  }
+
+  async verifyTelegramLoginWidget(
+    loginWidgetDto: TelegramLoginWidgetDto,
+    ipAddress?: string,
+  ): Promise<AuthResponseDto> {
+    try {
+      // Получаем токен бота из переменных окружения
+      const botToken =
+        this.configService.get<string>('TELEGRAM_BOT_TOKEN') ||
+        process.env.TELEGRAM_BOT_TOKEN;
+
+      if (!botToken) {
+        throw new UnauthorizedException(
+          'Telegram bot token не настроен на сервере',
+        );
+      }
+
+      // Проверяем, что данные не старше 24 часов
+      const currentTime = Math.floor(Date.now() / 1000);
+      const dataAge = currentTime - loginWidgetDto.auth_date;
+      if (dataAge > 86400) {
+        throw new UnauthorizedException('Данные авторизации устарели');
+      }
+
+      // Проверяем hash
+      const dataCheckString = [
+        `auth_date=${loginWidgetDto.auth_date}`,
+        `first_name=${loginWidgetDto.first_name}`,
+        `id=${loginWidgetDto.id}`,
+        ...(loginWidgetDto.last_name
+          ? [`last_name=${loginWidgetDto.last_name}`]
+          : []),
+        ...(loginWidgetDto.photo_url
+          ? [`photo_url=${loginWidgetDto.photo_url}`]
+          : []),
+        ...(loginWidgetDto.username
+          ? [`username=${loginWidgetDto.username}`]
+          : []),
+      ]
+        .sort()
+        .join('\n');
+
+      const secretKey = crypto
+        .createHash('sha256')
+        .update(botToken)
+        .digest();
+
+      const calculatedHash = crypto
+        .createHmac('sha256', secretKey)
+        .update(dataCheckString)
+        .digest('hex');
+
+      if (calculatedHash !== loginWidgetDto.hash) {
+        throw new UnauthorizedException('Неверный hash авторизации');
+      }
+
+      // Ищем пользователя по Telegram ID или создаем нового
+      const telegramId = loginWidgetDto.id.toString();
+      let user = await this.userService.findByTelegramId(telegramId);
+
+      if (!user) {
+        // Формируем имя пользователя
+        let userName = loginWidgetDto.first_name;
+        if (loginWidgetDto.last_name) {
+          userName += ` ${loginWidgetDto.last_name}`;
+        }
+        if (!userName && loginWidgetDto.username) {
+          userName = loginWidgetDto.username;
+        }
+        if (!userName) {
+          userName = `User_${telegramId.slice(-4)}`;
+        }
+
+        // Генерируем уникальный номер телефона на основе Telegram ID
+        // Используем формат +7XXXXXXXXXX, где X - последние 10 цифр Telegram ID
+        const phoneSuffix = telegramId.slice(-10).padStart(10, '0');
+        const phone = `+7${phoneSuffix}`;
+
+        // Проверяем, не занят ли этот номер
+        let existingUser = await this.userService.findByPhone(phone);
+        let finalPhone = phone;
+        if (existingUser) {
+          // Если номер занят, добавляем префикс
+          finalPhone = `+7${telegramId.slice(-9).padStart(10, '0')}`;
+        }
+
+        // Создаем нового пользователя
+        user = await this.userService.create({
+          phone: finalPhone,
+          name: userName,
+          isPhoneVerified: true,
+          role: UserRole.CUSTOMER,
+          telegramId: telegramId,
+        });
+      } else {
+        // Обновляем имя пользователя, если изменилось
+        let newName = loginWidgetDto.first_name;
+        if (loginWidgetDto.last_name) {
+          newName += ` ${loginWidgetDto.last_name}`;
+        }
+        if (!newName && loginWidgetDto.username) {
+          newName = loginWidgetDto.username;
+        }
+        if (!newName) {
+          newName = user.name;
+        }
+
+        if (newName !== user.name) {
+          await this.userService.update(user.id, { name: newName });
+        }
+      }
+
+      // Обновляем информацию о входе
+      if (ipAddress) {
+        await this.userService.updateLastLogin(user.id);
+      }
+
+      // Обрабатываем adToken, если есть
+      if (loginWidgetDto.adToken) {
+        await this.adTokenService.associateTokenWithUser(
+          loginWidgetDto.adToken,
+          user.id,
+        );
+      }
+
+      return this.generateAuthTokens(user);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException(
+        'Ошибка авторизации через Telegram Login Widget',
+      );
+    }
   }
 }

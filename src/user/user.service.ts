@@ -69,6 +69,12 @@ export class UserService {
     });
   }
 
+  async findByTelegramId(telegramId: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { telegramId, deletedAt: IsNull() },
+    });
+  }
+
   async updatePhoneVerification(
     userId: string,
     isVerified: boolean,
