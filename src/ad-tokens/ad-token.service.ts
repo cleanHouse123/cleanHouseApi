@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdToken } from './ad-token.entity';
+import { User } from '../user/entities/user.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { AdTokenType } from 'src/shared/types/ad-token';
 
@@ -10,6 +11,8 @@ export class AdTokenService {
   constructor(
     @InjectRepository(AdToken)
     private readonly adTokenRepository: Repository<AdToken>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(reference: string, type: AdTokenType): Promise<AdToken> {
@@ -69,5 +72,28 @@ export class AdTokenService {
       return 0;
     }
     return referralToken.users.length;
+  }
+
+  /**
+   * Связывает токен с пользователем
+   */
+  async associateTokenWithUser(token: string, userId: string): Promise<void> {
+    const adToken = await this.findByToken(token);
+    if (!adToken) {
+      return; // Токен не найден, просто игнорируем
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    // Связываем токен с пользователем
+    user.adToken = adToken;
+    await this.userRepository.save(user);
+
+    // Увеличиваем счетчик кликов
+    adToken.clickCount += 1;
+    await this.adTokenRepository.save(adToken);
   }
 }
