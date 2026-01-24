@@ -129,6 +129,13 @@ export class OrderResponseDto {
   @Expose()
   numberPackages: number;
 
+  @ApiProperty({
+    description: 'Время назначения курьера',
+    required: false,
+  })
+  @Expose()
+  assignedAt?: Date;
+
   @ApiProperty({ type: [PaymentResponseDto] })
   @Expose()
   @Type(() => PaymentResponseDto)

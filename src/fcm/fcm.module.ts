@@ -1,14 +1,16 @@
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { FcmService } from './fcm.service';
 import { FcmController } from './fcm.controller';
+import { User } from '../user/entities/user.entity';
 import * as admin from 'firebase-admin';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Global()
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, TypeOrmModule.forFeature([User])],
   controllers: [FcmController],
   providers: [
     {

@@ -258,7 +258,7 @@ export class OrderController {
 
   @Patch(':id/take')
   @ApiOperation({
-    summary: 'Курьер берет заказ (включая просроченные)',
+    summary: 'Курьер берет заказ (только PAID)',
   })
   @ApiResponse({
     status: 200,
@@ -272,6 +272,22 @@ export class OrderController {
     @Body() body: { courierId: string },
   ): Promise<OrderResponseDto> {
     return this.orderService.takeOrder(id, body.courierId);
+  }
+
+  @Patch(':id/reassign')
+  @ApiOperation({ summary: 'Переназначить заказ другому курьеру' })
+  @ApiResponse({
+    status: 200,
+    description: 'Заказ успешно переназначен',
+    type: OrderResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Заказ не может быть переназначен' })
+  @ApiResponse({ status: 404, description: 'Заказ или курьер не найден' })
+  async reassignOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { newCourierId: string },
+  ): Promise<OrderResponseDto> {
+    return this.orderService.reassignOrder(id, body.newCourierId);
   }
 
   @Patch(':id/start')

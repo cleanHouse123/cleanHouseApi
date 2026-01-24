@@ -1,10 +1,17 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import * as admin from 'firebase-admin';
 import { Message } from 'firebase-admin/messaging';
+import { User } from '../user/entities/user.entity';
 
 @Injectable()
 export class FcmService {
-  constructor(@Inject('FIREBASE_APP') private firebaseApp: admin.app.App) {}
+  constructor(
+    @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+  ) {}
 
   /**
    * Отправка уведомления на одно устройство
@@ -156,6 +163,52 @@ export class FcmService {
         code: error.code,
         deviceType: isLikelyIOS ? 'iOS' : 'Android/Other',
       };
+    }
+  }
+
+  /**
+   * Отправка уведомления пользователю по его ID
+   * @param userId - ID пользователя
+   * @param title - Заголовок уведомления
+   * @param body - Текст уведомления
+   * @param data - Дополнительные данные
+   */
+  async sendToUser(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ) {
+    try {
+      // Находим пользователя и его deviceToken
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        select: ['id', 'deviceToken', 'name'],
+      });
+
+      if (!user || !user.deviceToken) {
+        console.warn(
+          `[sendToUser] User ${userId} has no device token, skipping notification`,
+        );
+        return { success: false, error: 'No device token' };
+      }
+
+      // Преобразуем data в JSON строку для payload
+      const payload = data ? JSON.stringify(data) : undefined;
+
+      // Отправляем уведомление
+      return await this.sendNotificationToDevice(
+        user.deviceToken,
+        title,
+        body,
+        payload,
+      );
+    } catch (error) {
+      console.error(
+        `[sendToUser] Error sending notification to user ${userId}:`,
+        error,
+      );
+      return { success: false, error: error.message };
     }
   }
 }

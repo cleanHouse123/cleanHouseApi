@@ -758,11 +758,12 @@ export class OrderService {
       paymentUrl: order?.paymentUrl || undefined,
       coordinates: order?.coordinates || undefined,
       numberPackages: order?.numberPackages || 1,
+      assignedAt: order?.assignedAt || undefined,
       payments: order?.payments || [],
       createdAt: order?.createdAt || new Date(),
       updatedAt: order?.updatedAt || new Date(),
       isOverdue: overdueInfo.isOverdue,
-      overdueMinutes: overdueInfo.overdueMinutes,
+      overdueMinutes: order?.overdueMinutes || overdueInfo.overdueMinutes,
     };
   }
 
@@ -781,11 +782,18 @@ export class OrderService {
       throw new NotFoundException('Заказ не найден');
     }
 
-    if (
-      order.status !== OrderStatus.NEW &&
-      order.status !== OrderStatus.PAID
-    ) {
-      throw new BadRequestException('Заказ уже взят или недоступен');
+    // Только оплаченные заказы можно брать
+    if (order.status !== OrderStatus.PAID) {
+      throw new BadRequestException(
+        'Можно взять только оплаченные заказы (статус PAID)',
+      );
+    }
+
+    // Проверяем, что заказ еще не назначен
+    if (order.currierId) {
+      throw new BadRequestException(
+        'Заказ уже назначен другому курьеру. Используйте reassign для переназначения',
+      );
     }
 
     // Проверяем, что курьер существует и имеет правильную роль
@@ -804,8 +812,83 @@ export class OrderService {
     // Назначаем курьера и меняем статус
     order.currierId = courierId;
     order.status = OrderStatus.ASSIGNED;
+    order.assignedAt = new Date();
+
+    // Вычисляем просроченность и сохраняем
+    const overdueInfo = this.isOrderOverdue(order);
+    if (overdueInfo.isOverdue) {
+      order.overdueMinutes = overdueInfo.overdueMinutes;
+    }
 
     await this.orderRepository.save(order);
+
+    return this.findOne(orderId);
+  }
+
+  async reassignOrder(
+    orderId: string,
+    newCourierId: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+      relations: ['customer', 'currier'],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    // Проверяем статус - можно переназначить только ASSIGNED или IN_PROGRESS
+    if (
+      order.status !== OrderStatus.ASSIGNED &&
+      order.status !== OrderStatus.IN_PROGRESS
+    ) {
+      throw new BadRequestException(
+        'Переназначить можно только заказы в статусе ASSIGNED или IN_PROGRESS',
+      );
+    }
+
+    // Проверяем, что новый курьер существует
+    const newCourier = await this.userRepository.findOne({
+      where: { id: newCourierId },
+    });
+
+    if (!newCourier) {
+      throw new NotFoundException('Новый курьер не найден');
+    }
+
+    if (newCourier.role !== UserRole.CURRIER) {
+      throw new BadRequestException('Пользователь не является курьером');
+    }
+
+    // Переназначаем
+    const oldCourierId = order.currierId;
+    order.currierId = newCourierId;
+    order.assignedAt = new Date();
+    
+    // Если был IN_PROGRESS, возвращаем в ASSIGNED
+    if (order.status === OrderStatus.IN_PROGRESS) {
+      order.status = OrderStatus.ASSIGNED;
+    }
+
+    await this.orderRepository.save(order);
+
+    // Отправляем уведомления
+    if (oldCourierId) {
+      await this.fcmService.sendToUser(
+        oldCourierId,
+        'Заказ переназначен',
+        `Заказ #${order.id.slice(-8)} был переназначен другому курьеру`,
+        { orderId: order.id, type: 'order_reassigned' },
+      );
+    }
+
+    await this.fcmService.sendToUser(
+      newCourierId,
+      'Новый заказ назначен',
+      `Вам назначен заказ #${order.id.slice(-8)}`,
+      { orderId: order.id, type: 'order_assigned' },
+    );
 
     return this.findOne(orderId);
   }

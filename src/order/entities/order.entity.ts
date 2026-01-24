@@ -92,6 +92,12 @@ export class Order {
   @Column({ type: 'integer', default: 1 })
   numberPackages: number;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  assignedAt?: Date;
+
+  @Column({ type: 'integer', nullable: true })
+  overdueMinutes?: number;
+
   @OneToMany(() => Payment, (payment) => payment.order, {
     cascade: true,
   })

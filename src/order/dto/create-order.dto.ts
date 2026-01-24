@@ -9,10 +9,28 @@ import {
   ValidateNested,
   IsNumber,
   Min,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { PaymentMethod } from '../entities/payment.entity';
 import { IsOptionalEnum } from '../../shared/validators/optional-enum.validator';
+
+@ValidatorConstraint({ name: 'IsDateNotInPast', async: false })
+export class IsDateNotInPast implements ValidatorConstraintInterface {
+  validate(dateString: string, args: ValidationArguments) {
+    if (!dateString) return true; // optional field
+    const date = new Date(dateString);
+    const now = new Date();
+    return date >= now;
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'Запланированное время не может быть в прошлом';
+  }
+}
 
 export class CoordinatesDto {
   @ApiProperty({ description: 'Широта', example: '55.7558' })
@@ -94,6 +112,7 @@ export class CreateOrderDto {
   })
   @IsOptional()
   @IsDateString()
+  @Validate(IsDateNotInPast)
   scheduledAt?: string;
 
   @ApiProperty({
