@@ -45,6 +45,11 @@ export class OverdueNotificationService {
           continue;
         }
 
+        // Пропускаем если нет scheduledAt
+        if (!order.scheduledAt) {
+          continue;
+        }
+
         // Вычисляем просрочку
         const scheduledTime = new Date(order.scheduledAt);
         const diffMs = now.getTime() - scheduledTime.getTime();
