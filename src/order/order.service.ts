@@ -660,6 +660,28 @@ export class OrderService {
     await this.orderRepository.remove(order);
   }
 
+  async removeForce(id: string): Promise<void> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    // Принудительное удаление без проверки статуса
+    await this.orderRepository.remove(order);
+  }
+
+  async removeAllOrders(): Promise<{ deleted: number }> {
+    // Удаляем все заказы напрямую через репозиторий
+    const result = await this.orderRepository
+      .createQueryBuilder()
+      .delete()
+      .from('order')
+      .execute();
+
+    return { deleted: result.affected || 0 };
+  }
+
   async getOrdersByCustomer(customerId: string): Promise<OrderResponseDto[]> {
     const orders = await this.orderRepository.find({
       where: { customerId },

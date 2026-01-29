@@ -24,7 +24,8 @@
     "delete-all-users": "ts-node scripts/delete-all-users.ts",
     "delete-all-orders": "ts-node scripts/delete-all-orders.ts",
     "test-user-roles": "ts-node scripts/test-user-roles.ts",
-    "check-orders": "ts-node scripts/check-and-delete-remaining-orders.ts"
+    "check-orders": "ts-node scripts/check-and-delete-remaining-orders.ts",
+    "delete-all-orders-force": "ts-node scripts/delete-all-orders-force.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

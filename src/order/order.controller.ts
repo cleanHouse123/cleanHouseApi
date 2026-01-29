@@ -34,6 +34,9 @@ import { Public } from '../shared/decorators/public.decorator';
 import { OrderPaymentService } from './services/order-payment.service';
 import { OrderPaymentGateway } from './gateways/order-payment.gateway';
 import { PaymentInfoDto } from '../shared/dto/payment-info.dto';
+import { RolesGuard } from '../shared/guards/roles.guard';
+import { Roles } from '../shared/decorators/roles.decorator';
+import { UserRole } from '../shared/types/user.role';
 
 @ApiTags('orders')
 @Controller('orders')
@@ -252,6 +255,29 @@ export class OrderController {
   @ApiResponse({ status: 404, description: 'Заказ не найден' })
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.orderService.remove(id);
+  }
+
+  @Delete(':id/force')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Принудительно удалить заказ (только для админа)' })
+  @ApiResponse({ status: 200, description: 'Заказ удален' })
+  @ApiResponse({ status: 404, description: 'Заказ не найден' })
+  async removeForce(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.orderService.removeForce(id);
+  }
+
+  @Delete('admin/delete-all')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Удалить все заказы (только для админа)' })
+  @ApiResponse({ status: 200, description: 'Все заказы удалены' })
+  async removeAllOrders(): Promise<{ deleted: number; message: string }> {
+    const result = await this.orderService.removeAllOrders();
+    return {
+      deleted: result.deleted,
+      message: `Удалено заказов: ${result.deleted}`,
+    };
   }
 
   // ==================== COURIER METHODS ====================
