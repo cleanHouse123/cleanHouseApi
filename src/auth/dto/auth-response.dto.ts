@@ -13,6 +13,6 @@ export class AuthResponseDto {
     name: string;
     phone?: string;
     email?: string;
-    role: string;
+    roles: string[];
   };
 }

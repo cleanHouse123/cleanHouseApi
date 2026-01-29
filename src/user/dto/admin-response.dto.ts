@@ -10,11 +10,12 @@ export class AdminResponseDto {
   id: string;
 
   @ApiProperty({
-    description: 'Роль пользователя',
+    description: 'Роли пользователя',
     enum: UserRole,
-    example: UserRole.ADMIN,
+    isArray: true,
+    example: [UserRole.ADMIN],
   })
-  role: UserRole;
+  roles: UserRole[];
 
   @ApiProperty({
     description: 'Имя администратора',

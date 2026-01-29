@@ -10,10 +10,11 @@ export class UsersListDto {
   id: string;
 
   @ApiProperty({
-    description: 'Роль пользователя',
+    description: 'Роли пользователя',
     enum: UserRole,
+    isArray: true,
   })
-  role: UserRole;
+  roles: UserRole[];
 
   @ApiProperty({
     description: 'Имя администратора',

@@ -1,13 +1,31 @@
-import { OmitType, PartialType } from '@nestjs/swagger';
-import { CreateUserDto } from './create-user.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsArray, IsEnum, IsString } from 'class-validator';
+import { UserRole } from 'src/shared/types/user.role';
 
-// Обновление только публичных полей (name, email, phone)
-export class UpdateUserDto extends PartialType(
-  OmitType(CreateUserDto, [
-    'adToken',
-    'role',
-    'hash_password',
-    'isPhoneVerified',
-    'isEmailVerified',
-  ] as const),
-) {}
+export class UpdateUserDto {
+  @ApiProperty({ description: 'Имя пользователя', required: false })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({ description: 'Email пользователя', required: false })
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @ApiProperty({ description: 'Номер телефона', required: false })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiProperty({
+    description: 'Роли пользователя',
+    enum: UserRole,
+    isArray: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(UserRole, { each: true })
+  roles?: UserRole[];
+}

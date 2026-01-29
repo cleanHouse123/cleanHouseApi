@@ -166,7 +166,7 @@ export class UserService {
     const admin = await this.userRepository
       .createQueryBuilder('user')
       .where('user.id = :id', { id })
-      .andWhere('user.role = :role', { role: UserRole.ADMIN })
+      .andWhere(':role = ANY(user.roles)', { role: UserRole.ADMIN })
       .andWhere('user.deletedAt IS NULL')
       .getOne();
 
@@ -202,7 +202,7 @@ export class UserService {
       email: createAdminDto.email,
       phone: createAdminDto.phone,
       hash_password: hashedPassword,
-      role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN],
       isPhoneVerified: false,
       isEmailVerified: false,
     };
@@ -222,7 +222,7 @@ export class UserService {
     const currierData = {
       name: createCurrierDto.name,
       phone: createCurrierDto.phone,
-      role: UserRole.CURRIER,
+      roles: [UserRole.CURRIER],
       isPhoneVerified: false,
       isEmailVerified: false,
     };
@@ -234,12 +234,12 @@ export class UserService {
   async getAdmins(): Promise<AdminResponseDto[]> {
     const admins = await this.userRepository
       .createQueryBuilder('user')
-      .where('user.role = :role', { role: UserRole.ADMIN })
+      .where(':role = ANY(user.roles)', { role: UserRole.ADMIN })
       .andWhere('user.deletedAt IS NULL')
       .getMany();
     return admins.map((admin) => ({
       id: admin.id,
-      role: admin.role,
+      roles: admin.roles,
       name: admin.name,
       email: admin.email || '',
       phone: admin.phone,
@@ -259,7 +259,7 @@ export class UserService {
     const queryBuilder = this.userRepository.createQueryBuilder('user');
 
     queryBuilder
-      .where('user.role != :adminRole', {
+      .where('NOT (:adminRole = ANY(user.roles))', {
         adminRole: UserRole.ADMIN,
       })
       .andWhere('user.deletedAt IS NULL');
@@ -280,7 +280,7 @@ export class UserService {
       });
     }
     if (query.role) {
-      queryBuilder.andWhere('user.role = :role', { role: query.role });
+      queryBuilder.andWhere(':role = ANY(user.roles)', { role: query.role });
     }
 
     const currentPage = query.page ?? DEFAULT_PAGE;
@@ -293,7 +293,7 @@ export class UserService {
     return {
       data: users.map((user) => ({
         id: user.id,
-        role: user.role,
+        roles: user.roles,
         name: user.name,
         email: user.email || '',
         phone: user.phone,

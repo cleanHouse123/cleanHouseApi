@@ -593,7 +593,7 @@ export class OrderService {
         throw new NotFoundException('Курьер не найден');
       }
 
-      if (currier.role !== UserRole.CURRIER) {
+      if (!currier.roles?.includes(UserRole.CURRIER)) {
         throw new BadRequestException('Пользователь не является курьером');
       }
 
@@ -805,7 +805,7 @@ export class OrderService {
       throw new NotFoundException('Курьер не найден');
     }
 
-    if (courier.role !== UserRole.CURRIER) {
+    if (!courier.roles?.includes(UserRole.CURRIER)) {
       throw new BadRequestException('Пользователь не является курьером');
     }
 
@@ -857,7 +857,7 @@ export class OrderService {
       throw new NotFoundException('Новый курьер не найден');
     }
 
-    if (newCourier.role !== UserRole.CURRIER) {
+    if (!newCourier.roles?.includes(UserRole.CURRIER)) {
       throw new BadRequestException('Пользователь не является курьером');
     }
 

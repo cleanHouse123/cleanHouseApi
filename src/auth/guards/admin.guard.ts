@@ -16,8 +16,8 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('Пользователь не авторизован');
     }
 
-    // Проверяем роль пользователя из базы данных
-    if (user.role !== UserRole.ADMIN) {
+    // Проверяем роли пользователя из базы данных
+    if (!user.roles?.includes(UserRole.ADMIN)) {
       throw new ForbiddenException(
         'Нет прав доступа. Требуются права администратора',
       );

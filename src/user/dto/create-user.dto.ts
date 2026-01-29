@@ -4,13 +4,15 @@ import { UserRole } from 'src/shared/types/user.role';
 
 export class CreateUserDto {
   @ApiProperty({
-    description: 'Роль пользователя',
+    description: 'Роли пользователя',
     enum: UserRole,
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsArray()
+  @IsEnum(UserRole, { each: true })
+  roles?: UserRole[];
 
   @ApiProperty({ description: 'Имя пользователя' })
   @IsString()

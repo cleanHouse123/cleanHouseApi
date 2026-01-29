@@ -65,7 +65,7 @@ export class AuthService {
         phone: formattedPhone,
         name: `User_${formattedPhone.slice(-4)}`,
         isPhoneVerified: true,
-        role: UserRole.CUSTOMER,
+        roles: [UserRole.CUSTOMER],
       };
 
       if (adToken) {
@@ -245,7 +245,7 @@ export class AuthService {
         name: user.name,
         phone: user.phone,
         email: user.email,
-        role: user.role,
+        roles: user.roles,
       },
     };
   }
@@ -276,7 +276,7 @@ export class AuthService {
       hash_password: hashedPassword,
       phone: `email_${email}`,
       isEmailVerified: false,
-      role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN],
     };
 
     const user = await this.userService.create(createUserData);
@@ -428,7 +428,7 @@ export class AuthService {
           phone: formattedPhone,
           name: `User_${formattedPhone.slice(-4)}`,
           isPhoneVerified: true,
-          role: UserRole.CUSTOMER,
+          roles: [UserRole.CUSTOMER],
         });
       } else {
         // Обновляем статус верификации
@@ -565,7 +565,7 @@ export class AuthService {
         name: user.name,
         phone: user.phone,
         email: user.email,
-        role: user.role,
+        roles: user.roles,
       },
       adToken,
       deviceToken: user.deviceToken || undefined,
@@ -662,7 +662,7 @@ export class AuthService {
           phone: finalPhone,
           name: userName,
           isPhoneVerified: true,
-          role: UserRole.CUSTOMER,
+          roles: [UserRole.CUSTOMER],
           telegramId: telegramId,
         });
       } else {

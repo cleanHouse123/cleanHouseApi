@@ -20,9 +20,10 @@ export class User {
   @Column({
     type: 'enum',
     enum: UserRole,
-    nullable: true,
+    array: true,
+    default: [],
   })
-  role: UserRole;
+  roles: UserRole[];
 
   @Column()
   name: string;
