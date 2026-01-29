@@ -11,6 +11,7 @@ import {
   In,
   IsNull,
   Not,
+  ArrayContains,
 } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import {
@@ -1017,7 +1018,7 @@ export class OrderService {
     try {
       const couriers = await this.userRepository.find({
         where: {
-          role: UserRole.CURRIER,
+          roles: ArrayContains([UserRole.CURRIER]),
           deviceToken: Not(IsNull()),
           deletedAt: IsNull(),
         },

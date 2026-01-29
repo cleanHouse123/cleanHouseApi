@@ -12,7 +12,7 @@ import { SubscriptionStatus } from '../../subscription/entities/subscription.ent
 import { SubscriptionPaymentStatus } from '../../subscription/entities/subscription-payment.entity';
 import { FcmService } from '../../fcm/fcm.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, IsNull } from 'typeorm';
+import { Repository, Not, IsNull, ArrayContains } from 'typeorm';
 import { Order } from '../../order/entities/order.entity';
 import { User } from '../../user/entities/user.entity';
 import { UserRole } from '../types/user.role';
@@ -427,7 +427,7 @@ export class WebhookController {
     try {
       const couriers = await this.userRepository.find({
         where: {
-          role: UserRole.CURRIER,
+          roles: ArrayContains([UserRole.CURRIER]),
           deviceToken: Not(IsNull()),
           deletedAt: IsNull(),
         },
