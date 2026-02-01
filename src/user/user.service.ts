@@ -75,6 +75,26 @@ export class UserService {
     });
   }
 
+  async findByTelegramIdIncludingDeleted(telegramId: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { telegramId },
+    });
+  }
+
+  async restore(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    // Восстанавливаем пользователя - убираем deletedAt
+    await this.userRepository.update(id, { deletedAt: null });
+    return this.userRepository.findOne({ where: { id } }) as Promise<User>;
+  }
+
   async updatePhoneVerification(
     userId: string,
     isVerified: boolean,
