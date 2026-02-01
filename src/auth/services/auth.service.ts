@@ -616,40 +616,18 @@ export class AuthService {
           userName = `User_${telegramId.slice(-4)}`;
         }
 
-        // Генерируем уникальный номер телефона на основе Telegram ID
-        // Используем формат +7XXXXXXXXXX, где X - последние 10 цифр Telegram ID
-        let phone = `+7${telegramId.slice(-10).padStart(10, '0')}`;
-        
-        // Проверяем, не занят ли этот номер, и ищем свободный
-        let existingUser = await this.userService.findByPhone(phone);
-        let attempts = 0;
-        const maxAttempts = 10;
-        
-        while (existingUser && attempts < maxAttempts) {
-          // Если номер занят, генерируем новый на основе Telegram ID + попытка
-          const randomSuffix = `${telegramId}${attempts}`.slice(-10).padStart(10, '0');
-          phone = `+7${randomSuffix}`;
-          existingUser = await this.userService.findByPhone(phone);
-          attempts++;
-        }
-
-        // Если все номера заняты, используем timestamp для уникальности
-        if (existingUser && attempts >= maxAttempts) {
-          const timestamp = Date.now().toString().slice(-6);
-          const suffix = `${telegramId.slice(-4)}${timestamp}`.padStart(10, '0');
-          phone = `+7${suffix}`;
-        }
-
+        // Telegram Login Widget не предоставляет номер телефона
+        // Создаем пользователя без номера телефона
         // Повторно проверяем, не появился ли пользователь (race condition)
         user = await this.userService.findByTelegramId(telegramId);
         
         if (!user) {
-          // Создаем нового пользователя
+          // Создаем нового пользователя без номера телефона
           try {
             user = await this.userService.create({
-              phone: phone.trim(),
+              phone: undefined, // Telegram Login Widget не предоставляет номер
               name: userName.trim(),
-              isPhoneVerified: true,
+              isPhoneVerified: false, // Номер не верифицирован, так как его нет
               roles: [UserRole.CUSTOMER],
               telegramId: telegramId,
             });
@@ -677,64 +655,19 @@ export class AuthService {
                   // Пользователь уже существует с этим telegramId
                   console.log('User found by telegramId after error');
                 } else {
-                  // Проверяем по телефону
-                  const existingByPhone = await this.userService.findByPhone(phone);
-                  if (existingByPhone) {
-                    if (!existingByPhone.telegramId) {
-                      // Обновляем существующего пользователя, добавляя telegramId
-                      user = await this.userService.update(existingByPhone.id, {
-                        telegramId: telegramId,
-                      });
-                    } else if (existingByPhone.telegramId === telegramId) {
-                      // Пользователь уже существует с этим telegramId
-                      user = existingByPhone;
-                    } else {
-                      // Конфликт - другой пользователь с таким телефоном
-                      // Генерируем новый уникальный телефон
-                      const timestamp = Date.now().toString().slice(-6);
-                      const suffix = `${telegramId.slice(-4)}${timestamp}`.padStart(10, '0');
-                      phone = `+7${suffix}`;
-                      
-                      // Проверяем, не занят ли новый телефон
-                      const checkPhone = await this.userService.findByPhone(phone);
-                      if (!checkPhone) {
-                        user = await this.userService.create({
-                          phone: phone.trim(),
-                          name: userName.trim(),
-                          isPhoneVerified: true,
-                          roles: [UserRole.CUSTOMER],
-                          telegramId: telegramId,
-                        });
-                      } else {
-                        // Если и новый телефон занят, используем существующего пользователя
-                        user = existingByPhone;
-                      }
-                    }
-                  } else {
-                    // Непонятная ошибка уникальности - пробуем найти пользователя еще раз
-                    user = await this.userService.findByTelegramId(telegramId);
-                    if (!user) {
-                      throw new UnauthorizedException(
-                        `Ошибка создания пользователя: ${createError.message || 'Неизвестная ошибка'}`,
-                      );
-                    }
+                  // Непонятная ошибка уникальности - пробуем найти пользователя еще раз
+                  user = await this.userService.findByTelegramId(telegramId);
+                  if (!user) {
+                    throw new UnauthorizedException(
+                      `Ошибка создания пользователя: ${createError.message || 'Неизвестная ошибка'}`,
+                    );
                   }
                 }
               }
             } else if (createError instanceof ConflictException) {
-              // Обработка ConflictException
-              const existingByPhone = await this.userService.findByPhone(phone);
-              if (existingByPhone) {
-                if (!existingByPhone.telegramId) {
-                  user = await this.userService.update(existingByPhone.id, {
-                    telegramId: telegramId,
-                  });
-                } else if (existingByPhone.telegramId === telegramId) {
-                  user = existingByPhone;
-                } else {
-                  throw createError;
-                }
-              } else {
+              // Обработка ConflictException - проверяем по telegramId
+              user = await this.userService.findByTelegramId(telegramId);
+              if (!user) {
                 throw createError;
               }
             } else {

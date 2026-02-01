@@ -28,8 +28,8 @@ export class User {
   @Column()
   name: string;
 
-  @Column({ unique: true })
-  phone: string;
+  @Column({ unique: true, nullable: true })
+  phone?: string;
 
   @Column({ default: false })
   isPhoneVerified: boolean;

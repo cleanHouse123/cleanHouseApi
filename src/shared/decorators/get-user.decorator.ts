@@ -4,7 +4,7 @@ import { AuthResponseDto } from '../../auth/dto/auth-response.dto';
 
 export type UserMetadata = {
   userId: string;
-  phone: string;
+  phone?: string;
 };
 
 export const GetUserMetadata = createParamDecorator(

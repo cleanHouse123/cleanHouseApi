@@ -23,9 +23,10 @@ export class CreateUserDto {
   @IsString()
   email?: string;
 
-  @ApiProperty({ description: 'Номер телефона' })
+  @ApiProperty({ description: 'Номер телефона', required: false })
+  @IsOptional()
   @IsString()
-  phone: string;
+  phone?: string;
 
   @ApiProperty({ description: 'Хеш пароля' })
   @IsString()
