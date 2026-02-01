@@ -11,7 +11,7 @@
     "start": "nest start",
     "start:dev": "NODE_ENV=development nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "deploy:init": "./config/deploy/first-deploy.sh",
     "deploy:app": "./config/deploy/redeploy.sh",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
