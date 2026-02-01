@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://cleanhouse123-cleanhouseapi-209c.twc1.net';
+const API_BASE_URL = 'https://cleanhouse123-cleanhouseapi-4d55.twc1.net';
 const TOKEN =
   process.env.AUTH_TOKEN ||
   process.argv[2] ||
