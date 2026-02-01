@@ -588,42 +588,65 @@ export class AuthService {
         );
       }
 
-      // Проверяем, что данные не старше 24 часов
+      // Проверяем, что данные не старше 24 часов и не в будущем
       const currentTime = Math.floor(Date.now() / 1000);
       const dataAge = currentTime - loginWidgetDto.auth_date;
       if (dataAge > 86400) {
         throw new UnauthorizedException('Данные авторизации устарели');
       }
+      if (loginWidgetDto.auth_date > currentTime + 60) {
+        throw new UnauthorizedException('Данные авторизации из будущего');
+      }
 
-      // Проверяем hash
-      const dataCheckString = [
-        `auth_date=${loginWidgetDto.auth_date}`,
-        `first_name=${loginWidgetDto.first_name}`,
-        `id=${loginWidgetDto.id}`,
-        ...(loginWidgetDto.last_name
-          ? [`last_name=${loginWidgetDto.last_name}`]
-          : []),
-        ...(loginWidgetDto.photo_url
-          ? [`photo_url=${loginWidgetDto.photo_url}`]
-          : []),
-        ...(loginWidgetDto.username
-          ? [`username=${loginWidgetDto.username}`]
-          : []),
-      ]
-        .sort()
-        .join('\n');
+      // Формируем data-check-string из всех полей кроме hash
+      // Согласно документации Telegram, нужно использовать все поля кроме hash,
+      // отсортированные по ключу в алфавитном порядке
+      const dataEntries: string[] = [];
+      
+      if (loginWidgetDto.auth_date !== undefined) {
+        dataEntries.push(`auth_date=${loginWidgetDto.auth_date}`);
+      }
+      if (loginWidgetDto.first_name) {
+        dataEntries.push(`first_name=${loginWidgetDto.first_name}`);
+      }
+      if (loginWidgetDto.id !== undefined) {
+        dataEntries.push(`id=${loginWidgetDto.id}`);
+      }
+      if (loginWidgetDto.last_name) {
+        dataEntries.push(`last_name=${loginWidgetDto.last_name}`);
+      }
+      if (loginWidgetDto.photo_url) {
+        dataEntries.push(`photo_url=${loginWidgetDto.photo_url}`);
+      }
+      if (loginWidgetDto.username) {
+        dataEntries.push(`username=${loginWidgetDto.username}`);
+      }
 
+      // Сортируем по ключу (алфавитный порядок)
+      dataEntries.sort();
+      const dataCheckString = dataEntries.join('\n');
+
+      // Создаем secret key из bot token
       const secretKey = crypto
         .createHash('sha256')
-        .update(botToken)
+        .update(botToken, 'utf8')
         .digest();
 
+      // Вычисляем hash
       const calculatedHash = crypto
         .createHmac('sha256', secretKey)
-        .update(dataCheckString)
+        .update(dataCheckString, 'utf8')
         .digest('hex');
 
-      if (calculatedHash !== loginWidgetDto.hash) {
+      // Проверяем длину hash (SHA-256 всегда 64 символа в hex)
+      if (calculatedHash.length !== loginWidgetDto.hash.length) {
+        throw new UnauthorizedException('Неверный hash авторизации');
+      }
+
+      // Безопасное сравнение hash (защита от timing-атак)
+      const calculatedBuffer = Buffer.from(calculatedHash, 'hex');
+      const receivedBuffer = Buffer.from(loginWidgetDto.hash, 'hex');
+      if (!crypto.timingSafeEqual(calculatedBuffer, receivedBuffer)) {
         throw new UnauthorizedException('Неверный hash авторизации');
       }
 
