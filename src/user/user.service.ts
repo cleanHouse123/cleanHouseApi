@@ -81,6 +81,12 @@ export class UserService {
     });
   }
 
+  async findByIdIncludingDeleted(id: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { id },
+    });
+  }
+
   async restore(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
@@ -91,11 +97,9 @@ export class UserService {
     }
 
     // Восстанавливаем пользователя - убираем deletedAt
-    await this.userRepository.update(id, { deletedAt: undefined });
-    const restoredUser = await this.userRepository.findOne({ where: { id } });
-    if (!restoredUser) {
-      throw new NotFoundException('Пользователь не найден после восстановления');
-    }
+    user.deletedAt = undefined;
+    const restoredUser = await this.userRepository.save(user);
+    
     return restoredUser;
   }
 

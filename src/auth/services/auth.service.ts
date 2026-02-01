@@ -98,7 +98,18 @@ export class AuthService {
       }
 
       const payload = await this.tokenService.verifyRefreshToken(refreshToken);
-      const user = await this.userService.findById(payload.userId);
+      let user = await this.userService.findById(payload.userId);
+
+      // Если пользователь не найден, проверяем удаленных
+      if (!user) {
+        const userById = await this.userService.findByIdIncludingDeleted(payload.userId);
+        if (userById && userById.deletedAt) {
+          // Восстанавливаем удаленного пользователя
+          user = await this.userService.restore(userById.id);
+        } else if (userById) {
+          user = userById;
+        }
+      }
 
       if (!user) {
         throw new UnauthorizedException('Пользователь не найден');
