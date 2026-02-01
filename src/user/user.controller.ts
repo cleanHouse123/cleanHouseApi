@@ -122,6 +122,28 @@ export class UserController {
     return { message: 'Device token успешно обновлен' };
   }
 
+  @Patch('me')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
+  @ApiBody({
+    type: UpdateUserDto,
+    description: 'Данные для обновления текущего пользователя',
+  })
+  async updateMe(
+    @GetUserMetadata() user: UserMetadata,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<{ message: string; user: UsersListDto }> {
+    const updatedUser = await this.userService.update(
+      user.userId,
+      updateUserDto,
+    );
+    const { hash_password, refreshTokenHash, ...userResponse } = updatedUser;
+    return {
+      message: 'Пользователь успешно обновлен',
+      user: userResponse as UsersListDto,
+    };
+  }
+
   @Patch(':id')
   @ApiBearerAuth('JWT')
   @UseGuards(JwtAuthGuard, RolesGuard)
