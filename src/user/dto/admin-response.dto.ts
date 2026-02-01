@@ -32,8 +32,9 @@ export class AdminResponseDto {
   @ApiProperty({
     description: 'Номер телефона администратора',
     example: '+7 (999) 123-45-67',
+    required: false,
   })
-  phone: string;
+  phone?: string;
 
   @ApiProperty({
     description: 'Статус верификации телефона',

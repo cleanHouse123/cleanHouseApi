@@ -34,9 +34,9 @@ export class UserResponseDto {
   @Expose()
   name: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @Expose()
-  phone: string;
+  phone?: string;
 
   @Exclude()
   email?: string;
