@@ -8,6 +8,7 @@ import { SubscriptionService } from '../../subscription/subscription.service';
 import { OrderPaymentGateway } from '../../order/gateways/order-payment.gateway';
 import { PaymentGateway } from '../../subscription/gateways/payment.gateway';
 import { OrderStatus } from '../../order/entities/order.entity';
+import { PaymentStatus } from '../../order/entities/payment.entity';
 import { SubscriptionStatus } from '../../subscription/entities/subscription.entity';
 import { SubscriptionPaymentStatus } from '../../subscription/entities/subscription-payment.entity';
 import { FcmService } from '../../fcm/fcm.service';
@@ -271,23 +272,63 @@ export class WebhookController {
     const { object: payment } = webhookData;
     const metadata = payment.metadata || {};
 
+    this.logger.log(`🔍 Определение типа платежа из metadata:`, metadata);
+
     // Определяем тип платежа по metadata
     const isOrderPayment =
       metadata.orderId && metadata.paymentId && !metadata.subscriptionId;
     const isSubscriptionPayment = metadata.subscriptionId && metadata.paymentId;
 
+    // Если metadata пустое, пытаемся найти платеж по yookassaId
+    if (!isOrderPayment && !isSubscriptionPayment && payment.id) {
+      this.logger.log(`🔍 Metadata пустое, ищем платеж по yookassaId: ${payment.id}`);
+      
+      const orderPayment = await this.orderPaymentService.findByYookassaId(payment.id);
+      if (orderPayment) {
+        this.logger.log(`✅ Найден платеж заказа по yookassaId: ${orderPayment.id}`);
+        // Создаем правильный webhookData с metadata
+        const correctedWebhookData = {
+          ...webhookData,
+          object: {
+            ...payment,
+            metadata: {
+              orderId: orderPayment.orderId,
+              paymentId: orderPayment.id,
+            },
+          },
+        };
+        return await this.handleOrderPayment(correctedWebhookData);
+      }
+
+      const subscriptionPayment = await this.subscriptionPaymentService.findByYookassaId(payment.id);
+      if (subscriptionPayment) {
+        this.logger.log(`✅ Найден платеж подписки по yookassaId: ${subscriptionPayment.id}`);
+        const correctedWebhookData = {
+          ...webhookData,
+          object: {
+            ...payment,
+            metadata: {
+              subscriptionId: subscriptionPayment.subscriptionId,
+              paymentId: subscriptionPayment.id,
+            },
+          },
+        };
+        return await this.handleSubscriptionPayment(correctedWebhookData);
+      }
+    }
+
     if (isOrderPayment) {
       this.logger.log(
-        `Обрабатываем платеж заказа: ${metadata.paymentId} (${eventStatus})`,
+        `📦 Обрабатываем платеж заказа: ${metadata.paymentId} (${eventStatus})`,
       );
       return await this.handleOrderPayment(webhookData);
     } else if (isSubscriptionPayment) {
       this.logger.log(
-        `Обрабатываем платеж подписки: ${metadata.paymentId} (${eventStatus})`,
+        `💳 Обрабатываем платеж подписки: ${metadata.paymentId} (${eventStatus})`,
       );
       return await this.handleSubscriptionPayment(webhookData);
     } else {
-      this.logger.warn('Неизвестный тип платежа в metadata:', metadata);
+      this.logger.warn('❌ Неизвестный тип платежа в metadata:', metadata);
       return {
         message: 'Неизвестный тип платежа',
         metadata,
@@ -298,10 +339,18 @@ export class WebhookController {
 
   private async handleOrderPayment(webhookData: any) {
     try {
+      this.logger.log('🔄 Обработка платежа заказа из webhook');
       const payment =
         await this.orderPaymentService.handleYookassaWebhook(webhookData);
 
-      if (payment && payment.status === 'paid') {
+      this.logger.log(`📊 Результат обработки платежа:`, {
+        paymentId: payment?.id,
+        orderId: payment?.orderId,
+        status: payment?.status,
+      });
+
+      if (payment && (payment.status === 'paid' || payment.status === PaymentStatus.PAID)) {
+        this.logger.log(`✅ Платеж ${payment.id} успешно оплачен, обновляем статус заказа ${payment.orderId}`);
         // Получаем заказ для проверки текущего статуса
         const order = await this.orderRepository.findOne({
           where: { id: payment.orderId },
@@ -361,13 +410,16 @@ export class WebhookController {
             `Заказ ${payment.orderId} уже был оплачен ранее, пропускаем отправку push-уведомлений курьерам`,
           );
         }
-      } else if (payment && payment.status === 'failed') {
+      } else if (payment && (payment.status === 'failed' || payment.status === PaymentStatus.FAILED)) {
+        this.logger.log(`❌ Платеж ${payment.id} не прошел, статус: ${payment.status}`);
         // Отправляем уведомление об ошибке
         this.orderPaymentGateway.notifyPaymentError(
           payment.id,
           payment.orderId,
           'Ошибка оплаты заказа',
         );
+      } else {
+        this.logger.warn(`⚠️ Неизвестный статус платежа: ${payment?.status}`);
       }
 
       return { message: 'Webhook заказа обработан успешно', type: 'order' };

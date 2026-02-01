@@ -156,7 +156,32 @@ export class OrderPaymentService {
         }
       }
 
-      // Временно убираем сохранение в БД для тестирования
+      // Проверяем, не существует ли уже платеж с таким ID
+      const existingPayment = await this.paymentRepository.findOne({
+        where: { id: paymentId },
+      });
+
+      let payment: Payment;
+      if (existingPayment) {
+        // Обновляем существующий платеж
+        existingPayment.yookassaId = yookassaPayment.id;
+        existingPayment.amount = amount;
+        payment = await this.paymentRepository.save(existingPayment);
+        console.log(`🔄 Обновлен существующий платеж ${paymentId}`);
+      } else {
+        // Создаем новый платеж в базе данных
+        payment = this.paymentRepository.create({
+          id: paymentId,
+          orderId,
+          amount,
+          status: PaymentStatus.PENDING,
+          method: PaymentMethod.ONLINE,
+          yookassaId: yookassaPayment.id,
+        });
+
+        payment = await this.paymentRepository.save(payment);
+        console.log(`✅ Создан новый платеж в БД: ${paymentId} для заказа ${orderId}`);
+      }
 
       // Сохраняем информацию о платеже в памяти для быстрого доступа
       this.payments.set(paymentId, {
@@ -238,6 +263,8 @@ export class OrderPaymentService {
 
   // Обновление статуса платежа
   async updatePaymentStatus(paymentId: string, status: string) {
+    console.log(`🔄 Обновление статуса платежа ${paymentId} на ${status}`);
+    
     // Обновляем в памяти
     const memoryPayment = this.payments.get(paymentId);
     if (memoryPayment) {
@@ -249,14 +276,40 @@ export class OrderPaymentService {
     // Обновляем в базе данных
     const dbPayment = await this.paymentRepository.findOne({
       where: { id: paymentId },
+      relations: ['order'],
     });
 
     if (dbPayment) {
       dbPayment.status = status as PaymentStatus;
       await this.paymentRepository.save(dbPayment);
+      console.log(`✅ Статус платежа ${paymentId} обновлен в БД: ${status}`);
+      
+      // Возвращаем объект с правильной структурой
+      return {
+        id: dbPayment.id,
+        orderId: dbPayment.orderId,
+        amount: dbPayment.amount,
+        status: dbPayment.status,
+        yookassaId: dbPayment.yookassaId,
+        createdAt: dbPayment.createdAt,
+      };
+    } else {
+      console.warn(`⚠️ Платеж ${paymentId} не найден в БД`);
     }
 
-    return memoryPayment || dbPayment;
+    // Если платеж только в памяти, возвращаем его
+    if (memoryPayment) {
+      return {
+        id: memoryPayment.id,
+        orderId: memoryPayment.orderId,
+        amount: memoryPayment.amount,
+        status: memoryPayment.status,
+        yookassaId: memoryPayment.yookassaId,
+        createdAt: memoryPayment.createdAt,
+      };
+    }
+
+    return null;
   }
 
   // Симуляция успешной оплаты (для тестирования)
@@ -284,12 +337,19 @@ export class OrderPaymentService {
 
   // Обработка webhook от YooKassa
   async handleYookassaWebhook(webhookData: any) {
+    console.log('📥 Обработка webhook от YooKassa для заказа');
+    console.log('Webhook data:', JSON.stringify(webhookData, null, 2));
+    
     const { object: payment } = webhookData;
-    const { orderId, paymentId } = payment.metadata;
+    const { orderId, paymentId } = payment.metadata || {};
 
     if (!paymentId) {
+      console.error('❌ PaymentId не найден в metadata');
       throw new Error('PaymentId не найден в metadata');
     }
+
+    console.log(`🔍 Обработка платежа ${paymentId} для заказа ${orderId}`);
+    console.log(`📊 Статус платежа в YooKassa: ${payment.status}`);
 
     let status: PaymentStatus;
     switch (payment.status) {
@@ -303,7 +363,10 @@ export class OrderPaymentService {
         status = PaymentStatus.PENDING;
     }
 
-    return await this.updatePaymentStatus(paymentId, status.toString());
+    const updatedPayment = await this.updatePaymentStatus(paymentId, status.toString());
+    console.log(`✅ Платеж обработан:`, updatedPayment);
+    
+    return updatedPayment;
   }
 
   // Проверка статуса платежа в YooKassa
