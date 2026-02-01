@@ -188,7 +188,6 @@ async function main() {
     
     console.log(`\n=== Результат ===`);
     console.log(`Успешно удалено: ${result.deleted}`);
-    console.log(`Сообщение: ${result.message || 'Все заказы удалены'}`);
 
     if (result.deleted > 0) {
       console.log(`\n✓ Все заказы успешно удалены!`);
