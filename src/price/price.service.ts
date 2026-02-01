@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { User } from '../user/entities/user.entity';
 import { Order, OrderStatus } from '../order/entities/order.entity';
 import { UserAddress } from '../address/entities/user-address';
@@ -93,13 +93,20 @@ export class PriceService {
     if (userId) {
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (user) {
-        const ordersCount = await this.orderRepository.count({
+        // Проверяем, есть ли у пользователя ЛЮБОЙ заказ за 1 рубль (независимо от статуса)
+        // Это строгая проверка - один аккаунт = один первый заказ
+        // Первый заказ всегда стоит 1 рубль, независимо от статуса (NEW, PAID, CANCELED и т.д.)
+        const hasFirstOrder = await this.orderRepository.findOne({
           where: { 
             customerId: userId,
-            status: Not(OrderStatus.NEW),
+            price: this.FIRST_ORDER_PRICE, // 1 рубль в копейках
+            // Не проверяем статус - любой заказ за 1 рубль означает, что первый заказ использован
           },
         });
-        const isUserFirstOrder = ordersCount === 0;
+
+        // Если уже есть заказ за 1 рубль (в любом статусе), первый заказ уже использован
+        const isUserFirstOrder = !hasFirstOrder;
+        
         if (isUserFirstOrder && isAddressEligible) {
           basePricePerPackage = this.FIRST_ORDER_PRICE;
         }

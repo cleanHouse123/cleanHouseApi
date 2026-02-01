@@ -138,6 +138,24 @@ export class OrderService {
       addressDetails: createOrderDto.addressDetails,
     });
 
+    // Строгая проверка: если цена = 1 рубль, проверяем, что у пользователя еще нет ЛЮБОГО заказа за 1 рубль
+    // Первый заказ всегда стоит 1 рубль, независимо от статуса (NEW, PAID, CANCELED и т.д.)
+    if (orderPrice === 100) {
+      const existingFirstOrder = await this.orderRepository.findOne({
+        where: {
+          customerId: createOrderDto.customerId,
+          price: 100,
+          // Не проверяем статус - любой заказ за 1 рубль означает, что первый заказ уже использован
+        },
+      });
+
+      if (existingFirstOrder) {
+        throw new BadRequestException(
+          'Первый заказ за 1 рубль уже был использован. На один аккаунт разрешен только один первый заказ (независимо от статуса).',
+        );
+      }
+    }
+
     // Преобразуем координаты из фронта в нужный формат
     let coordinates: { lat: number; lon: number } | undefined;
     if (
