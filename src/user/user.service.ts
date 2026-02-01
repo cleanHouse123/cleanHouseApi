@@ -97,8 +97,22 @@ export class UserService {
     }
 
     // Восстанавливаем пользователя - убираем deletedAt
-    user.deletedAt = undefined;
-    const restoredUser = await this.userRepository.save(user);
+    // Используем update для гарантированного обновления в БД
+    await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ deletedAt: undefined })
+      .where('id = :id', { id })
+      .execute();
+    
+    // Получаем обновленного пользователя
+    const restoredUser = await this.userRepository.findOne({
+      where: { id },
+    });
+    
+    if (!restoredUser) {
+      throw new NotFoundException('Не удалось восстановить пользователя');
+    }
     
     return restoredUser;
   }
@@ -139,9 +153,20 @@ export class UserService {
   }
 
   async update(id: string, updateUserDto: Partial<User>): Promise<User> {
-    const user = await this.findById(id);
+    // Сначала ищем активного пользователя
+    let user = await this.findById(id);
+    
+    // Если не найден, проверяем удаленных (может быть только что восстановлен)
     if (!user) {
-      throw new NotFoundException('User not found');
+      user = await this.findByIdIncludingDeleted(id);
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      // Если пользователь был удален, но мы его нашли, значит он только что восстановлен
+      // В этом случае обнуляем deletedAt, если он еще не обнулен
+      if (user.deletedAt) {
+        user.deletedAt = undefined;
+      }
     }
 
     // Проверяем уникальность телефона, если он обновляется
