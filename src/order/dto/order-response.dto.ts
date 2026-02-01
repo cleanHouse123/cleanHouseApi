@@ -38,6 +38,10 @@ export class UserResponseDto {
   @Expose()
   phone?: string;
 
+  @ApiProperty({ required: false })
+  @Expose()
+  telegramUsername?: string;
+
   @Exclude()
   email?: string;
 

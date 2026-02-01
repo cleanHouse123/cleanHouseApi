@@ -18,6 +18,11 @@ export class UpdateUserDto {
   @IsString()
   phone?: string;
 
+  @ApiProperty({ description: 'Username пользователя в Telegram', required: false })
+  @IsOptional()
+  @IsString()
+  telegramUsername?: string;
+
   @ApiProperty({
     description: 'Роли пользователя',
     enum: UserRole,

@@ -50,4 +50,9 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   telegramId?: string;
+
+  @ApiProperty({ description: 'Username пользователя в Telegram', required: false })
+  @IsOptional()
+  @IsString()
+  telegramUsername?: string;
 }

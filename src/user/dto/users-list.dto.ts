@@ -36,6 +36,13 @@ export class UsersListDto {
   phone?: string;
 
   @ApiProperty({
+    description: 'Username пользователя в Telegram',
+    example: 'nickShym',
+    required: false,
+  })
+  telegramUsername?: string;
+
+  @ApiProperty({
     description: 'Статус верификации телефона',
     example: false,
   })

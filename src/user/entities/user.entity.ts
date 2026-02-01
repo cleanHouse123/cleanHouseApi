@@ -55,6 +55,9 @@ export class User {
   @Column({ unique: true, nullable: true })
   telegramId?: string;
 
+  @Column({ nullable: true })
+  telegramUsername?: string;
+
   @Column({
     type: 'enum',
     enum: UsageFeaturesEnum,

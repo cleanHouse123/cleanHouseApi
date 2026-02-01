@@ -630,6 +630,7 @@ export class AuthService {
               isPhoneVerified: false, // Номер не верифицирован, так как его нет
               roles: [UserRole.CUSTOMER],
               telegramId: telegramId,
+              telegramUsername: loginWidgetDto.username || undefined,
             });
           } catch (createError: any) {
             console.error('Error creating user:', createError);
@@ -691,6 +692,12 @@ export class AuthService {
         if (newName.trim() !== user.name) {
           await this.userService.update(user.id, { name: newName.trim() });
           user.name = newName.trim();
+        }
+
+        // Обновляем telegramUsername, если изменился
+        if (loginWidgetDto.username && loginWidgetDto.username !== user.telegramUsername) {
+          await this.userService.update(user.id, { telegramUsername: loginWidgetDto.username });
+          user.telegramUsername = loginWidgetDto.username;
         }
       }
 
