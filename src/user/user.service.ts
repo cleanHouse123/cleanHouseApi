@@ -91,8 +91,12 @@ export class UserService {
     }
 
     // Восстанавливаем пользователя - убираем deletedAt
-    await this.userRepository.update(id, { deletedAt: null });
-    return this.userRepository.findOne({ where: { id } }) as Promise<User>;
+    await this.userRepository.update(id, { deletedAt: undefined });
+    const restoredUser = await this.userRepository.findOne({ where: { id } });
+    if (!restoredUser) {
+      throw new NotFoundException('Пользователь не найден после восстановления');
+    }
+    return restoredUser;
   }
 
   async updatePhoneVerification(

@@ -666,46 +666,47 @@ export class AuthService {
                   // Пользователь уже существует с этим telegramId
                   console.log('User found by telegramId after error');
                 } else {
-                // Проверяем по телефону
-                const existingByPhone = await this.userService.findByPhone(phone);
-                if (existingByPhone) {
-                  if (!existingByPhone.telegramId) {
-                    // Обновляем существующего пользователя, добавляя telegramId
-                    user = await this.userService.update(existingByPhone.id, {
-                      telegramId: telegramId,
-                    });
-                  } else if (existingByPhone.telegramId === telegramId) {
-                    // Пользователь уже существует с этим telegramId
-                    user = existingByPhone;
-                  } else {
-                    // Конфликт - другой пользователь с таким телефоном
-                    // Генерируем новый уникальный телефон
-                    const timestamp = Date.now().toString().slice(-6);
-                    const suffix = `${telegramId.slice(-4)}${timestamp}`.padStart(10, '0');
-                    phone = `+7${suffix}`;
-                    
-                    // Проверяем, не занят ли новый телефон
-                    const checkPhone = await this.userService.findByPhone(phone);
-                    if (!checkPhone) {
-                      user = await this.userService.create({
-                        phone: phone.trim(),
-                        name: userName.trim(),
-                        isPhoneVerified: true,
-                        roles: [UserRole.CUSTOMER],
+                  // Проверяем по телефону
+                  const existingByPhone = await this.userService.findByPhone(phone);
+                  if (existingByPhone) {
+                    if (!existingByPhone.telegramId) {
+                      // Обновляем существующего пользователя, добавляя telegramId
+                      user = await this.userService.update(existingByPhone.id, {
                         telegramId: telegramId,
                       });
-                    } else {
-                      // Если и новый телефон занят, используем существующего пользователя
+                    } else if (existingByPhone.telegramId === telegramId) {
+                      // Пользователь уже существует с этим telegramId
                       user = existingByPhone;
+                    } else {
+                      // Конфликт - другой пользователь с таким телефоном
+                      // Генерируем новый уникальный телефон
+                      const timestamp = Date.now().toString().slice(-6);
+                      const suffix = `${telegramId.slice(-4)}${timestamp}`.padStart(10, '0');
+                      phone = `+7${suffix}`;
+                      
+                      // Проверяем, не занят ли новый телефон
+                      const checkPhone = await this.userService.findByPhone(phone);
+                      if (!checkPhone) {
+                        user = await this.userService.create({
+                          phone: phone.trim(),
+                          name: userName.trim(),
+                          isPhoneVerified: true,
+                          roles: [UserRole.CUSTOMER],
+                          telegramId: telegramId,
+                        });
+                      } else {
+                        // Если и новый телефон занят, используем существующего пользователя
+                        user = existingByPhone;
+                      }
                     }
-                  }
-                } else {
-                  // Непонятная ошибка уникальности - пробуем найти пользователя еще раз
-                  user = await this.userService.findByTelegramId(telegramId);
-                  if (!user) {
-                    throw new UnauthorizedException(
-                      `Ошибка создания пользователя: ${createError.message || 'Неизвестная ошибка'}`,
-                    );
+                  } else {
+                    // Непонятная ошибка уникальности - пробуем найти пользователя еще раз
+                    user = await this.userService.findByTelegramId(telegramId);
+                    if (!user) {
+                      throw new UnauthorizedException(
+                        `Ошибка создания пользователя: ${createError.message || 'Неизвестная ошибка'}`,
+                      );
+                    }
                   }
                 }
               }
@@ -747,6 +748,11 @@ export class AuthService {
           await this.userService.update(user.id, { name: newName.trim() });
           user.name = newName.trim();
         }
+      }
+
+      // Проверяем, что пользователь найден
+      if (!user) {
+        throw new UnauthorizedException('Не удалось найти или создать пользователя');
       }
 
       // Обновляем информацию о входе
