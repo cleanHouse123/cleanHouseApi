@@ -563,7 +563,26 @@ export class AuthService {
   ): Promise<
     AuthResponseDto & { adToken: AdToken | null; deviceToken?: string }
   > {
-    const user = await this.userService.findById(authenticatedUser.userId);
+    // Сначала ищем активного пользователя
+    let user = await this.userService.findById(authenticatedUser.userId);
+    
+    // Если не найден, проверяем удаленных (может быть только что восстановлен)
+    if (!user) {
+      const userById = await this.userService.findByIdIncludingDeleted(authenticatedUser.userId);
+      if (userById && userById.deletedAt) {
+        // Восстанавливаем удаленного пользователя
+        try {
+          user = await this.userService.restore(userById.id);
+          console.log(`[getMe] Восстановлен удаленный пользователь с id: ${user.id}`);
+        } catch (restoreError: any) {
+          console.error(`[getMe] Ошибка восстановления пользователя ${userById.id}:`, restoreError);
+          throw new NotFoundException('Пользователь не найден');
+        }
+      } else if (userById) {
+        user = userById;
+      }
+    }
+    
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
