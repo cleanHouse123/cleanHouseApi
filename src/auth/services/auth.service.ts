@@ -590,20 +590,35 @@ export class AuthService {
     try {
       // Ищем пользователя по Telegram ID или создаем нового
       const telegramId = loginWidgetDto.id.toString();
+      console.log(`[Telegram Login] Поиск пользователя с telegramId: ${telegramId}`);
+      
       let user = await this.userService.findByTelegramId(telegramId);
+      console.log(`[Telegram Login] Активный пользователь найден: ${user ? 'да' : 'нет'}`);
 
       // Если пользователь не найден, проверяем удаленных пользователей
       if (!user) {
         // Ищем удаленного пользователя с таким telegramId
         const deletedUser = await this.userService.findByTelegramIdIncludingDeleted(telegramId);
+        console.log(`[Telegram Login] Удаленный пользователь найден: ${deletedUser ? 'да' : 'нет'}`);
+        
         if (deletedUser) {
-          // Восстанавливаем удаленного пользователя
-          user = await this.userService.restore(deletedUser.id);
+          try {
+            // Восстанавливаем удаленного пользователя
+            console.log(`[Telegram Login] Попытка восстановления пользователя с id: ${deletedUser.id}`);
+            user = await this.userService.restore(deletedUser.id);
+            console.log(`[Telegram Login] Пользователь успешно восстановлен с telegramId: ${telegramId}, userId: ${user?.id}`);
+          } catch (restoreError: any) {
+            console.error(`[Telegram Login] Ошибка восстановления пользователя с telegramId: ${telegramId}`, restoreError);
+            // Если не удалось восстановить, продолжаем создавать нового пользователя
+            user = null;
+          }
         }
       }
 
       // Если пользователь не найден, создаем нового
       if (!user) {
+        console.log(`[Telegram Login] Пользователь не найден, создаем нового с telegramId: ${telegramId}`);
+        
         // Формируем имя пользователя
         let userName = loginWidgetDto.first_name || '';
         if (loginWidgetDto.last_name) {
@@ -620,10 +635,12 @@ export class AuthService {
         // Создаем пользователя без номера телефона
         // Повторно проверяем, не появился ли пользователь (race condition)
         user = await this.userService.findByTelegramId(telegramId);
+        console.log(`[Telegram Login] Повторная проверка активного пользователя: ${user ? 'найден' : 'не найден'}`);
         
         if (!user) {
           // Создаем нового пользователя без номера телефона
           try {
+            console.log(`[Telegram Login] Создание нового пользователя: name=${userName.trim()}, telegramId=${telegramId}, telegramUsername=${loginWidgetDto.username || 'нет'}`);
             user = await this.userService.create({
               phone: undefined, // Telegram Login Widget не предоставляет номер
               name: userName.trim(),
@@ -632,7 +649,9 @@ export class AuthService {
               telegramId: telegramId,
               telegramUsername: loginWidgetDto.username || undefined,
             });
+            console.log(`[Telegram Login] Пользователь успешно создан с id: ${user.id}`);
           } catch (createError: any) {
+            console.error(`[Telegram Login] Ошибка создания пользователя:`, createError);
             console.error('Error creating user:', createError);
             
             // Проверяем, не появился ли пользователь с таким telegramId (race condition)
@@ -646,9 +665,20 @@ export class AuthService {
               // Проверяем по telegramId (включая удаленных)
               const deletedByTelegramId = await this.userService.findByTelegramIdIncludingDeleted(telegramId);
               if (deletedByTelegramId) {
-                // Восстанавливаем удаленного пользователя
-                user = await this.userService.restore(deletedByTelegramId.id);
-                console.log('Restored deleted user by telegramId');
+                try {
+                  // Восстанавливаем удаленного пользователя
+                  user = await this.userService.restore(deletedByTelegramId.id);
+                  console.log('Restored deleted user by telegramId');
+                } catch (restoreError: any) {
+                  console.error('Ошибка восстановления пользователя при создании:', restoreError);
+                  // Если не удалось восстановить, пробуем найти активного пользователя
+                  user = await this.userService.findByTelegramId(telegramId);
+                  if (!user) {
+                    throw new UnauthorizedException(
+                      `Не удалось восстановить или создать пользователя: ${restoreError.message || 'Неизвестная ошибка'}`,
+                    );
+                  }
+                }
               } else {
                 // Проверяем активных пользователей
                 user = await this.userService.findByTelegramId(telegramId);
@@ -690,14 +720,24 @@ export class AuthService {
         }
 
         if (newName.trim() !== user.name) {
-          await this.userService.update(user.id, { name: newName.trim() });
-          user.name = newName.trim();
+          try {
+            await this.userService.update(user.id, { name: newName.trim() });
+            user.name = newName.trim();
+          } catch (updateError: any) {
+            console.error(`Ошибка обновления имени пользователя ${user.id}:`, updateError);
+            // Игнорируем ошибку обновления имени, продолжаем авторизацию
+          }
         }
 
         // Обновляем telegramUsername, если изменился
         if (loginWidgetDto.username && loginWidgetDto.username !== user.telegramUsername) {
-          await this.userService.update(user.id, { telegramUsername: loginWidgetDto.username });
-          user.telegramUsername = loginWidgetDto.username;
+          try {
+            await this.userService.update(user.id, { telegramUsername: loginWidgetDto.username });
+            user.telegramUsername = loginWidgetDto.username;
+          } catch (updateError: any) {
+            console.error(`Ошибка обновления telegramUsername пользователя ${user.id}:`, updateError);
+            // Игнорируем ошибку обновления telegramUsername, продолжаем авторизацию
+          }
         }
       }
 
