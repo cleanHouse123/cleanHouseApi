@@ -12,9 +12,11 @@ export class TelegramLoginWidgetDto {
   @ApiProperty({
     example: 'Иван',
     description: 'Имя пользователя',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  first_name: string;
+  first_name?: string;
 
   @ApiProperty({
     example: 'Иванов',
@@ -46,16 +48,20 @@ export class TelegramLoginWidgetDto {
   @ApiProperty({
     example: 1234567890,
     description: 'Unix timestamp времени авторизации',
+    required: false,
   })
+  @IsOptional()
   @IsNumber()
-  auth_date: number;
+  auth_date?: number;
 
   @ApiProperty({
     example: 'abc123def456...',
     description: 'HMAC-SHA-256 hash для проверки подлинности данных',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  hash: string;
+  hash?: string;
 
   @ApiProperty({
     example: '550e8400-e29b-41d4-a716-446655440000',

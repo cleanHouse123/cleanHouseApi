@@ -583,53 +583,103 @@ export class AuthService {
 
       if (!user) {
         // Формируем имя пользователя
-        let userName = loginWidgetDto.first_name;
+        let userName = loginWidgetDto.first_name || '';
         if (loginWidgetDto.last_name) {
           userName += ` ${loginWidgetDto.last_name}`;
         }
-        if (!userName && loginWidgetDto.username) {
+        if (!userName.trim() && loginWidgetDto.username) {
           userName = loginWidgetDto.username;
         }
-        if (!userName) {
+        if (!userName.trim()) {
           userName = `User_${telegramId.slice(-4)}`;
         }
 
         // Генерируем уникальный номер телефона на основе Telegram ID
         // Используем формат +7XXXXXXXXXX, где X - последние 10 цифр Telegram ID
-        const phoneSuffix = telegramId.slice(-10).padStart(10, '0');
-        const phone = `+7${phoneSuffix}`;
-
-        // Проверяем, не занят ли этот номер
+        let phone = `+7${telegramId.slice(-10).padStart(10, '0')}`;
+        
+        // Проверяем, не занят ли этот номер, и ищем свободный
         let existingUser = await this.userService.findByPhone(phone);
-        let finalPhone = phone;
-        if (existingUser) {
-          // Если номер занят, добавляем префикс
-          finalPhone = `+7${telegramId.slice(-9).padStart(10, '0')}`;
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (existingUser && attempts < maxAttempts) {
+          // Если номер занят, генерируем новый на основе Telegram ID + попытка
+          const randomSuffix = `${telegramId}${attempts}`.slice(-10).padStart(10, '0');
+          phone = `+7${randomSuffix}`;
+          existingUser = await this.userService.findByPhone(phone);
+          attempts++;
+        }
+
+        // Если все номера заняты, используем timestamp для уникальности
+        if (existingUser && attempts >= maxAttempts) {
+          const timestamp = Date.now().toString().slice(-6);
+          const suffix = `${telegramId.slice(-4)}${timestamp}`.padStart(10, '0');
+          phone = `+7${suffix}`;
         }
 
         // Создаем нового пользователя
-        user = await this.userService.create({
-          phone: finalPhone,
-          name: userName,
-          isPhoneVerified: true,
-          roles: [UserRole.CUSTOMER],
-          telegramId: telegramId,
-        });
+        try {
+          user = await this.userService.create({
+            phone: phone.trim(),
+            name: userName.trim(),
+            isPhoneVerified: true,
+            roles: [UserRole.CUSTOMER],
+            telegramId: telegramId,
+          });
+        } catch (createError) {
+          console.error('Error creating user:', createError);
+          
+          // Если ошибка при создании из-за конфликта телефона
+          if (createError instanceof ConflictException) {
+            // Пробуем найти пользователя по телефону и обновить его telegramId
+            const existingByPhone = await this.userService.findByPhone(phone);
+            if (existingByPhone) {
+              if (!existingByPhone.telegramId) {
+                // Обновляем существующего пользователя, добавляя telegramId
+                user = await this.userService.update(existingByPhone.id, {
+                  telegramId: telegramId,
+                });
+              } else if (existingByPhone.telegramId === telegramId) {
+                // Пользователь уже существует с этим telegramId
+                user = existingByPhone;
+              } else {
+                // Конфликт - другой пользователь с таким телефоном
+                // Генерируем новый уникальный телефон
+                const timestamp = Date.now().toString().slice(-6);
+                const suffix = `${telegramId.slice(-4)}${timestamp}`.padStart(10, '0');
+                phone = `+7${suffix}`;
+                user = await this.userService.create({
+                  phone: phone.trim(),
+                  name: userName.trim(),
+                  isPhoneVerified: true,
+                  roles: [UserRole.CUSTOMER],
+                  telegramId: telegramId,
+                });
+              }
+            } else {
+              throw createError;
+            }
+          } else {
+            throw createError;
+          }
+        }
       } else {
         // Обновляем имя пользователя, если изменилось
-        let newName = loginWidgetDto.first_name;
+        let newName = loginWidgetDto.first_name || '';
         if (loginWidgetDto.last_name) {
           newName += ` ${loginWidgetDto.last_name}`;
         }
-        if (!newName && loginWidgetDto.username) {
+        if (!newName.trim() && loginWidgetDto.username) {
           newName = loginWidgetDto.username;
         }
-        if (!newName) {
+        if (!newName.trim()) {
           newName = user.name;
         }
 
-        if (newName !== user.name) {
-          await this.userService.update(user.id, { name: newName });
+        if (newName.trim() !== user.name) {
+          await this.userService.update(user.id, { name: newName.trim() });
+          user.name = newName.trim();
         }
       }
 
@@ -640,19 +690,28 @@ export class AuthService {
 
       // Обрабатываем adToken, если есть
       if (loginWidgetDto.adToken) {
-        await this.adTokenService.associateTokenWithUser(
-          loginWidgetDto.adToken,
-          user.id,
-        );
+        try {
+          await this.adTokenService.associateTokenWithUser(
+            loginWidgetDto.adToken,
+            user.id,
+          );
+        } catch (adTokenError) {
+          // Игнорируем ошибки adToken, они не критичны
+          console.error('Error associating adToken:', adTokenError);
+        }
       }
 
       return this.generateAuthTokens(user);
     } catch (error) {
+      console.error('Telegram Login Widget error:', error);
       if (error instanceof UnauthorizedException) {
         throw error;
       }
+      if (error instanceof ConflictException) {
+        throw new UnauthorizedException(error.message);
+      }
       throw new UnauthorizedException(
-        'Ошибка авторизации через Telegram Login Widget',
+        `Ошибка авторизации через Telegram Login Widget: ${error.message || 'Неизвестная ошибка'}`,
       );
     }
   }
