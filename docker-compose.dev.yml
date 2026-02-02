@@ -20,6 +20,8 @@ services:
         condition: service_healthy
     networks:
       - dev-app-network
+    env_file:
+      - .env.development
     environment:
       - NODE_ENV=development
       - DATABASE_HOST=dev-db
