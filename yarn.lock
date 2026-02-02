@@ -5281,14 +5281,15 @@ neo-async@^2.6.2:
   resolved "https://registry.yarnpkg.com/neo-async/-/neo-async-2.6.2.tgz#b4aafb93e3aeb2d8174ca53cf163ab7d7308305f"
   integrity sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==
 
-nestjs-yookassa@^1.1.28:
-  version "1.1.34"
-  resolved "https://registry.yarnpkg.com/nestjs-yookassa/-/nestjs-yookassa-1.1.34.tgz#aa359b047000c61074147668fbc290b1546c7c4c"
-  integrity sha512-6dkCVgfRt90DByu3gLS7MqkZU9LSxuhexoV7CdShu961WEp/rPGw4kUZHodFWZIXDGVUOOZBCDzIexW+oqJB4Q==
+nestjs-yookassa@1.1.28:
+  version "1.1.28"
+  resolved "https://registry.yarnpkg.com/nestjs-yookassa/-/nestjs-yookassa-1.1.28.tgz#323cf44ce20614715f44ec4083f6b7ac01f365d7"
+  integrity sha512-e057SanJ/pZ3fO6MbD+/87LDQHnYLhVKjTPNGcbP0mRqGd/dF3hitVc5QFZxvLN8iyLGObeyT6X90oGFmPa4qA==
   dependencies:
     "@nestjs/axios" "^4.0.1"
     axios "^1.11.0"
     rxjs "^7.8.2"
+    uuid "^11.1.0"
 
 node-abort-controller@^3.0.1:
   version "3.1.1"

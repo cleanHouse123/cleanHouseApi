@@ -48,7 +48,7 @@
     "grammy": "^1.39.3",
     "libphonenumber-js": "^1.11.13",
     "moment-timezone": "^0.6.0",
-    "nestjs-yookassa": "^1.1.28",
+    "nestjs-yookassa": "1.1.28",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
