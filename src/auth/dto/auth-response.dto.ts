@@ -14,5 +14,6 @@ export class AuthResponseDto {
     phone?: string;
     email?: string;
     roles: string[];
+    telegramId?: string;
   };
 }

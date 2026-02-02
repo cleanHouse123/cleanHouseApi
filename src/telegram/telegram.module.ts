@@ -3,10 +3,13 @@ import { TelegramUpdate } from './telegram.update';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NestjsGrammyModule } from '@grammyjs/nestjs';
 import { TelegramService } from './telegram.service';
+import { LinkPhoneByTelegramService } from './link-phone-by-telegram.service';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
     ConfigModule,
+    UserModule,
     NestjsGrammyModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -15,6 +18,6 @@ import { TelegramService } from './telegram.service';
       inject: [ConfigService],
     }),
   ],
-  providers: [TelegramUpdate, TelegramService],
+  providers: [TelegramUpdate, TelegramService, LinkPhoneByTelegramService],
 })
 export class TelegramModule {}

@@ -46,6 +46,7 @@
     "class-validator": "^0.14.2",
     "firebase-admin": "^13.2.0",
     "grammy": "^1.39.3",
+    "libphonenumber-js": "^1.11.13",
     "moment-timezone": "^0.6.0",
     "nestjs-yookassa": "^1.1.28",
     "passport": "^0.7.0",

@@ -596,6 +596,7 @@ export class AuthService {
         phone: user.phone,
         email: user.email,
         roles: user.roles,
+        telegramId: user.telegramId,
       },
       adToken,
       deviceToken: user.deviceToken || undefined,
