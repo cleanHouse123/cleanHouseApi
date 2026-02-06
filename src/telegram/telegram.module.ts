@@ -19,5 +19,6 @@ import { UserModule } from '../user/user.module';
     }),
   ],
   providers: [TelegramUpdate, TelegramService, LinkPhoneByTelegramService],
+  exports: [TelegramService],
 })
 export class TelegramModule {}

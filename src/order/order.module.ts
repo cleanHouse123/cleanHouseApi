@@ -13,12 +13,14 @@ import { Payment } from './entities/payment.entity';
 import { Review } from './entities/review.entity';
 import { User } from '../user/entities/user.entity';
 import { UserAddress } from '../address/entities/user-address';
+import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order, Payment, Review, User, UserAddress]),
     SubscriptionModule,
     PriceModule,
+    TelegramModule,
   ],
   controllers: [OrderController, OrderPaymentPageController],
   providers: [

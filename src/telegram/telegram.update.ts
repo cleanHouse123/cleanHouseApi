@@ -49,15 +49,13 @@ export class TelegramUpdate {
     }
     const telegramId = String(ctx.from.id);
     const rawPhone = ctx.message.contact.phone_number;
+    const telegramUsername = ctx.from.username ?? undefined;
 
-    console.log(rawPhone, "rawPhonerawPhonerawPhonerawPhone");
-    
     const result = await this.linkPhoneByTelegramService.link(
       telegramId,
       rawPhone,
+      telegramUsername,
     );
-
-    console.log(result, "resultresultresultresultresultresultresultresult");
     if (result.ok) {
       await ctx.reply(MESSAGES.success);
       return;

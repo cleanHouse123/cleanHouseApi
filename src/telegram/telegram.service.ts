@@ -1,12 +1,11 @@
 import { InjectBot } from '@grammyjs/nestjs';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Bot, Context, InlineKeyboard } from 'grammy';
-import { Message } from 'grammy/types';
-
+import { Bot, Context } from 'grammy';
 
 @Injectable()
 export class TelegramService {
+  private readonly logger = new Logger(TelegramService.name);
   private readonly botToken: string;
 
   constructor(
@@ -20,5 +19,21 @@ export class TelegramService {
       );
     }
     this.botToken = botToken;
+  }
+
+  /**
+   * Отправляет текстовое сообщение в указанный чат (chat_id).
+   * chatId — числовой ID пользователя/группы или строка (например, -1001234567890 для групп).
+   */
+  async sendMessage(chatId: string, text: string): Promise<boolean> {
+    try {
+      const id = chatId.trim();
+      if (!id) return false;
+      await this.bot.api.sendMessage(id, text);
+      return true;
+    } catch (err) {
+      this.logger.warn(`[sendMessage] Failed to send to ${chatId}: ${err}`);
+      return false;
+    }
   }
 }

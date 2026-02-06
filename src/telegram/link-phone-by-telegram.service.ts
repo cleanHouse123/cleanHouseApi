@@ -15,39 +15,91 @@ export class LinkPhoneByTelegramService {
 
   constructor(private readonly userService: UserService) {}
 
-  async link(telegramId: string, rawPhoneNumber: string): Promise<LinkPhoneResult> {
+  /**
+   * Привязывает Telegram к аккаунту по контакту.
+   * 1) Если найден пользователь по telegramId — обновляем ему телефон.
+   * 2) Если не найден по telegramId, но найден по номеру телефона — сохраняем ему telegramId
+   *    (нужно для курьеров, созданных админом: они могут привязать Telegram через бота).
+   */
+  async link(
+    telegramId: string,
+    rawPhoneNumber: string,
+    telegramUsername?: string,
+  ): Promise<LinkPhoneResult> {
     let normalizedPhone: string;
     try {
       normalizedPhone = normalizePhoneToE164(rawPhoneNumber);
     } catch {
-      this.logger.warn(`[link] Invalid phone from telegramId=${telegramId}: ${rawPhoneNumber}`);
+      this.logger.warn(
+        `[link] Invalid phone from telegramId=${telegramId}: ${rawPhoneNumber}`,
+      );
       return { ok: false, reason: 'invalid_phone' };
     }
 
-    const user = await this.userService.findByTelegramId(telegramId);
-    if (!user) {
-      this.logger.warn(`[link] User not found for telegramId=${telegramId}`);
-      return { ok: false, reason: 'not_found' };
+    const userByTelegram = await this.userService.findByTelegramId(telegramId);
+    if (userByTelegram) {
+      const existingByPhone =
+        await this.userService.findByPhone(normalizedPhone);
+      if (existingByPhone && existingByPhone.id !== userByTelegram.id) {
+        this.logger.warn(
+          `[link] Phone conflict: ${normalizedPhone} already linked to another userId`,
+        );
+        return { ok: false, reason: 'conflict' };
+      }
+      try {
+        await this.userService.update(userByTelegram.id, {
+          phone: normalizedPhone,
+          isPhoneVerified: true,
+          ...(telegramUsername && {
+            telegramUsername,
+          }),
+        });
+        this.logger.log(
+          `[link] Success: telegramId=${telegramId} linked to phone=${normalizedPhone}`,
+        );
+        return { ok: true };
+      } catch (err) {
+        this.logger.error(
+          `[link] Error linking phone for telegramId=${telegramId}`,
+          err,
+        );
+        return { ok: false, reason: 'error' };
+      }
     }
 
-    const existingByPhone = await this.userService.findByPhone(normalizedPhone);
-    if (existingByPhone && existingByPhone.id !== user.id) {
-      this.logger.warn(
-        `[link] Phone conflict: ${normalizedPhone} already linked to userId=${existingByPhone.id}, telegramId=${telegramId}`,
-      );
-      return { ok: false, reason: 'conflict' };
+    const userByPhone = await this.userService.findByPhone(normalizedPhone);
+    if (userByPhone) {
+      const otherWithTelegram =
+        await this.userService.findByTelegramId(telegramId);
+      if (otherWithTelegram && otherWithTelegram.id !== userByPhone.id) {
+        this.logger.warn(
+          `[link] telegramId=${telegramId} already linked to another user`,
+        );
+        return { ok: false, reason: 'conflict' };
+      }
+      try {
+        await this.userService.update(userByPhone.id, {
+          telegramId,
+          phone: normalizedPhone,
+          isPhoneVerified: true,
+          ...(telegramUsername && { telegramUsername }),
+        });
+        this.logger.log(
+          `[link] Success: telegramId=${telegramId} saved for existing user (phone=${normalizedPhone}), userId=${userByPhone.id}`,
+        );
+        return { ok: true };
+      } catch (err) {
+        this.logger.error(
+          `[link] Error saving telegramId for userId=${userByPhone.id}`,
+          err,
+        );
+        return { ok: false, reason: 'error' };
+      }
     }
 
-    try {
-      await this.userService.update(user.id, {
-        phone: normalizedPhone,
-        isPhoneVerified: true,
-      });
-      this.logger.log(`[link] Success: telegramId=${telegramId} linked to phone=${normalizedPhone}`);
-      return { ok: true };
-    } catch (err) {
-      this.logger.error(`[link] Error linking phone for telegramId=${telegramId}`, err);
-      return { ok: false, reason: 'error' };
-    }
+    this.logger.warn(
+      `[link] No user for telegramId=${telegramId} or phone=${normalizedPhone}`,
+    );
+    return { ok: false, reason: 'not_found' };
   }
 }

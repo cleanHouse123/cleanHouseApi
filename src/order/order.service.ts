@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -34,9 +35,12 @@ import { PriceService } from '../price/price.service';
 import { FcmService } from '../fcm/fcm.service';
 import { UserAddress } from '../address/entities/user-address';
 import { AddressUsageFeature } from '../shared/types/address-features';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
@@ -51,6 +55,7 @@ export class OrderService {
     private orderPaymentService: OrderPaymentService,
     private priceService: PriceService,
     private fcmService: FcmService,
+    private telegramService: TelegramService,
     private dataSource: DataSource,
   ) {}
 
@@ -215,6 +220,11 @@ export class OrderService {
     );
     console.log('=== END DEBUG ===');
 
+    // Уведомление о новом заказе в Telegram (чат из TELEGRAM_NOTIFY_CHAT_ID и курьеры с telegramId)
+    this.notifyNewOrderTelegram(savedOrder, customer.name).catch((err) => {
+      console.error('[OrderService] Telegram notify new order failed:', err);
+    });
+
     // Флаг FIRST_ORDER_USED теперь устанавливается только после оплаты заказа
     // в методе updateStatus при переходе статуса на PAID
 
@@ -237,8 +247,11 @@ export class OrderService {
       });
       await this.paymentRepository.save(payment);
 
-      // Отправляем push-уведомления курьерам о новом оплаченном заказе
+      // Отправляем push и Telegram курьерам о новом оплаченном заказе
       await this.notifyCouriersAboutPaidOrder(savedOrder);
+      await this.notifyCouriersAboutPaidOrderTelegram(savedOrder).catch((err) => {
+        this.logger.warn('[OrderService] Telegram notify paid order failed:', err);
+      });
     } else if (orderStatus === OrderStatus.NEW) {
       // Для новых заказов создаем ссылку на оплату
       try {
@@ -1049,6 +1062,86 @@ export class OrderService {
 
     payment.status = status;
     await this.paymentRepository.save(payment);
+  }
+
+  private async notifyNewOrderTelegram(
+    order: Order,
+    customerName: string,
+  ): Promise<void> {
+    const priceRub = (Number(order.price) / 100).toFixed(2);
+    const statusText =
+      order.status === OrderStatus.PAID ? 'Оплачен' : 'Новый (ожидает оплаты)';
+    const shortId = order.id.slice(-8);
+    const scheduled =
+      order.scheduledAt != null
+        ? `\nДоставить до: ${new Date(order.scheduledAt).toLocaleString('ru-RU')}`
+        : '';
+    const text = `🆕 Новый заказ #${shortId}\nКлиент: ${customerName}\nАдрес: ${order.address}\nСумма: ${priceRub} ₽\nСтатус: ${statusText}${scheduled}`;
+
+    const chatIds: string[] = [];
+
+    const couriers = await this.userRepository.find({
+      where: {
+        roles: ArrayContains([UserRole.CURRIER]),
+        telegramId: Not(IsNull()),
+        deletedAt: IsNull(),
+      },
+    });
+    couriers.forEach((c) => {
+      if (c.telegramId?.trim()) chatIds.push(c.telegramId!.trim());
+    });
+
+    const uniqueChatIds = [...new Set(chatIds)];
+    if (uniqueChatIds.length === 0) {
+      this.logger.debug(
+        '[Telegram] Нет получателей для уведомления о новом заказе ( курьеров с telegramId)',
+      );
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      uniqueChatIds.map((chatId) =>
+        this.telegramService.sendMessage(chatId, text),
+      ),
+    );
+    const ok = results.filter(
+      (r) => r.status === 'fulfilled' && r.value === true,
+    ).length;
+    this.logger.log(
+      `[Telegram] Новый заказ #${shortId}: отправлено ${ok}/${uniqueChatIds.length} (курьеров с telegramId: ${couriers.length})`,
+    );
+  }
+
+  /**
+   * Отправляет в Telegram уведомление курьерам с telegramId о том, что заказ оплачен и готов к работе.
+   * Вызывается при создании оплаченного заказа (подписка) и из webhook при первой оплате.
+   */
+  async notifyCouriersAboutPaidOrderTelegram(order: Order): Promise<void> {
+    const couriers = await this.userRepository.find({
+      where: {
+        roles: ArrayContains([UserRole.CURRIER]),
+        telegramId: Not(IsNull()),
+        deletedAt: IsNull(),
+      },
+    });
+    const chatIds = couriers
+      .map((c) => c.telegramId?.trim())
+      .filter((id): id is string => !!id);
+    if (chatIds.length === 0) return;
+
+    const priceRub = (Number(order.price) / 100).toFixed(2);
+    const shortId = order.id.slice(-8);
+    const text = `✅ Оплаченный заказ #${shortId} готов к работе\nАдрес: ${order.address}\nСумма: ${priceRub} ₽`;
+
+    const results = await Promise.allSettled(
+      chatIds.map((chatId) => this.telegramService.sendMessage(chatId, text)),
+    );
+    const ok = results.filter(
+      (r) => r.status === 'fulfilled' && r.value === true,
+    ).length;
+    this.logger.log(
+      `[Telegram] Оплаченный заказ #${shortId}: отправлено курьерам ${ok}/${chatIds.length}`,
+    );
   }
 
   /**

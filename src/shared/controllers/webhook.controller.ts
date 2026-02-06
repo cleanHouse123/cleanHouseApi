@@ -391,10 +391,9 @@ export class WebhookController {
           payment.orderId,
         );
 
-        // Отправляем push-уведомления всем курьерам ТОЛЬКО если заказ был оплачен впервые
+        // Отправляем push и Telegram курьерам ТОЛЬКО если заказ был оплачен впервые
         if (!wasAlreadyPaid) {
           try {
-            // Уведомляем всех курьеров о оплаченном заказе (только при первой оплате)
             await this.notifyCouriersAboutPaidOrder(order);
             this.logger.log(
               `Push-уведомления отправлены курьерам о первой оплате заказа ${order.id}`,
@@ -403,7 +402,13 @@ export class WebhookController {
             this.logger.error(
               `Ошибка отправки push-уведомлений курьерам: ${error.message}`,
             );
-            // Не пробрасываем ошибку, чтобы не блокировать обработку webhook
+          }
+          try {
+            await this.orderService.notifyCouriersAboutPaidOrderTelegram(order);
+          } catch (error) {
+            this.logger.warn(
+              `Ошибка отправки Telegram курьерам о оплаченном заказе: ${error?.message ?? error}`,
+            );
           }
         } else {
           this.logger.log(

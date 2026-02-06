@@ -197,6 +197,21 @@ export class UserService {
       updateUserDto.isEmailVerified = false;
     }
 
+    // Проверяем уникальность telegramId при обновлении (для привязки Telegram курьерам и т.д.)
+    if (
+      updateUserDto.telegramId !== undefined &&
+      updateUserDto.telegramId !== user.telegramId
+    ) {
+      const existingByTelegramId = await this.userRepository.findOne({
+        where: { telegramId: updateUserDto.telegramId, deletedAt: IsNull() },
+      });
+      if (existingByTelegramId && existingByTelegramId.id !== id) {
+        throw new ConflictException(
+          'Этот Telegram уже привязан к другому аккаунту',
+        );
+      }
+    }
+
     return this.userRepository.save({ ...user, ...updateUserDto });
   }
 
