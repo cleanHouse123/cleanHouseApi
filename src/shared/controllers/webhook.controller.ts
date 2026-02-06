@@ -403,13 +403,6 @@ export class WebhookController {
               `Ошибка отправки push-уведомлений курьерам: ${error.message}`,
             );
           }
-          try {
-            await this.orderService.notifyCouriersAboutPaidOrderTelegram(order);
-          } catch (error) {
-            this.logger.warn(
-              `Ошибка отправки Telegram курьерам о оплаченном заказе: ${error?.message ?? error}`,
-            );
-          }
         } else {
           this.logger.log(
             `Заказ ${payment.orderId} уже был оплачен ранее, пропускаем отправку push-уведомлений курьерам`,
