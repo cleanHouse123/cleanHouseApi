@@ -7,7 +7,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
-  FindOptionsWhere,
   DataSource,
   In,
   IsNull,
@@ -36,6 +35,7 @@ import { FcmService } from '../fcm/fcm.service';
 import { UserAddress } from '../address/entities/user-address';
 import { AddressUsageFeature } from '../shared/types/address-features';
 import { TelegramService } from '../telegram/telegram.service';
+import { TelegramNotifyGroupService } from '../telegram/telegram-notify-group.service';
 
 @Injectable()
 export class OrderService {
@@ -56,6 +56,7 @@ export class OrderService {
     private priceService: PriceService,
     private fcmService: FcmService,
     private telegramService: TelegramService,
+    private telegramNotifyGroupService: TelegramNotifyGroupService,
     private dataSource: DataSource,
   ) {}
 
@@ -249,9 +250,6 @@ export class OrderService {
 
       // Отправляем push и Telegram курьерам о новом оплаченном заказе
       await this.notifyCouriersAboutPaidOrder(savedOrder);
-      await this.notifyCouriersAboutPaidOrderTelegram(savedOrder).catch((err) => {
-        this.logger.warn('[OrderService] Telegram notify paid order failed:', err);
-      });
     } else if (orderStatus === OrderStatus.NEW) {
       // Для новых заказов создаем ссылку на оплату
       try {
@@ -1080,21 +1078,25 @@ export class OrderService {
 
     const chatIds: string[] = [];
 
-    const couriers = await this.userRepository.find({
-      where: {
-        roles: ArrayContains([UserRole.CURRIER]),
-        telegramId: Not(IsNull()),
-        deletedAt: IsNull(),
-      },
-    });
-    couriers.forEach((c) => {
-      if (c.telegramId?.trim()) chatIds.push(c.telegramId!.trim());
-    });
+    // Группы, в которые добавлен бот — рассылка о новых заказах
+    const groupChatIds = await this.telegramNotifyGroupService.getActiveChatIds();
+    chatIds.push(...groupChatIds);
+
+    // const couriers = await this.userRepository.find({
+    //   where: {
+    //     roles: ArrayContains([UserRole.CURRIER]),
+    //     telegramId: Not(IsNull()),
+    //     deletedAt: IsNull(),
+    //   },
+    // });
+    // couriers.forEach((c) => {
+    //   if (c.telegramId?.trim()) chatIds.push(c.telegramId!.trim());
+    // });
 
     const uniqueChatIds = [...new Set(chatIds)];
     if (uniqueChatIds.length === 0) {
       this.logger.debug(
-        '[Telegram] Нет получателей для уведомления о новом заказе ( курьеров с telegramId)',
+        '[Telegram] Нет получателей для уведомления о новом заказе (группы и курьеры с telegramId)',
       );
       return;
     }
@@ -1108,39 +1110,7 @@ export class OrderService {
       (r) => r.status === 'fulfilled' && r.value === true,
     ).length;
     this.logger.log(
-      `[Telegram] Новый заказ #${shortId}: отправлено ${ok}/${uniqueChatIds.length} (курьеров с telegramId: ${couriers.length})`,
-    );
-  }
-
-  /**
-   * Отправляет в Telegram уведомление курьерам с telegramId о том, что заказ оплачен и готов к работе.
-   * Вызывается при создании оплаченного заказа (подписка) и из webhook при первой оплате.
-   */
-  async notifyCouriersAboutPaidOrderTelegram(order: Order): Promise<void> {
-    const couriers = await this.userRepository.find({
-      where: {
-        roles: ArrayContains([UserRole.CURRIER]),
-        telegramId: Not(IsNull()),
-        deletedAt: IsNull(),
-      },
-    });
-    const chatIds = couriers
-      .map((c) => c.telegramId?.trim())
-      .filter((id): id is string => !!id);
-    if (chatIds.length === 0) return;
-
-    const priceRub = (Number(order.price) / 100).toFixed(2);
-    const shortId = order.id.slice(-8);
-    const text = `✅ Оплаченный заказ #${shortId} готов к работе\nАдрес: ${order.address}\nСумма: ${priceRub} ₽`;
-
-    const results = await Promise.allSettled(
-      chatIds.map((chatId) => this.telegramService.sendMessage(chatId, text)),
-    );
-    const ok = results.filter(
-      (r) => r.status === 'fulfilled' && r.value === true,
-    ).length;
-    this.logger.log(
-      `[Telegram] Оплаченный заказ #${shortId}: отправлено курьерам ${ok}/${chatIds.length}`,
+      `[Telegram] Новый заказ #${shortId}: отправлено ${ok}/${uniqueChatIds.length} (групп: ${groupChatIds.length})`,
     );
   }
 

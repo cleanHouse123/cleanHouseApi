@@ -35,6 +35,7 @@ import { WorkTime } from './work-time/entities/work-time.entity';
 import { ReferralFreeSubscriptionUsage } from './subscription/entities/referral-free-subscription-usage.entity';
 import { FcmModule } from './fcm/fcm.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.entity';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { TelegramModule } from './telegram/telegram.module';
             UserAddress,
             WorkTime,
             ReferralFreeSubscriptionUsage,
+            TelegramNotifyGroup,
           ],
         };
       },

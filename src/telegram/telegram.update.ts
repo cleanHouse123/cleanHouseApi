@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Context, Keyboard } from 'grammy';
 import { TelegramService } from './telegram.service';
 import { LinkPhoneByTelegramService } from './link-phone-by-telegram.service';
+import { TelegramNotifyGroupService } from './telegram-notify-group.service';
 
 const MESSAGES = {
   success:
@@ -18,6 +19,10 @@ const MESSAGES = {
     'Произошла ошибка. Попробуйте позже или поделитесь контактом снова.',
 } as const;
 
+const BOT_IN_STATUSES = ['member', 'administrator', 'restricted'] as const;
+const BOT_OUT_STATUSES = ['left', 'kicked'] as const;
+const GROUP_CHAT_TYPES = ['group', 'supergroup'] as const;
+
 @Update()
 @Injectable()
 export class TelegramUpdate {
@@ -25,6 +30,7 @@ export class TelegramUpdate {
     private readonly telegramService: TelegramService,
     private readonly configService: ConfigService,
     private readonly linkPhoneByTelegramService: LinkPhoneByTelegramService,
+    private readonly telegramNotifyGroupService: TelegramNotifyGroupService,
   ) {}
 
   private getPhoneNumberButton(ctx: Context) {
@@ -92,5 +98,46 @@ export class TelegramUpdate {
 
     // Обычная обработка текста (эхо)
     await ctx.reply(`пока у меня нет других функций кроме поделиться телефоном`);
+  }
+
+  /**
+   * Когда бота добавляют в группу — сохраняем чат для рассылки о новых заказах.
+   * Когда бота удаляют из группы — отключаем рассылку в этот чат.
+   */
+  @On('my_chat_member')
+  async onMyChatMember(ctx: Context) {
+    const update = ctx.update?.my_chat_member;
+    const chat = update?.chat;
+    const oldStatus = update?.old_chat_member?.status;
+    const newStatus = update?.new_chat_member?.status;
+    if (!chat || oldStatus == null || newStatus == null) return;
+
+    const isGroup = GROUP_CHAT_TYPES.some((t) => t === chat.type);
+    if (!isGroup) return;
+
+    const chatId = String(chat.id);
+    const added =
+      BOT_OUT_STATUSES.includes(oldStatus as any) &&
+      BOT_IN_STATUSES.includes(newStatus as any);
+    const removed =
+      BOT_IN_STATUSES.includes(oldStatus as any) &&
+      BOT_OUT_STATUSES.includes(newStatus as any);
+
+    if (added) {
+      await this.telegramNotifyGroupService.addGroup(
+        chatId,
+        'title' in chat ? (chat.title as string) : undefined,
+      );
+      try {
+        await ctx.api.sendMessage(
+          chat.id,
+          '✅ Готово! В эту группу будут приходить уведомления о новых заказах.',
+        );
+      } catch {
+        // игнорируем ошибку отправки приветствия
+      }
+    } else if (removed) {
+      await this.telegramNotifyGroupService.deactivateGroup(chatId);
+    }
   }
 }
