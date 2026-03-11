@@ -4,52 +4,27 @@ import type { YookassaOptions } from 'nestjs-yookassa';
 export function getYookassaConfig(
   configService: ConfigService,
 ): YookassaOptions {
-  const shopId = configService.get<string>('YOOKASSA_SHOP_ID');
-  const apiKey = configService.get<string>('YOOKASSA_SECRET_KEY');
+  const useTestMode =
+    configService.get<string>('YOOKASSA_USE_TEST_MODE') === 'true';
+  const shopId = useTestMode
+    ? configService.get<string>('YOOKASSA_SHOP_ID_TEST')
+    : configService.get<string>('YOOKASSA_SHOP_ID');
+  const apiKey = useTestMode
+    ? configService.get<string>('YOOKASSA_SECRET_KEY_TEST')
+    : configService.get<string>('YOOKASSA_SECRET_KEY');
 
-  // Детальное логирование для отладки
-  console.log('=== YooKassa Configuration Debug ===');
-  console.log('NODE_ENV:', process.env.NODE_ENV);
-  console.log(
-    'YOOKASSA_SHOP_ID:',
-    shopId ? `${shopId} (length: ${shopId.length})` : 'NOT SET',
-  );
-  console.log(
-    'YOOKASSA_SECRET_KEY:',
-    apiKey
-      ? `${apiKey.substring(0, 10)}... (length: ${apiKey.length})`
-      : 'NOT SET',
-  );
-  console.log(
-    'All env vars starting with YOOKASSA:',
-    Object.keys(process.env)
-      .filter((key) => key.startsWith('YOOKASSA'))
-      .reduce(
-        (obj, key) => {
-          obj[key] = process.env[key]?.substring(0, 10) + '...';
-          return obj;
-        },
-        {} as Record<string, string>,
-      ),
-  );
-
+  const credSource = useTestMode ? 'TEST' : 'LIVE';
   if (!shopId || !apiKey) {
-    console.error('YooKassa credentials missing!');
     throw new Error(
-      'YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY должны быть установлены',
+      `YOOKASSA credentials (${credSource}) missing: shopId and secretKey must be set`,
     );
   }
 
-  // Проверяем формат shopId
   if (!/^\d+$/.test(shopId)) {
-    console.error('Invalid shopId format:', shopId);
     throw new Error(
-      `YOOKASSA_SHOP_ID должен содержать только цифры, получен: ${shopId}`,
+      `YOOKASSA_SHOP_ID must contain only digits, got: ${shopId}`,
     );
   }
-
-  console.log('YooKassa config created successfully');
-  console.log('=====================================');
 
   return {
     shopId,
