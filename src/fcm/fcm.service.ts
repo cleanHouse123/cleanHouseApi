@@ -180,7 +180,6 @@ export class FcmService {
     data?: Record<string, string>,
   ) {
     try {
-      // Находим пользователя и его deviceToken
       const user = await this.userRepository.findOne({
         where: { id: userId },
         select: ['id', 'deviceToken', 'name'],
@@ -193,10 +192,7 @@ export class FcmService {
         return { success: false, error: 'No device token' };
       }
 
-      // Преобразуем data в JSON строку для payload
       const payload = data ? JSON.stringify(data) : undefined;
-
-      // Отправляем уведомление
       return await this.sendNotificationToDevice(
         user.deviceToken,
         title,

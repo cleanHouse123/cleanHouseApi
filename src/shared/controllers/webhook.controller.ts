@@ -364,16 +364,13 @@ export class WebhookController {
           return { message: 'Заказ не найден', type: 'order' };
         }
 
-        // Проверяем, был ли заказ уже оплачен
-        const wasAlreadyPaid = order.status === OrderStatus.PAID;
-
+        let orderJustPaid = false;
         try {
-          // Обновляем статус заказа на "оплачен" (только если еще не оплачен)
           await this.orderService.updateStatus(payment.orderId, {
             status: OrderStatus.PAID,
           });
+          orderJustPaid = true;
         } catch (error) {
-          // Игнорируем ошибку, если заказ уже оплачен
           if (
             error.message?.includes('Невозможно изменить статус с paid на paid')
           ) {
@@ -385,15 +382,16 @@ export class WebhookController {
           }
         }
 
-        // Отправляем уведомление через WebSocket
         this.orderPaymentGateway.notifyPaymentSuccess(
           payment.id,
           payment.orderId,
         );
 
-        // Отправляем push и Telegram курьерам ТОЛЬКО если заказ был оплачен впервые
-        if (!wasAlreadyPaid) {
+        if (orderJustPaid) {
           try {
+            this.logger.log(
+              `Отправляем push курьерам о новой оплате заказа ${order.id}`,
+            );
             await this.notifyCouriersAboutPaidOrder(order);
             this.logger.log(
               `Push-уведомления отправлены курьерам о первой оплате заказа ${order.id}`,
@@ -507,21 +505,34 @@ export class WebhookController {
         `[WebhookController] Notification payload: ${payload}`,
       );
 
-      const validTokens = couriers
-        .map((courier) => courier.deviceToken)
-        .filter((token): token is string => !!token);
+      const validCouriers = couriers.filter(
+        (c) => c.deviceToken && c.deviceToken.trim(),
+      );
 
-      if (validTokens.length === 0) {
+      if (validCouriers.length === 0) {
         this.logger.log(
           '[WebhookController] No valid device tokens found for couriers',
         );
         return;
       }
 
-      // Отправляем уведомления всем курьерам
+      validCouriers.forEach((c) => {
+        const tokenPreview = c.deviceToken
+          ? `${c.deviceToken.substring(0, 20)}...${c.deviceToken.slice(-10)}`
+          : 'отсутствует';
+        this.logger.log(
+          `[WebhookController] Push заказ ${order.id} оплачен -> курьер ${c.name} (${c.phone || c.id}), token: ${tokenPreview}`,
+        );
+      });
+
       const results = await Promise.allSettled(
-        validTokens.map((token) =>
-          this.fcmService.sendNotificationToDevice(token, title, body, payload),
+        validCouriers.map((c) =>
+          this.fcmService.sendNotificationToDevice(
+            c.deviceToken!,
+            title,
+            body,
+            payload,
+          ),
         ),
       );
 

@@ -874,6 +874,30 @@ export class OrderService {
 
     await this.orderRepository.save(order);
 
+    // Push курьеру о взятии заказа
+    try {
+      const tokenPreview = courier.deviceToken
+        ? `${courier.deviceToken.substring(0, 20)}...${courier.deviceToken.slice(-10)}`
+        : 'отсутствует';
+      this.logger.log(
+        `[takeOrder] Отправляем push курьеру ${courier.name} (${courier.phone || courierId}), заказ ${orderId}, token: ${tokenPreview}`,
+      );
+      const result = await this.fcmService.sendToUser(
+        courierId,
+        'Заказ назначен',
+        `Вы взяли заказ #${orderId.slice(-8)}`,
+        { orderId, type: 'order_assigned' },
+      );
+      this.logger.log(
+        `[takeOrder] Push курьеру ${courier.name}: ${result.success ? 'отправлен' : result.error}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[takeOrder] Ошибка отправки push курьеру ${courierId}:`,
+        error,
+      );
+    }
+
     return this.findOne(orderId);
   }
 
@@ -927,19 +951,40 @@ export class OrderService {
 
     // Отправляем уведомления
     if (oldCourierId) {
-      await this.fcmService.sendToUser(
+      const oldCourier = await this.userRepository.findOne({
+        where: { id: oldCourierId },
+      });
+      const oldTokenPreview = oldCourier?.deviceToken
+        ? `${oldCourier.deviceToken.substring(0, 20)}...${oldCourier.deviceToken.slice(-10)}`
+        : 'отсутствует';
+      this.logger.log(
+        `[reassignOrder] Push старому курьеру ${oldCourier?.name || oldCourierId} (заказ переназначен), token: ${oldTokenPreview}`,
+      );
+      const oldResult = await this.fcmService.sendToUser(
         oldCourierId,
         'Заказ переназначен',
         `Заказ #${order.id.slice(-8)} был переназначен другому курьеру`,
         { orderId: order.id, type: 'order_reassigned' },
       );
+      this.logger.log(
+        `[reassignOrder] Push старому курьеру: ${oldResult.success ? 'отправлен' : oldResult.error}`,
+      );
     }
 
-    await this.fcmService.sendToUser(
+    const newTokenPreview = newCourier.deviceToken
+      ? `${newCourier.deviceToken.substring(0, 20)}...${newCourier.deviceToken.slice(-10)}`
+      : 'отсутствует';
+    this.logger.log(
+      `[reassignOrder] Push новому курьеру ${newCourier.name} (${newCourier.phone || newCourierId}), заказ ${order.id}, token: ${newTokenPreview}`,
+    );
+    const newResult = await this.fcmService.sendToUser(
       newCourierId,
       'Новый заказ назначен',
       `Вам назначен заказ #${order.id.slice(-8)}`,
       { orderId: order.id, type: 'order_assigned' },
+    );
+    this.logger.log(
+      `[reassignOrder] Push новому курьеру ${newCourier.name}: ${newResult.success ? 'отправлен' : newResult.error}`,
     );
 
     return this.findOne(orderId);
