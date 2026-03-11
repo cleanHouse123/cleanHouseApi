@@ -215,11 +215,16 @@ export class AuthService {
   }
 
   private isTestPhone(phone: string): boolean {
+    const raw =
+      this.configService.get<string>('TEST_PHONES') ||
+      process.env.TEST_PHONES ||
+      '';
+    if (!raw.trim()) return false;
     const formatted = this.formatPhoneNumber(phone);
-    const testPhones = (process.env.TEST_PHONES || '')
+    const testPhones = raw
       .split(',')
       .map((p) => this.formatPhoneNumber(p.trim()))
-      .filter(Boolean);
+      .filter((p) => p.length > 5 && p.startsWith('+'));
     return testPhones.includes(formatted);
   }
 

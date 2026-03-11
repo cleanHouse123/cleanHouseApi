@@ -40,6 +40,7 @@ services:
       - YOOKASSA_SECRET_KEY=test_qXKh3h-nMuuiZuKqowskhCczKnwEDCxlkix8Eo1wEJQ
       - BASE_URL=http://localhost:4000
       - FRONTEND_URL=http://localhost:5173
+      - TEST_PHONES=+79999999991,+79999999992
     restart: unless-stopped
   dev-db:
     image: postgres:17
