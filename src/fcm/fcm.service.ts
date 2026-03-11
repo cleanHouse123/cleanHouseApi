@@ -193,12 +193,22 @@ export class FcmService {
       }
 
       const payload = data ? JSON.stringify(data) : undefined;
-      return await this.sendNotificationToDevice(
+      const result = await this.sendNotificationToDevice(
         user.deviceToken,
         title,
         body,
         payload,
       );
+      if (result.success) {
+        console.log(
+          `[sendToUser] ✅ Push отправлен пользователю ${userId} (${user.name}), messageId: ${result.messageId}`,
+        );
+      } else {
+        console.warn(
+          `[sendToUser] ❌ Push не отправлен пользователю ${userId}: ${result.error}`,
+        );
+      }
+      return result;
     } catch (error) {
       console.error(
         `[sendToUser] Error sending notification to user ${userId}:`,

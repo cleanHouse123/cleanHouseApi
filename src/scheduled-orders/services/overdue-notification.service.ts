@@ -68,7 +68,7 @@ export class OverdueNotificationService {
         // Отправляем уведомление курьеру
         if (order.currierId) {
           try {
-            await this.fcmService.sendToUser(
+            const result = await this.fcmService.sendToUser(
               order.currierId,
               '⚠️ Просроченный заказ',
               `Заказ #${order.id.slice(-8)} просрочен на ${overdueMinutes} мин`,
@@ -78,13 +78,19 @@ export class OverdueNotificationService {
                 overdueMinutes: overdueMinutes.toString(),
               },
             );
-
-            this.logger.log(
-              `Уведомление отправлено курьеру ${order.currierId} о просроченном заказе ${order.id}`,
-            );
-          } catch (error) {
+            const courierName = order.currier?.name || order.currierId;
+            if (result.success) {
+              this.logger.log(
+                `[OverdueNotification] ✅ Push ОТПРАВЛЕН: курьер ${courierName}, заказ ${order.id} (просрочен ${overdueMinutes} мин)`,
+              );
+            } else {
+              this.logger.warn(
+                `[OverdueNotification] ❌ Push НЕ отправлен: курьер ${courierName}, заказ ${order.id}: ${result.error}`,
+              );
+            }
+          } catch (error: any) {
             this.logger.error(
-              `Ошибка отправки уведомления курьеру: ${error.message}`,
+              `[OverdueNotification] Ошибка отправки push курьеру ${order.currierId}: ${error?.message}`,
             );
           }
         }

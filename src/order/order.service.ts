@@ -248,7 +248,10 @@ export class OrderService {
       });
       await this.paymentRepository.save(payment);
 
-      // Отправляем push и Telegram курьерам о новом оплаченном заказе
+      // Отправляем push и Telegram курьерам о новом оплаченном заказе (подписка)
+      this.logger.log(
+        `[create] Отправляем push курьерам о новом заказе ${savedOrder.id} (оплачен подпиской)`,
+      );
       await this.notifyCouriersAboutPaidOrder(savedOrder);
     } else if (orderStatus === OrderStatus.NEW) {
       // Для новых заказов создаем ссылку на оплату
@@ -888,9 +891,15 @@ export class OrderService {
         `Вы взяли заказ #${orderId.slice(-8)}`,
         { orderId, type: 'order_assigned' },
       );
-      this.logger.log(
-        `[takeOrder] Push курьеру ${courier.name}: ${result.success ? 'отправлен' : result.error}`,
-      );
+      if (result.success) {
+        this.logger.log(
+          `[takeOrder] ✅ Push ОТПРАВЛЕН: курьер ${courier.name} (${courier.phone || courierId}), заказ ${orderId}`,
+        );
+      } else {
+        this.logger.warn(
+          `[takeOrder] ❌ Push НЕ отправлен: курьер ${courier.name}: ${result.error}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `[takeOrder] Ошибка отправки push курьеру ${courierId}:`,
@@ -966,9 +975,15 @@ export class OrderService {
         `Заказ #${order.id.slice(-8)} был переназначен другому курьеру`,
         { orderId: order.id, type: 'order_reassigned' },
       );
-      this.logger.log(
-        `[reassignOrder] Push старому курьеру: ${oldResult.success ? 'отправлен' : oldResult.error}`,
-      );
+      if (oldResult.success) {
+        this.logger.log(
+          `[reassignOrder] ✅ Push ОТПРАВЛЕН старому курьеру ${oldCourier?.name || oldCourierId} (заказ переназначен)`,
+        );
+      } else {
+        this.logger.warn(
+          `[reassignOrder] ❌ Push НЕ отправлен старому курьеру: ${oldResult.error}`,
+        );
+      }
     }
 
     const newTokenPreview = newCourier.deviceToken
@@ -983,9 +998,15 @@ export class OrderService {
       `Вам назначен заказ #${order.id.slice(-8)}`,
       { orderId: order.id, type: 'order_assigned' },
     );
-    this.logger.log(
-      `[reassignOrder] Push новому курьеру ${newCourier.name}: ${newResult.success ? 'отправлен' : newResult.error}`,
-    );
+    if (newResult.success) {
+      this.logger.log(
+        `[reassignOrder] ✅ Push ОТПРАВЛЕН новому курьеру ${newCourier.name} (${newCourier.phone || newCourierId}), заказ ${order.id}`,
+      );
+    } else {
+      this.logger.warn(
+        `[reassignOrder] ❌ Push НЕ отправлен новому курьеру ${newCourier.name}: ${newResult.error}`,
+      );
+    }
 
     return this.findOne(orderId);
   }
@@ -1187,29 +1208,52 @@ export class OrderService {
         type: 'order_paid_ready',
       });
 
-      const validTokens = couriers
-        .map((courier) => courier.deviceToken)
-        .filter((token): token is string => !!token);
+      const validCouriers = couriers.filter(
+        (c) => c.deviceToken && c.deviceToken.trim(),
+      );
 
-      if (validTokens.length === 0) {
-        console.log('[OrderService] No valid device tokens found for couriers');
+      if (validCouriers.length === 0) {
+        this.logger.log(
+          '[OrderService] No valid device tokens found for couriers',
+        );
         return;
       }
 
-      // Отправляем уведомления всем курьерам
       const results = await Promise.allSettled(
-        validTokens.map((token) =>
-          this.fcmService.sendNotificationToDevice(token, title, body, payload),
+        validCouriers.map((c) =>
+          this.fcmService.sendNotificationToDevice(
+            c.deviceToken!,
+            title,
+            body,
+            payload,
+          ),
         ),
       );
+
+      validCouriers.forEach((c, i) => {
+        const r = results[i];
+        const success =
+          r?.status === 'fulfilled' && (r as PromiseFulfilledResult<{ success: boolean }>).value?.success;
+        if (success) {
+          this.logger.log(
+            `[OrderService] ✅ Push ОТПРАВЛЕН: заказ ${order.id} (при создании) -> курьер ${c.name} (${c.phone || c.id})`,
+          );
+        } else {
+          const err =
+            r?.status === 'rejected'
+              ? (r as PromiseRejectedResult).reason?.message
+              : (r as PromiseFulfilledResult<{ error?: string }>)?.value?.error;
+          this.logger.warn(
+            `[OrderService] ❌ Push НЕ отправлен: заказ ${order.id} -> курьер ${c.name}: ${err || 'unknown'}`,
+          );
+        }
+      });
 
       const successCount = results.filter(
         (r) => r.status === 'fulfilled' && r.value.success,
       ).length;
-      const failureCount = results.length - successCount;
-
-      console.log(
-        `[OrderService] Push notifications sent to couriers about paid order ${order.id}: ${successCount} success, ${failureCount} failed`,
+      this.logger.log(
+        `[OrderService] Итого push по заказу ${order.id} (при создании): ${successCount} отправлено`,
       );
     } catch (error) {
       console.error(

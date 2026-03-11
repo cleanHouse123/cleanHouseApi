@@ -370,12 +370,17 @@ export class WebhookController {
             status: OrderStatus.PAID,
           });
           orderJustPaid = true;
-        } catch (error) {
-          if (
-            error.message?.includes('Невозможно изменить статус с paid на paid')
-          ) {
+        } catch (error: any) {
+          const msg = error?.response?.message || error?.message || '';
+          const alreadyProcessed =
+            msg.includes('Невозможно изменить статус с paid на paid') ||
+            msg.includes('Невозможно изменить статус с assigned на paid') ||
+            msg.includes('Невозможно изменить статус с in_progress на paid') ||
+            msg.includes('Невозможно изменить статус с done на paid') ||
+            msg.includes('Невозможно изменить статус с canceled на paid');
+          if (alreadyProcessed) {
             this.logger.log(
-              `Заказ ${payment.orderId} уже оплачен, пропускаем обновление статуса`,
+              `Заказ ${payment.orderId} уже обработан (текущий статус ${order.status}), пропускаем обновление`,
             );
           } else {
             throw error;
@@ -536,13 +541,32 @@ export class WebhookController {
         ),
       );
 
+      validCouriers.forEach((c, i) => {
+        const r = results[i];
+        const success =
+          r?.status === 'fulfilled' && (r as PromiseFulfilledResult<any>).value?.success;
+        if (success) {
+          this.logger.log(
+            `[WebhookController] ✅ Push ОТПРАВЛЕН: заказ ${order.id} оплачен -> курьер ${c.name} (${c.phone || c.id}), messageId: ${(r as PromiseFulfilledResult<any>).value?.messageId}`,
+          );
+        } else {
+          const err =
+            r?.status === 'rejected'
+              ? (r as PromiseRejectedResult).reason?.message
+              : (r as PromiseFulfilledResult<any>)?.value?.error;
+          this.logger.warn(
+            `[WebhookController] ❌ Push НЕ отправлен: заказ ${order.id} -> курьер ${c.name}: ${err || 'unknown'}`,
+          );
+        }
+      });
+
       const successCount = results.filter(
         (r) => r.status === 'fulfilled' && r.value.success,
       ).length;
       const failureCount = results.length - successCount;
 
       this.logger.log(
-        `[WebhookController] Push notifications sent to couriers about paid order ${order.id}: ${successCount} success, ${failureCount} failed`,
+        `[WebhookController] Итого push по заказу ${order.id}: ${successCount} отправлено, ${failureCount} ошибок`,
       );
     } catch (error) {
       this.logger.error(
