@@ -164,8 +164,8 @@ export class AuthService {
     channel: 'whatsapp' | 'sms' | 'auto' = 'auto',
   ): Promise<{ message: string; code?: string; channel?: string }> {
     try {
-      const code = this.generateVerificationCode();
       const forceDev = this.isTestPhone(phone) || isDev;
+      const code = forceDev ? '123456' : this.generateVerificationCode();
 
       if (forceDev) {
         const formattedPhone = this.formatPhoneNumber(phone);
