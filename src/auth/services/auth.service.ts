@@ -61,11 +61,12 @@ export class AuthService {
     let user = await this.userService.findByPhone(formattedPhone);
 
     if (!user) {
+      const roles = formattedPhone === '+79999999992' ? [UserRole.CURRIER] : [UserRole.CUSTOMER];
       const createUserData: CreateUserDto = {
         phone: formattedPhone,
         name: `User_${formattedPhone.slice(-4)}`,
         isPhoneVerified: true,
-        roles: [UserRole.CUSTOMER],
+        roles,
       };
 
       if (adToken) {
@@ -163,16 +164,17 @@ export class AuthService {
     channel: 'whatsapp' | 'sms' | 'auto' = 'auto',
   ): Promise<{ message: string; code?: string; channel?: string }> {
     try {
-      // Генерируем код верификации
       const code = this.generateVerificationCode();
+      const forceDev = this.isTestPhone(phone) || isDev;
 
-      if (isDev) {
-        // В режиме разработки сохраняем код и возвращаем его
+      if (forceDev) {
+        const formattedPhone = this.formatPhoneNumber(phone);
+        console.log('[DEV] SMS код для', formattedPhone, ':', code);
         await this.saveVerificationCode(phone, code);
 
         return {
           message: 'Код верификации для разработки (сообщение не отправлено)',
-          code: code, // Возвращаем код для разработки
+          code,
         };
       }
 
@@ -210,6 +212,15 @@ export class AuthService {
   async getVerificationCode(phone: string): Promise<{ code: string } | null> {
     // В моковой версии не возвращаем код из базы для безопасности
     return null;
+  }
+
+  private isTestPhone(phone: string): boolean {
+    const formatted = this.formatPhoneNumber(phone);
+    const testPhones = (process.env.TEST_PHONES || '')
+      .split(',')
+      .map((p) => this.formatPhoneNumber(p.trim()))
+      .filter(Boolean);
+    return testPhones.includes(formatted);
   }
 
   private formatPhoneNumber(phoneNumber: string): string {
