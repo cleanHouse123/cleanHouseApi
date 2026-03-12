@@ -395,21 +395,28 @@ export class WebhookController {
         if (orderJustPaid) {
           try {
             this.logger.log(
-              `Отправляем push курьерам о новой оплате заказа ${order.id}`,
+              `[WebhookController] Отправляем push курьерам о новой оплате заказа ${order.id}`,
             );
             await this.notifyCouriersAboutPaidOrder(order);
             this.logger.log(
-              `Push-уведомления отправлены курьерам о первой оплате заказа ${order.id}`,
+              `[WebhookController] Push-уведомления отправлены курьерам о первой оплате заказа ${order.id}`,
             );
           } catch (error) {
             this.logger.error(
-              `Ошибка отправки push-уведомлений курьерам: ${error.message}`,
+              `[WebhookController] Ошибка отправки push курьерам: ${error.message}`,
             );
           }
         } else {
           this.logger.log(
-            `Заказ ${payment.orderId} уже был оплачен ранее, пропускаем отправку push-уведомлений курьерам`,
+            `[WebhookController] Заказ ${payment.orderId} уже в статусе ${order.status}, отправляем push как fallback (запоздавший webhook)`,
           );
+          try {
+            await this.notifyCouriersAboutPaidOrder(order);
+          } catch (error) {
+            this.logger.error(
+              `[WebhookController] Ошибка fallback push курьерам: ${error.message}`,
+            );
+          }
         }
       } else if (payment && (payment.status === 'failed' || payment.status === PaymentStatus.FAILED)) {
         this.logger.log(`❌ Платеж ${payment.id} не прошел, статус: ${payment.status}`);
@@ -474,23 +481,32 @@ export class WebhookController {
   }
 
   /**
-   * Отправляет push-уведомления всем курьерам о том, что заказ оплачен и готов к работе
+   * Отправляет push-уведомления курьерам о том, что заказ оплачен.
+   * Если order.currierId задан — только назначенному курьеру (fallback для запоздавшего webhook).
    */
   private async notifyCouriersAboutPaidOrder(order: Order): Promise<void> {
     try {
-      const couriers = await this.userRepository.find({
-        where: {
-          roles: ArrayContains([UserRole.CURRIER]),
-          deviceToken: Not(IsNull()),
-          deletedAt: IsNull(),
-        },
-      });
+      const where: any = {
+        roles: ArrayContains([UserRole.CURRIER]),
+        deviceToken: Not(IsNull()),
+        deletedAt: IsNull(),
+      };
+      if (order.currierId) {
+        where.id = order.currierId;
+      }
+      const couriers = await this.userRepository.find({ where });
 
       if (couriers.length === 0) {
         this.logger.log(
-          '[WebhookController] No couriers with device tokens found',
+          `[WebhookController] ${order.currierId ? 'Назначенный курьер' : 'Курьеры'} без device token, push не отправлен`,
         );
         return;
+      }
+
+      if (order.currierId) {
+        this.logger.log(
+          `[WebhookController] Fallback push: заказ ${order.id} уже в работе, отправляем только назначенному курьеру ${couriers[0]?.name || order.currierId}`,
+        );
       }
 
       const priceInRubles = (order.price / 100).toFixed(2);
