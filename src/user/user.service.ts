@@ -166,7 +166,10 @@ export class UserService {
     await this.userRepository.update(userId, { deviceToken });
   }
 
-  async update(id: string, updateUserDto: Partial<User>): Promise<User> {
+  async update(
+    id: string,
+    updateUserDto: Partial<User> & { password?: string },
+  ): Promise<User> {
     // Сначала ищем активного пользователя
     let user = await this.findById(id);
 
@@ -226,7 +229,19 @@ export class UserService {
       }
     }
 
-    return this.userRepository.save({ ...user, ...updateUserDto });
+    const updatePayload: Partial<User> = { ...updateUserDto };
+
+    if (updateUserDto.password && updateUserDto.password.trim() !== '') {
+      const saltRounds = 10;
+      updatePayload.hash_password = await bcrypt.hash(
+        updateUserDto.password,
+        saltRounds,
+      );
+    }
+
+    delete (updatePayload as { password?: string }).password;
+
+    return this.userRepository.save({ ...user, ...updatePayload });
   }
 
   async remove(id: string): Promise<void> {
