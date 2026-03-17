@@ -111,20 +111,7 @@ export class AuthService {
       }
 
       const payload = await this.tokenService.verifyRefreshToken(refreshToken);
-      let user = await this.userService.findById(payload.userId);
-
-      // Если пользователь не найден, проверяем удаленных
-      if (!user) {
-        const userById = await this.userService.findByIdIncludingDeleted(
-          payload.userId,
-        );
-        if (userById && userById.deletedAt) {
-          // Восстанавливаем удаленного пользователя
-          user = await this.userService.restore(userById.id);
-        } else if (userById) {
-          user = userById;
-        }
-      }
+      const user = await this.userService.findById(payload.userId);
 
       if (!user) {
         throw new UnauthorizedException('Пользователь не найден');
@@ -404,7 +391,16 @@ export class AuthService {
   ): Promise<AuthResponseDto> {
     const { email, password } = loginDto;
 
-    const user = await this.findOrRestoreByEmail(email);
+    let user = await this.userService.findByEmail(email);
+    if (!user) {
+      const deletedUser = await this.userService.findByEmailIncludingDeleted(
+        email,
+      );
+      if (deletedUser?.deletedAt) {
+        throw new UnauthorizedException('Аккаунт удален');
+      }
+    }
+
     if (!user) {
       throw new UnauthorizedException('Неверные учетные данные');
     }
@@ -671,32 +667,7 @@ export class AuthService {
   ): Promise<
     AuthResponseDto & { adToken: AdToken | null; deviceToken?: string }
   > {
-    // Сначала ищем активного пользователя
-    let user = await this.userService.findById(authenticatedUser.userId);
-
-    // Если не найден, проверяем удаленных (может быть только что восстановлен)
-    if (!user) {
-      const userById = await this.userService.findByIdIncludingDeleted(
-        authenticatedUser.userId,
-      );
-      if (userById && userById.deletedAt) {
-        // Восстанавливаем удаленного пользователя
-        try {
-          user = await this.userService.restore(userById.id);
-          console.log(
-            `[getMe] Восстановлен удаленный пользователь с id: ${user.id}`,
-          );
-        } catch (restoreError: any) {
-          console.error(
-            `[getMe] Ошибка восстановления пользователя ${userById.id}:`,
-            restoreError,
-          );
-          throw new NotFoundException('Пользователь не найден');
-        }
-      } else if (userById) {
-        user = userById;
-      }
-    }
+    const user = await this.userService.findById(authenticatedUser.userId);
 
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
