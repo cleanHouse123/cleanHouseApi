@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsEnum, IsString, IsDateString, IsInt, Min, IsBoolean } from 'class-validator';
+import {
+  IsOptional,
+  IsEnum,
+  IsString,
+  IsDateString,
+  IsInt,
+  Min,
+  IsBoolean,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderStatus } from '../entities/order.entity';
 

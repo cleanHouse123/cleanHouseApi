@@ -40,7 +40,10 @@ import { SubscriptionStatus } from './entities/subscription.entity';
 import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
 import { PaymentInfoDto } from '../shared/dto/payment-info.dto';
-import { GetUserMetadata, UserMetadata } from '../shared/decorators/get-user.decorator';
+import {
+  GetUserMetadata,
+  UserMetadata,
+} from '../shared/decorators/get-user.decorator';
 import { SubscriptionPriceDto } from './dto/subscription-price.dto';
 
 @ApiTags('Subscriptions')
@@ -92,7 +95,8 @@ export class SubscriptionController {
   @ApiOperation({ summary: 'Получить предварительную финальную цену подписки' })
   @ApiResponse({
     status: 200,
-    description: 'Предварительная цена подписки с учетом прав на бесплатную подписку',
+    description:
+      'Предварительная цена подписки с учетом прав на бесплатную подписку',
     type: SubscriptionPriceDto,
   })
   @ApiResponse({ status: 404, description: 'План подписки не найден' })

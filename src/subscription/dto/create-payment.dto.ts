@@ -32,7 +32,8 @@ export class SubscriptionPaymentResponseDto {
   @ApiProperty({
     example:
       'https://mock-payment.example.com/pay/123e4567-e89b-12d3-a456-426614174000',
-    description: 'Ссылка на страницу оплаты (null если подписка активирована бесплатно)',
+    description:
+      'Ссылка на страницу оплаты (null если подписка активирована бесплатно)',
     nullable: true,
   })
   @IsOptional()
@@ -46,7 +47,8 @@ export class SubscriptionPaymentResponseDto {
 
   @ApiProperty({
     example: 'pending',
-    description: 'Статус платежа (success если подписка активирована бесплатно)',
+    description:
+      'Статус платежа (success если подписка активирована бесплатно)',
   })
   status: string;
 }

@@ -547,9 +547,8 @@ export class SubscriptionService {
     userId: string,
   ): Promise<SubscriptionPriceDto> {
     // Получаем план подписки
-    const plan = await this.priceValidationService.getSubscriptionPlanById(
-      planId,
-    );
+    const plan =
+      await this.priceValidationService.getSubscriptionPlanById(planId);
 
     // Проверяем право на бесплатную подписку для конкретного плана
     const freeSubscriptionCheck =
@@ -559,9 +558,7 @@ export class SubscriptionService {
       );
 
     // Вычисляем финальную цену
-    const finalPrice = freeSubscriptionCheck.eligible
-      ? 0
-      : plan.priceInKopecks;
+    const finalPrice = freeSubscriptionCheck.eligible ? 0 : plan.priceInKopecks;
 
     const hasUsedFreeSubscription =
       await this.freeSubscriptionService.hasAnyUsedFreeSubscription(userId);

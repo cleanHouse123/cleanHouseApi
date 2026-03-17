@@ -39,9 +39,8 @@ export class SmsProviderService {
     // Если явно указан WhatsApp, пытаемся отправить только через WhatsApp
     if (channel === 'whatsapp') {
       try {
+        console.log(phoneNumber, 'phoneNumber');
 
-        console.log(phoneNumber, "phoneNumber");
-        
         await this.wahaService.sendMessage(phoneNumber, signedMessage);
         return {
           success: true,
@@ -64,8 +63,10 @@ export class SmsProviderService {
           channel: 'whatsapp',
         };
       } catch (error) {
-        this.logger.error(`Ошибка отправки через WhatsApp: ${error.message} fallback на SMS`);
-        
+        this.logger.error(
+          `Ошибка отправки через WhatsApp: ${error.message} fallback на SMS`,
+        );
+
         return this.sendSms(phoneNumber, signedMessage);
       }
     }
@@ -76,12 +77,15 @@ export class SmsProviderService {
   /**
    * Отправляет SMS через SMS.RU
    */
-  private async sendSms(phoneNumber: string, message: string): Promise<SmsProviderResponse> {
+  private async sendSms(
+    phoneNumber: string,
+    message: string,
+  ): Promise<SmsProviderResponse> {
     try {
       this.logger.log(`Отправка SMS на номер: ${phoneNumber}`);
-      
+
       const result = await this.smsRuService.sendSms(phoneNumber, message);
-      
+
       if (result.status === 'OK') {
         return {
           success: true,
@@ -107,11 +111,11 @@ export class SmsProviderService {
    */
   private signMessage(message: string): string {
     const host = this.configService.get<string>('HOST');
-    
+
     if (host && host.includes('qa.')) {
       return `${message}\n\n[QA Environment]: ${host}`;
     }
-    
+
     return message;
   }
 

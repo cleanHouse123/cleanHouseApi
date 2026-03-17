@@ -20,10 +20,7 @@ import { FcmModule } from '../fcm/fcm.module';
     FcmModule,
   ],
   controllers: [ScheduledOrdersController],
-  providers: [
-    ScheduledOrdersService,
-    OverdueNotificationService,
-  ],
+  providers: [ScheduledOrdersService, OverdueNotificationService],
   exports: [ScheduledOrdersService, OverdueNotificationService],
 })
 export class ScheduledOrdersModule {}

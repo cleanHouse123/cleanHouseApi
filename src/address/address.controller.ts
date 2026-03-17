@@ -1,6 +1,20 @@
-import { Controller, Get, Query, Delete, Post, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Delete,
+  Post,
+  Body,
+  Param,
+} from '@nestjs/common';
 import { AddressService } from './service/address.service';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AddressResponseDto } from './dto/address-response.dto';
 import { CreateLocationDto, LocationDto } from './dto/location.dto';
 import { Location } from './entities/location.entity';
@@ -29,7 +43,9 @@ export class AddressController {
     type: LocationDto,
   })
   @Post('locations')
-  async createLocation(@Body() location: CreateLocationDto): Promise<LocationDto> {
+  async createLocation(
+    @Body() location: CreateLocationDto,
+  ): Promise<LocationDto> {
     return this.addressService.createLocation(location);
   }
 
@@ -45,7 +61,11 @@ export class AddressController {
   }
 
   @ApiOperation({ summary: 'Поиск адресов с автокомплитом и кэшированием' })
-  @ApiQuery({ name: 'query', type: String, description: 'Поисковый запрос (минимум 2 символа)' })
+  @ApiQuery({
+    name: 'query',
+    type: String,
+    description: 'Поисковый запрос (минимум 2 символа)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список найденных адресов',
@@ -63,7 +83,10 @@ export class AddressController {
     schema: {
       type: 'object',
       properties: {
-        total: { type: 'number', description: 'Общее количество записей в кэше' },
+        total: {
+          type: 'number',
+          description: 'Общее количество записей в кэше',
+        },
         mostSearched: {
           type: 'array',
           description: 'Самые популярные запросы',
@@ -73,9 +96,9 @@ export class AddressController {
               query: { type: 'string' },
               search_count: { type: 'number' },
               last_searched_at: { type: 'string', format: 'date-time' },
-              city_or_settlement: { type: 'string', nullable: true }
-            }
-          }
+              city_or_settlement: { type: 'string', nullable: true },
+            },
+          },
         },
         recentSearches: {
           type: 'array',
@@ -85,12 +108,12 @@ export class AddressController {
             properties: {
               query: { type: 'string' },
               last_searched_at: { type: 'string', format: 'date-time' },
-              search_count: { type: 'number' }
-            }
-          }
-        }
-      }
-    }
+              search_count: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
   })
   @Get('cache/stats')
   async getCacheStats() {
@@ -98,45 +121,44 @@ export class AddressController {
   }
 
   @ApiOperation({ summary: 'Очистить устаревшие записи кэша' })
-  @ApiQuery({ 
-    name: 'days', 
-    type: Number, 
-    required: false, 
-    description: 'Количество дней (по умолчанию 30)' 
+  @ApiQuery({
+    name: 'days',
+    type: Number,
+    required: false,
+    description: 'Количество дней (по умолчанию 30)',
   })
   @Delete('cache/clean')
   async cleanOldCache(@Query('days') days?: number) {
     const result = await this.addressService.cleanOldCache(days);
     return {
       message: `Очищено ${result.deletedCount} устаревших записей`,
-      deletedCount: result.deletedCount
+      deletedCount: result.deletedCount,
     };
   }
 
   @ApiOperation({ summary: 'Ограничить размер кэша' })
-  @ApiQuery({ 
-    name: 'maxRecords', 
-    type: Number, 
-    required: false, 
-    description: 'Максимальное количество записей (по умолчанию 1000)' 
+  @ApiQuery({
+    name: 'maxRecords',
+    type: Number,
+    required: false,
+    description: 'Максимальное количество записей (по умолчанию 1000)',
   })
   @Delete('cache/limit')
   async limitCacheSize(@Query('maxRecords') maxRecords?: number) {
     const result = await this.addressService.limitCacheSize(maxRecords);
     return {
       message: `Ограничен размер кэша. Удалено ${result.deletedCount} записей`,
-      deletedCount: result.deletedCount
+      deletedCount: result.deletedCount,
     };
   }
 
   @ApiOperation({ summary: 'Полная очистка кэша' })
-
   @Delete('cache/clear')
   async clearAllCache() {
     const result = await this.addressService.clearAllCache();
     return {
       message: `Полностью очищен кэш. Удалено ${result.deletedCount} записей`,
-      deletedCount: result.deletedCount
+      deletedCount: result.deletedCount,
     };
   }
 
@@ -146,7 +168,7 @@ export class AddressController {
     const result = await this.addressService.performMaintenance();
     return {
       message: `Обслуживание кэша завершено. Удалено ${result.totalDeleted} записей`,
-      ...result
+      ...result,
     };
   }
 
@@ -158,7 +180,9 @@ export class AddressController {
     type: Boolean,
   })
   @Post('is-supportable')
-  async isSupportableAddress(@Body() address: AddressResponseDto): Promise<boolean> {
+  async isSupportableAddress(
+    @Body() address: AddressResponseDto,
+  ): Promise<boolean> {
     return this.addressService.isSupportableAddress(address);
   }
 }

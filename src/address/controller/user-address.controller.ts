@@ -1,10 +1,27 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserAddress } from '../entities/user-address';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { CreateUserAddressDto } from '../dto/create-user-address.dto';
 import { UserAddressService } from '../service/user-address.service';
-import { GetUserMetadata, UserMetadata } from 'src/shared/decorators/get-user.decorator';
+import {
+  GetUserMetadata,
+  UserMetadata,
+} from 'src/shared/decorators/get-user.decorator';
 
 @ApiTags('user-address')
 @Controller('user-address')
@@ -20,7 +37,9 @@ export class UserAddressController {
     type: [UserAddress],
   })
   @Get()
-  async getUserAddresses(@GetUserMetadata() user: UserMetadata): Promise<UserAddress[]> {
+  async getUserAddresses(
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<UserAddress[]> {
     const userId = user.userId;
     return this.userAddressService.getUserAddresses(userId);
   }
@@ -32,7 +51,10 @@ export class UserAddressController {
     type: UserAddress,
   })
   @Get(':id')
-  async getUserAddressById(@Param('id') id: string, @GetUserMetadata() user: UserMetadata): Promise<UserAddress[]> {
+  async getUserAddressById(
+    @Param('id') id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<UserAddress[]> {
     return this.userAddressService.getUserAddresses(id);
   }
 
@@ -49,7 +71,10 @@ export class UserAddressController {
     @GetUserMetadata() user: UserMetadata,
   ): Promise<UserAddress> {
     const userId = user.userId;
-    return this.userAddressService.createUserAddress(userId, createUserAddressDto);
+    return this.userAddressService.createUserAddress(
+      userId,
+      createUserAddressDto,
+    );
   }
 
   @ApiOperation({ summary: 'Удалить адрес пользователя' })

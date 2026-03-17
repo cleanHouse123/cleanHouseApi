@@ -102,7 +102,9 @@ export class OverdueNotificationService {
       // Очищаем список уведомленных заказов от завершенных
       this.cleanupNotifiedOrders(overdueOrders);
     } catch (error) {
-      this.logger.error(`Ошибка при проверке просроченных заказов: ${error.message}`);
+      this.logger.error(
+        `Ошибка при проверке просроченных заказов: ${error.message}`,
+      );
     }
   }
 

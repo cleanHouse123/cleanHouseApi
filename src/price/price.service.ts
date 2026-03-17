@@ -78,16 +78,20 @@ export class PriceService {
         } else {
           // Флага нет, но нужно проверить, нет ли других адресов с таким же DaData,
           // у которых уже использован первый заказ (защита от дублирования адресов)
-          const hasOtherAddressWithFlag = await this.hasFirstOrderForDaDataAddress(
-            userAddress.address,
-            userAddress.addressDetails as AddressDetailsComparable,
-          );
+          const hasOtherAddressWithFlag =
+            await this.hasFirstOrderForDaDataAddress(
+              userAddress.address,
+              userAddress.addressDetails as AddressDetailsComparable,
+            );
           isAddressEligible = !hasOtherAddressWithFlag;
         }
       }
     } else if (address) {
       // Fallback: проверяем по текстовому адресу (старая логика)
-      isAddressEligible = !(await this.hasFirstOrderForAddress(address, addressDetails));
+      isAddressEligible = !(await this.hasFirstOrderForAddress(
+        address,
+        addressDetails,
+      ));
     }
 
     if (userId) {
@@ -97,7 +101,7 @@ export class PriceService {
         // Это строгая проверка - один аккаунт = один первый заказ
         // Первый заказ всегда стоит 1 рубль, независимо от статуса (NEW, PAID, CANCELED и т.д.)
         const hasFirstOrder = await this.orderRepository.findOne({
-          where: { 
+          where: {
             customerId: userId,
             price: this.FIRST_ORDER_PRICE, // 1 рубль в копейках
             // Не проверяем статус - любой заказ за 1 рубль означает, что первый заказ использован
@@ -106,7 +110,7 @@ export class PriceService {
 
         // Если уже есть заказ за 1 рубль (в любом статусе), первый заказ уже использован
         const isUserFirstOrder = !hasFirstOrder;
-        
+
         if (isUserFirstOrder && isAddressEligible) {
           basePricePerPackage = this.FIRST_ORDER_PRICE;
         }
@@ -213,9 +217,12 @@ export class PriceService {
     // Используем правильный синтаксис для PostgreSQL enum массивов с параметризованным запросом
     const addressesWithFlag = await this.userAddressRepository
       .createQueryBuilder('userAddress')
-      .where('userAddress.usageFeatures @> ARRAY[CAST(:feature AS address_usage_feature_enum)]', {
-        feature: AddressUsageFeature.FIRST_ORDER_USED,
-      })
+      .where(
+        'userAddress.usageFeatures @> ARRAY[CAST(:feature AS address_usage_feature_enum)]',
+        {
+          feature: AddressUsageFeature.FIRST_ORDER_USED,
+        },
+      )
       .getMany();
 
     // Сравниваем с каждым адресом

@@ -18,7 +18,8 @@ export class SendSmsDto {
 
   @ApiProperty({
     example: 'auto',
-    description: 'Канал отправки: auto (WhatsApp с fallback на SMS), whatsapp, sms',
+    description:
+      'Канал отправки: auto (WhatsApp с fallback на SMS), whatsapp, sms',
     enum: ['auto', 'whatsapp', 'sms'],
     required: false,
   })

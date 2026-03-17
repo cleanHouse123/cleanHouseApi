@@ -39,4 +39,3 @@ export class ReferralFreeSubscriptionUsage {
   @CreateDateColumn()
   createdAt: Date;
 }
-

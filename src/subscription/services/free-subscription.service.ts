@@ -142,7 +142,9 @@ export class FreeSubscriptionService {
     });
 
     if (existingUsage) {
-      throw new Error('Бесплатная подписка по этому плану уже была использована');
+      throw new Error(
+        'Бесплатная подписка по этому плану уже была использована',
+      );
     }
 
     // Создаем запись использования бесплатной подписки по плану
@@ -155,7 +157,9 @@ export class FreeSubscriptionService {
 
     // Добавляем в массив usageFeatures общий флаг, если еще нет (для обратной совместимости и аналитики)
     const updatedFeatures = user.usageFeatures || [];
-    if (!updatedFeatures.includes(UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION)) {
+    if (
+      !updatedFeatures.includes(UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION)
+    ) {
       updatedFeatures.push(UsageFeaturesEnum.FREE_REFERRAL_SUBSCRIPTION);
     }
 
@@ -199,4 +203,3 @@ export class FreeSubscriptionService {
     );
   }
 }
-

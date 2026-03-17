@@ -19,10 +19,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: { userId: string; email: string }) {
     let user = await this.userService.findById(payload.userId);
-    
+
     // Если пользователь не найден, проверяем удаленных
     if (!user) {
-      const userById = await this.userService.findByIdIncludingDeleted(payload.userId);
+      const userById = await this.userService.findByIdIncludingDeleted(
+        payload.userId,
+      );
       if (userById && userById.deletedAt) {
         // Восстанавливаем удаленного пользователя
         user = await this.userService.restore(userById.id);
@@ -30,11 +32,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         user = userById;
       }
     }
-    
+
     if (!user) {
       return null;
     }
-    
+
     return {
       id: user.id,
       userId: user.id,

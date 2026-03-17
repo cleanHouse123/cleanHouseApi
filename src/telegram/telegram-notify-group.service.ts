@@ -29,7 +29,9 @@ export class TelegramNotifyGroupService {
       existing.isActive = true;
       if (title != null) existing.title = title;
       await this.repository.save(existing);
-      this.logger.log(`[addGroup] Группа уже была в списке, активирована: ${id}`);
+      this.logger.log(
+        `[addGroup] Группа уже была в списке, активирована: ${id}`,
+      );
       return existing;
     }
     const group = this.repository.create({

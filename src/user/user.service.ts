@@ -63,9 +63,21 @@ export class UserService {
     });
   }
 
+  async findByPhoneIncludingDeleted(phone: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { phone },
+    });
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { email, deletedAt: IsNull() },
+    });
+  }
+
+  async findByEmailIncludingDeleted(email: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { email },
     });
   }
 
@@ -75,7 +87,9 @@ export class UserService {
     });
   }
 
-  async findByTelegramIdIncludingDeleted(telegramId: string): Promise<User | null> {
+  async findByTelegramIdIncludingDeleted(
+    telegramId: string,
+  ): Promise<User | null> {
     return this.userRepository.findOne({
       where: { telegramId },
     });
@@ -104,16 +118,16 @@ export class UserService {
       .set({ deletedAt: undefined })
       .where('id = :id', { id })
       .execute();
-    
+
     // Получаем обновленного пользователя
     const restoredUser = await this.userRepository.findOne({
       where: { id },
     });
-    
+
     if (!restoredUser) {
       throw new NotFoundException('Не удалось восстановить пользователя');
     }
-    
+
     return restoredUser;
   }
 
@@ -155,7 +169,7 @@ export class UserService {
   async update(id: string, updateUserDto: Partial<User>): Promise<User> {
     // Сначала ищем активного пользователя
     let user = await this.findById(id);
-    
+
     // Если не найден, проверяем удаленных (может быть только что восстановлен)
     if (!user) {
       user = await this.findByIdIncludingDeleted(id);

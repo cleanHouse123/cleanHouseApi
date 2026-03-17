@@ -20,7 +20,8 @@ export class CreateUserAddressDto {
 
   @ApiProperty({
     required: false,
-    description: 'Дополнительные детали адреса (подъезд, этаж, квартира и т.п.)',
+    description:
+      'Дополнительные детали адреса (подъезд, этаж, квартира и т.п.)',
   })
   @IsOptional()
   addressDetails?: {

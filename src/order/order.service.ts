@@ -179,7 +179,7 @@ export class OrderService {
     if (createOrderDto.scheduledAt) {
       // Если время указано, используем его
       scheduledAt = new Date(createOrderDto.scheduledAt);
-      
+
       // Проверяем, что дата валидна
       if (isNaN(scheduledAt.getTime())) {
         throw new BadRequestException(
@@ -568,11 +568,11 @@ export class OrderService {
     // Затем преобразуем в DTO и добавляем distance
     const ordersWithDistance: (OrderResponseDto & { distance: number })[] =
       orders.map((order) => {
-          const distance = distanceMap.get(order.id);
-          return {
-            ...this.transformToResponseDto(order),
-            distance: typeof distance === 'number' ? distance : 0,
-          };
+        const distance = distanceMap.get(order.id);
+        return {
+          ...this.transformToResponseDto(order),
+          distance: typeof distance === 'number' ? distance : 0,
+        };
       });
 
     return {
@@ -654,7 +654,9 @@ export class OrderService {
 
       if (
         userAddress &&
-        !userAddress.usageFeatures.includes(AddressUsageFeature.FIRST_ORDER_USED)
+        !userAddress.usageFeatures.includes(
+          AddressUsageFeature.FIRST_ORDER_USED,
+        )
       ) {
         userAddress.usageFeatures = [
           ...userAddress.usageFeatures,
@@ -950,7 +952,7 @@ export class OrderService {
     const oldCourierId = order.currierId;
     order.currierId = newCourierId;
     order.assignedAt = new Date();
-    
+
     // Если был IN_PROGRESS, возвращаем в ASSIGNED
     if (order.status === OrderStatus.IN_PROGRESS) {
       order.status = OrderStatus.ASSIGNED;
@@ -1145,7 +1147,8 @@ export class OrderService {
     const chatIds: string[] = [];
 
     // Группы, в которые добавлен бот — рассылка о новых заказах
-    const groupChatIds = await this.telegramNotifyGroupService.getActiveChatIds();
+    const groupChatIds =
+      await this.telegramNotifyGroupService.getActiveChatIds();
     chatIds.push(...groupChatIds);
 
     // const couriers = await this.userRepository.find({
@@ -1233,7 +1236,8 @@ export class OrderService {
       validCouriers.forEach((c, i) => {
         const r = results[i];
         const success =
-          r?.status === 'fulfilled' && (r as PromiseFulfilledResult<{ success: boolean }>).value?.success;
+          r?.status === 'fulfilled' &&
+          (r as PromiseFulfilledResult<{ success: boolean }>).value?.success;
         if (success) {
           this.logger.log(
             `[OrderService] ✅ Push ОТПРАВЛЕН: заказ ${order.id} (при создании) -> курьер ${c.name} (${c.phone || c.id})`,
@@ -1241,7 +1245,7 @@ export class OrderService {
         } else {
           const err =
             r?.status === 'rejected'
-              ? (r as PromiseRejectedResult).reason?.message
+              ? r.reason?.message
               : (r as PromiseFulfilledResult<{ error?: string }>)?.value?.error;
           this.logger.warn(
             `[OrderService] ❌ Push НЕ отправлен: заказ ${order.id} -> курьер ${c.name}: ${err || 'unknown'}`,

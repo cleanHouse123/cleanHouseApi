@@ -10,8 +10,18 @@ export class PriceController {
   @Get('order')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiBearerAuth('JWT')
-  @ApiQuery({ name: 'numberPackages', required: false, type: Number, description: 'Количество пакетов' })
-  @ApiQuery({ name: 'addressId', required: false, type: String, description: 'ID адреса из user-address' })
+  @ApiQuery({
+    name: 'numberPackages',
+    required: false,
+    type: Number,
+    description: 'Количество пакетов',
+  })
+  @ApiQuery({
+    name: 'addressId',
+    required: false,
+    type: String,
+    description: 'ID адреса из user-address',
+  })
   async getOrderPrice(
     @Request() req,
     @Query('numberPackages') numberPackages?: number,
@@ -27,7 +37,7 @@ export class PriceController {
     return {
       priceInKopecks: price,
       priceInRubles: price / 100,
-      currency: 'RUB'
+      currency: 'RUB',
     };
   }
 }

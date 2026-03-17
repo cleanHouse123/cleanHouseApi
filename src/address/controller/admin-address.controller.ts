@@ -1,5 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { UserAddressService } from '../service/user-address.service';
 import { UserAddress } from '../entities/user-address';
@@ -11,11 +17,33 @@ import { UserAddress } from '../entities/user-address';
 export class AdminAddressController {
   constructor(private readonly userAddressService: UserAddressService) {}
 
-  @ApiOperation({ summary: 'Получить список всех адресов с пагинацией и фильтрацией' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Номер страницы' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Количество записей на странице' })
-  @ApiQuery({ name: 'userId', required: false, type: String, description: 'Фильтр по ID пользователя' })
-  @ApiQuery({ name: 'addressName', required: false, type: String, description: 'Поиск по названию адреса' })
+  @ApiOperation({
+    summary: 'Получить список всех адресов с пагинацией и фильтрацией',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Номер страницы',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Количество записей на странице',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    type: String,
+    description: 'Фильтр по ID пользователя',
+  })
+  @ApiQuery({
+    name: 'addressName',
+    required: false,
+    type: String,
+    description: 'Поиск по названию адреса',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список адресов с пагинацией',
@@ -48,7 +76,12 @@ export class AdminAddressController {
   }
 
   @ApiOperation({ summary: 'Получить самые встречающиеся улицы' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Количество улиц (по умолчанию 10)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Количество улиц (по умолчанию 10)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список самых встречающихся улиц',
@@ -69,4 +102,3 @@ export class AdminAddressController {
     return this.userAddressService.getMostCommonStreets(limitNumber);
   }
 }
-

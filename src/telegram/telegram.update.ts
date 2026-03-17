@@ -15,8 +15,7 @@ const MESSAGES = {
     'Сначала войдите в приложение через Telegram, затем снова нажмите «Поделиться контактом» здесь.',
   invalid_phone:
     'Не удалось распознать номер. Проверьте формат и попробуйте снова.',
-  error:
-    'Произошла ошибка. Попробуйте позже или поделитесь контактом снова.',
+  error: 'Произошла ошибка. Попробуйте позже или поделитесь контактом снова.',
 } as const;
 
 const BOT_IN_STATUSES = ['member', 'administrator', 'restricted'] as const;
@@ -34,9 +33,7 @@ export class TelegramUpdate {
   ) {}
 
   private getPhoneNumberButton(ctx: Context) {
-    return new Keyboard()
-      .requestContact('Поделиться телефоном')
-      .resized();
+    return new Keyboard().requestContact('Поделиться телефоном').resized();
   }
 
   @Start()
@@ -92,12 +89,14 @@ export class TelegramUpdate {
         'поделись номером чтобы авторизоваться в выносмусора',
         {
           reply_markup: keyboard,
-        }
+        },
       );
     }
 
     // Обычная обработка текста (эхо)
-    await ctx.reply(`пока у меня нет других функций кроме поделиться телефоном`);
+    await ctx.reply(
+      `пока у меня нет других функций кроме поделиться телефоном`,
+    );
   }
 
   /**

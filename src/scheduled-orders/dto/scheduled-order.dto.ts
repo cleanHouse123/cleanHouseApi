@@ -11,10 +11,17 @@ import {
   Max,
   Matches,
 } from 'class-validator';
-import { ScheduleFrequency, ScheduledOrder } from '../entities/scheduled-order.entity';
+import {
+  ScheduleFrequency,
+  ScheduledOrder,
+} from '../entities/scheduled-order.entity';
 
 export class AddressDetailsDto {
-  @ApiProperty({ description: 'Номер дома/здания', example: 10, required: false })
+  @ApiProperty({
+    description: 'Номер дома/здания',
+    example: 10,
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   building?: number;
@@ -54,7 +61,11 @@ export class CreateScheduledOrderDto {
   @MaxLength(500)
   address: string;
 
-  @ApiProperty({ description: 'Детали адреса', type: AddressDetailsDto, required: false })
+  @ApiProperty({
+    description: 'Детали адреса',
+    type: AddressDetailsDto,
+    required: false,
+  })
   @IsOptional()
   addressDetails?: AddressDetailsDto;
 
@@ -99,7 +110,8 @@ export class CreateScheduledOrderDto {
   preferredTime?: string;
 
   @ApiProperty({
-    description: 'Дни недели для создания заказов (0 = воскресенье, 1 = понедельник)',
+    description:
+      'Дни недели для создания заказов (0 = воскресенье, 1 = понедельник)',
     example: [1, 2, 3, 4, 5],
     required: false,
   })

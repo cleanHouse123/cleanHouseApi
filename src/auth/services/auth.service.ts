@@ -58,10 +58,13 @@ export class AuthService {
     // Форматируем номер телефона
     const formattedPhone = this.formatPhoneNumber(phone);
 
-    let user = await this.userService.findByPhone(formattedPhone);
+    let user = await this.findOrRestoreByPhone(formattedPhone);
 
     if (!user) {
-      const roles = formattedPhone === '+79999999992' ? [UserRole.CURRIER] : [UserRole.CUSTOMER];
+      const roles =
+        formattedPhone === '+79999999992'
+          ? [UserRole.CURRIER]
+          : [UserRole.CUSTOMER];
       const createUserData: CreateUserDto = {
         phone: formattedPhone,
         name: `User_${formattedPhone.slice(-4)}`,
@@ -73,7 +76,16 @@ export class AuthService {
         createUserData.adToken = adToken;
       }
 
-      user = await this.userService.create(createUserData);
+      try {
+        user = await this.userService.create(createUserData);
+      } catch (error: any) {
+        if (this.isUniqueViolation(error)) {
+          user = await this.findOrRestoreByPhone(formattedPhone);
+        }
+        if (!user) {
+          throw error;
+        }
+      }
     } else {
       // Обновляем статус верификации
       await this.userService.updatePhoneVerification(user.id, true);
@@ -103,7 +115,9 @@ export class AuthService {
 
       // Если пользователь не найден, проверяем удаленных
       if (!user) {
-        const userById = await this.userService.findByIdIncludingDeleted(payload.userId);
+        const userById = await this.userService.findByIdIncludingDeleted(
+          payload.userId,
+        );
         if (userById && userById.deletedAt) {
           // Восстанавливаем удаленного пользователя
           user = await this.userService.restore(userById.id);
@@ -251,6 +265,44 @@ export class AuthService {
     return phoneNumber.startsWith('+') ? phoneNumber : '+' + digits;
   }
 
+  private isUniqueViolation(error: any): boolean {
+    return (
+      error?.code === '23505' ||
+      error?.message?.includes('duplicate key') ||
+      error?.message?.includes('unique constraint')
+    );
+  }
+
+  private async findOrRestoreByPhone(phone: string): Promise<User | null> {
+    const activeUser = await this.userService.findByPhone(phone);
+    if (activeUser) {
+      return activeUser;
+    }
+
+    const deletedUser =
+      await this.userService.findByPhoneIncludingDeleted(phone);
+    if (deletedUser?.deletedAt) {
+      return this.userService.restore(deletedUser.id);
+    }
+
+    return deletedUser ?? null;
+  }
+
+  private async findOrRestoreByEmail(email: string): Promise<User | null> {
+    const activeUser = await this.userService.findByEmail(email);
+    if (activeUser) {
+      return activeUser;
+    }
+
+    const deletedUser =
+      await this.userService.findByEmailIncludingDeleted(email);
+    if (deletedUser?.deletedAt) {
+      return this.userService.restore(deletedUser.id);
+    }
+
+    return deletedUser ?? null;
+  }
+
   private async generateAuthTokens(user: User): Promise<AuthResponseDto> {
     const accessToken = await this.tokenService.generateAccessToken(
       user.id,
@@ -306,7 +358,38 @@ export class AuthService {
       roles: [UserRole.ADMIN],
     };
 
-    const user = await this.userService.create(createUserData);
+    let user = await this.findOrRestoreByEmail(email);
+    if (user) {
+      user = await this.userService.update(user.id, {
+        name,
+        email,
+        hash_password: hashedPassword,
+        phone: `email_${email}`,
+        isEmailVerified: false,
+        roles: [UserRole.ADMIN],
+      });
+    } else {
+      try {
+        user = await this.userService.create(createUserData);
+      } catch (error: any) {
+        if (this.isUniqueViolation(error)) {
+          user = await this.findOrRestoreByEmail(email);
+          if (user) {
+            user = await this.userService.update(user.id, {
+              name,
+              email,
+              hash_password: hashedPassword,
+              phone: `email_${email}`,
+              isEmailVerified: false,
+              roles: [UserRole.ADMIN],
+            });
+          }
+        }
+        if (!user) {
+          throw error;
+        }
+      }
+    }
 
     if (ipAddress) {
       await this.userService.updateLastLogin(user.id);
@@ -321,7 +404,7 @@ export class AuthService {
   ): Promise<AuthResponseDto> {
     const { email, password } = loginDto;
 
-    const user = await this.userService.findByEmail(email);
+    const user = await this.findOrRestoreByEmail(email);
     if (!user) {
       throw new UnauthorizedException('Неверные учетные данные');
     }
@@ -448,15 +531,24 @@ export class AuthService {
       }
 
       // Ищем или создаем пользователя
-      let user = await this.userService.findByPhone(formattedPhone);
+      let user = await this.findOrRestoreByPhone(formattedPhone);
 
       if (!user) {
-        user = await this.userService.create({
-          phone: formattedPhone,
-          name: `User_${formattedPhone.slice(-4)}`,
-          isPhoneVerified: true,
-          roles: [UserRole.CUSTOMER],
-        });
+        try {
+          user = await this.userService.create({
+            phone: formattedPhone,
+            name: `User_${formattedPhone.slice(-4)}`,
+            isPhoneVerified: true,
+            roles: [UserRole.CUSTOMER],
+          });
+        } catch (error: any) {
+          if (this.isUniqueViolation(error)) {
+            user = await this.findOrRestoreByPhone(formattedPhone);
+          }
+          if (!user) {
+            throw error;
+          }
+        }
       } else {
         // Обновляем статус верификации
         await this.userService.updatePhoneVerification(user.id, true);
@@ -581,24 +673,31 @@ export class AuthService {
   > {
     // Сначала ищем активного пользователя
     let user = await this.userService.findById(authenticatedUser.userId);
-    
+
     // Если не найден, проверяем удаленных (может быть только что восстановлен)
     if (!user) {
-      const userById = await this.userService.findByIdIncludingDeleted(authenticatedUser.userId);
+      const userById = await this.userService.findByIdIncludingDeleted(
+        authenticatedUser.userId,
+      );
       if (userById && userById.deletedAt) {
         // Восстанавливаем удаленного пользователя
         try {
           user = await this.userService.restore(userById.id);
-          console.log(`[getMe] Восстановлен удаленный пользователь с id: ${user.id}`);
+          console.log(
+            `[getMe] Восстановлен удаленный пользователь с id: ${user.id}`,
+          );
         } catch (restoreError: any) {
-          console.error(`[getMe] Ошибка восстановления пользователя ${userById.id}:`, restoreError);
+          console.error(
+            `[getMe] Ошибка восстановления пользователя ${userById.id}:`,
+            restoreError,
+          );
           throw new NotFoundException('Пользователь не найден');
         }
       } else if (userById) {
         user = userById;
       }
     }
-    
+
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
@@ -626,25 +725,39 @@ export class AuthService {
     try {
       // Ищем пользователя по Telegram ID или создаем нового
       const telegramId = loginWidgetDto.id.toString();
-      console.log(`[Telegram Login] Поиск пользователя с telegramId: ${telegramId}`);
-      
+      console.log(
+        `[Telegram Login] Поиск пользователя с telegramId: ${telegramId}`,
+      );
+
       let user = await this.userService.findByTelegramId(telegramId);
-      console.log(`[Telegram Login] Активный пользователь найден: ${user ? 'да' : 'нет'}`);
+      console.log(
+        `[Telegram Login] Активный пользователь найден: ${user ? 'да' : 'нет'}`,
+      );
 
       // Если пользователь не найден, проверяем удаленных пользователей
       if (!user) {
         // Ищем удаленного пользователя с таким telegramId
-        const deletedUser = await this.userService.findByTelegramIdIncludingDeleted(telegramId);
-        console.log(`[Telegram Login] Удаленный пользователь найден: ${deletedUser ? 'да' : 'нет'}`);
-        
+        const deletedUser =
+          await this.userService.findByTelegramIdIncludingDeleted(telegramId);
+        console.log(
+          `[Telegram Login] Удаленный пользователь найден: ${deletedUser ? 'да' : 'нет'}`,
+        );
+
         if (deletedUser) {
           try {
             // Восстанавливаем удаленного пользователя
-            console.log(`[Telegram Login] Попытка восстановления пользователя с id: ${deletedUser.id}`);
+            console.log(
+              `[Telegram Login] Попытка восстановления пользователя с id: ${deletedUser.id}`,
+            );
             user = await this.userService.restore(deletedUser.id);
-            console.log(`[Telegram Login] Пользователь успешно восстановлен с telegramId: ${telegramId}, userId: ${user?.id}`);
+            console.log(
+              `[Telegram Login] Пользователь успешно восстановлен с telegramId: ${telegramId}, userId: ${user?.id}`,
+            );
           } catch (restoreError: any) {
-            console.error(`[Telegram Login] Ошибка восстановления пользователя с telegramId: ${telegramId}`, restoreError);
+            console.error(
+              `[Telegram Login] Ошибка восстановления пользователя с telegramId: ${telegramId}`,
+              restoreError,
+            );
             // Если не удалось восстановить, продолжаем создавать нового пользователя
             user = null;
           }
@@ -653,8 +766,10 @@ export class AuthService {
 
       // Если пользователь не найден, создаем нового
       if (!user) {
-        console.log(`[Telegram Login] Пользователь не найден, создаем нового с telegramId: ${telegramId}`);
-        
+        console.log(
+          `[Telegram Login] Пользователь не найден, создаем нового с telegramId: ${telegramId}`,
+        );
+
         // Формируем имя пользователя
         let userName = loginWidgetDto.first_name || '';
         if (loginWidgetDto.last_name) {
@@ -671,12 +786,16 @@ export class AuthService {
         // Создаем пользователя без номера телефона
         // Повторно проверяем, не появился ли пользователь (race condition)
         user = await this.userService.findByTelegramId(telegramId);
-        console.log(`[Telegram Login] Повторная проверка активного пользователя: ${user ? 'найден' : 'не найден'}`);
-        
+        console.log(
+          `[Telegram Login] Повторная проверка активного пользователя: ${user ? 'найден' : 'не найден'}`,
+        );
+
         if (!user) {
           // Создаем нового пользователя без номера телефона
           try {
-            console.log(`[Telegram Login] Создание нового пользователя: name=${userName.trim()}, telegramId=${telegramId}, telegramUsername=${loginWidgetDto.username || 'нет'}`);
+            console.log(
+              `[Telegram Login] Создание нового пользователя: name=${userName.trim()}, telegramId=${telegramId}, telegramUsername=${loginWidgetDto.username || 'нет'}`,
+            );
             user = await this.userService.create({
               phone: undefined, // Telegram Login Widget не предоставляет номер
               name: userName.trim(),
@@ -685,28 +804,43 @@ export class AuthService {
               telegramId: telegramId,
               telegramUsername: loginWidgetDto.username || undefined,
             });
-            console.log(`[Telegram Login] Пользователь успешно создан с id: ${user.id}`);
+            console.log(
+              `[Telegram Login] Пользователь успешно создан с id: ${user.id}`,
+            );
           } catch (createError: any) {
-            console.error(`[Telegram Login] Ошибка создания пользователя:`, createError);
+            console.error(
+              `[Telegram Login] Ошибка создания пользователя:`,
+              createError,
+            );
             console.error('Error creating user:', createError);
-            
+
             // Проверяем, не появился ли пользователь с таким telegramId (race condition)
             user = await this.userService.findByTelegramId(telegramId);
             if (user) {
               // Пользователь уже создан другим запросом
               console.log('User already exists (race condition)');
-            } else if (createError.code === '23505' || createError.message?.includes('duplicate key') || createError.message?.includes('unique constraint')) {
+            } else if (
+              createError.code === '23505' ||
+              createError.message?.includes('duplicate key') ||
+              createError.message?.includes('unique constraint')
+            ) {
               // Ошибка уникальности - проверяем, какое поле конфликтует
-              
+
               // Проверяем по telegramId (включая удаленных)
-              const deletedByTelegramId = await this.userService.findByTelegramIdIncludingDeleted(telegramId);
+              const deletedByTelegramId =
+                await this.userService.findByTelegramIdIncludingDeleted(
+                  telegramId,
+                );
               if (deletedByTelegramId) {
                 try {
                   // Восстанавливаем удаленного пользователя
                   user = await this.userService.restore(deletedByTelegramId.id);
                   console.log('Restored deleted user by telegramId');
                 } catch (restoreError: any) {
-                  console.error('Ошибка восстановления пользователя при создании:', restoreError);
+                  console.error(
+                    'Ошибка восстановления пользователя при создании:',
+                    restoreError,
+                  );
                   // Если не удалось восстановить, пробуем найти активного пользователя
                   user = await this.userService.findByTelegramId(telegramId);
                   if (!user) {
@@ -760,18 +894,29 @@ export class AuthService {
             await this.userService.update(user.id, { name: newName.trim() });
             user.name = newName.trim();
           } catch (updateError: any) {
-            console.error(`Ошибка обновления имени пользователя ${user.id}:`, updateError);
+            console.error(
+              `Ошибка обновления имени пользователя ${user.id}:`,
+              updateError,
+            );
             // Игнорируем ошибку обновления имени, продолжаем авторизацию
           }
         }
 
         // Обновляем telegramUsername, если изменился
-        if (loginWidgetDto.username && loginWidgetDto.username !== user.telegramUsername) {
+        if (
+          loginWidgetDto.username &&
+          loginWidgetDto.username !== user.telegramUsername
+        ) {
           try {
-            await this.userService.update(user.id, { telegramUsername: loginWidgetDto.username });
+            await this.userService.update(user.id, {
+              telegramUsername: loginWidgetDto.username,
+            });
             user.telegramUsername = loginWidgetDto.username;
           } catch (updateError: any) {
-            console.error(`Ошибка обновления telegramUsername пользователя ${user.id}:`, updateError);
+            console.error(
+              `Ошибка обновления telegramUsername пользователя ${user.id}:`,
+              updateError,
+            );
             // Игнорируем ошибку обновления telegramUsername, продолжаем авторизацию
           }
         }
@@ -779,7 +924,9 @@ export class AuthService {
 
       // Проверяем, что пользователь найден
       if (!user) {
-        throw new UnauthorizedException('Не удалось найти или создать пользователя');
+        throw new UnauthorizedException(
+          'Не удалось найти или создать пользователя',
+        );
       }
 
       // Обновляем информацию о входе
