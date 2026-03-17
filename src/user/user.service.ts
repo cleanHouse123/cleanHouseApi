@@ -273,6 +273,30 @@ export class UserService {
       );
     }
 
+    const deletedUserByEmail = await this.findByEmailIncludingDeleted(
+      createAdminDto.email,
+    );
+    const deletedUserByPhone = await this.findByPhoneIncludingDeleted(
+      createAdminDto.phone,
+    );
+
+    const restorableByEmail = deletedUserByEmail?.deletedAt
+      ? deletedUserByEmail
+      : null;
+    const restorableByPhone = deletedUserByPhone?.deletedAt
+      ? deletedUserByPhone
+      : null;
+
+    if (
+      restorableByEmail &&
+      restorableByPhone &&
+      restorableByEmail.id !== restorableByPhone.id
+    ) {
+      throw new ConflictException(
+        'Email и телефон уже привязаны к разным удаленным пользователям',
+      );
+    }
+
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(
       createAdminDto.password,
@@ -289,8 +313,44 @@ export class UserService {
       isEmailVerified: false,
     };
 
+    const restorableUser = restorableByEmail ?? restorableByPhone;
+    if (restorableUser) {
+      await this.restore(restorableUser.id);
+      return this.update(restorableUser.id, adminData);
+    }
+
     const admin = this.userRepository.create(adminData);
-    return this.userRepository.save(admin);
+    try {
+      return await this.userRepository.save(admin);
+    } catch (error: any) {
+      const isUniqueViolation =
+        error?.code === '23505' ||
+        error?.message?.includes('duplicate key') ||
+        error?.message?.includes('unique constraint');
+
+      if (!isUniqueViolation) {
+        throw error;
+      }
+
+      const fallbackByEmail = await this.findByEmailIncludingDeleted(
+        createAdminDto.email,
+      );
+      const fallbackByPhone = await this.findByPhoneIncludingDeleted(
+        createAdminDto.phone,
+      );
+      const fallbackRestorable = [fallbackByEmail, fallbackByPhone].find(
+        (user) => user?.deletedAt,
+      );
+
+      if (!fallbackRestorable) {
+        throw new ConflictException(
+          'Пользователь с таким email или телефоном уже существует',
+        );
+      }
+
+      await this.restore(fallbackRestorable.id);
+      return this.update(fallbackRestorable.id, adminData);
+    }
   }
 
   async createCurrier(createCurrierDto: CreateCurrierDto): Promise<User> {
