@@ -71,7 +71,7 @@ export class AddressService {
 
   async findAll(query: string): Promise<AddressResponseDto[]> {
     if (!query || query.trim().length < 2) {
-      let cacheEntry = await this.addressCacheRepository
+      const cacheEntry = await this.addressCacheRepository
         .createQueryBuilder('cache')
         .orderBy('cache.search_count', 'DESC')
         .addOrderBy('cache.last_searched_at', 'DESC')
@@ -177,7 +177,6 @@ export class AddressService {
       console.error('Ошибка при сохранении в кэш:', error);
     }
   }
-
 
   async cleanOldCache(daysOld: number = 30): Promise<{ deletedCount: number }> {
     try {

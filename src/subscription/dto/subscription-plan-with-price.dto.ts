@@ -4,7 +4,8 @@ import { SubscriptionPlanResponseDto } from './subscription-plan-response.dto';
 export class SubscriptionPlanWithPriceDto extends SubscriptionPlanResponseDto {
   @ApiProperty({
     example: 0,
-    description: 'Финальная цена с учетом прав на бесплатную подписку в копейках',
+    description:
+      'Финальная цена с учетом прав на бесплатную подписку в копейках',
   })
   finalPriceInKopecks: number;
 
@@ -16,7 +17,8 @@ export class SubscriptionPlanWithPriceDto extends SubscriptionPlanResponseDto {
 
   @ApiProperty({
     example: false,
-    description: 'Имеет ли пользователь право на бесплатную подписку для этого плана',
+    description:
+      'Имеет ли пользователь право на бесплатную подписку для этого плана',
   })
   isEligibleForFree: boolean;
 
@@ -33,4 +35,3 @@ export class SubscriptionPlanWithPriceDto extends SubscriptionPlanResponseDto {
   })
   hasUsedFreeSubscription: boolean;
 }
-

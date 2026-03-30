@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { WorkTimeService } from './work-time.service';
 import { CreateWorkTimeDto } from './dto/create-work-time.dto';
 import { UpdateWorkTimeDto } from './dto/update-work-time.dto';
@@ -27,7 +36,10 @@ export class WorkTimeController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateWorkTimeDto: UpdateWorkTimeDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateWorkTimeDto: UpdateWorkTimeDto,
+  ) {
     return this.workTimeService.update(+id, updateWorkTimeDto);
   }
 

@@ -1,4 +1,12 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { DaDataAddressDataNormalized } from '../interfaces/address-data.interface';
 import { User } from '../../user/entities/user.entity';
 import { AddressUsageFeature } from '../../shared/types/address-features';

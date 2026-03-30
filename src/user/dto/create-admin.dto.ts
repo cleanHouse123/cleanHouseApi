@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateAdminDto {
   @ApiProperty({
@@ -30,5 +30,9 @@ export class CreateAdminDto {
   })
   @IsString()
   @MinLength(8, { message: 'Пароль должен содержать минимум 8 символов' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+    message:
+      'Пароль должен содержать минимум одну строчную букву, одну заглавную букву и одну цифру',
+  })
   password: string;
 }

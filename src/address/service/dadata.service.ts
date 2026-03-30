@@ -15,13 +15,18 @@ export class DaDataService {
     private readonly locationRepository: Repository<Location>,
   ) {}
 
-  async searchAddresses(query: string, withLocations: boolean = true): Promise<AddressResponseDto[]> {
+  async searchAddresses(
+    query: string,
+    withLocations: boolean = true,
+  ): Promise<AddressResponseDto[]> {
     try {
       const url =
         'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
       const token = '8c514de4553ad490a0c95f2c8a51385ecb1afd31'; // TODO: вынести в конфигурацию
 
-      const locations = withLocations ? await this.locationRepository.find() : [];
+      const locations = withLocations
+        ? await this.locationRepository.find()
+        : [];
       const locationsData = locations.map((location) => ({
         city: location.city,
         settlement: location.settlement,
@@ -41,10 +46,7 @@ export class DaDataService {
         body: JSON.stringify({
           query,
           ...(withLocations ? { locations: locationsData } : {}),
-          locations_boost: [
-            { kladr_id: '78' },
-            { kladr_id: '47' },
-          ],
+          locations_boost: [{ kladr_id: '78' }, { kladr_id: '47' }],
           from_bound: { value: 'street' },
           to_bound: { value: 'house' },
           restrict_value: false,
@@ -106,14 +108,13 @@ export class DaDataService {
     }
   }
 
-
   async isSupportableAddress(address: AddressResponseDto): Promise<boolean> {
     const { region, area, city, settlement, street } = address;
     if (!region || !area || !city || !settlement || !street) return false;
 
     const locations = await this.locationRepository.find();
-    console.log(locations, "locationslocationslocationslocationslocations");
-    
+    console.log(locations, 'locationslocationslocationslocationslocations');
+
     const locationsData = locations.map((location) => ({
       city: location.city,
       settlement: location.settlement,
@@ -122,16 +123,19 @@ export class DaDataService {
       street: location.street,
     }));
 
-    return locationsData.some((location) => 
+    return locationsData.some(
+      (location) =>
         location.region === region ||
         location.area === area ||
         location.city === city ||
         location.settlement === settlement ||
-        location.street === street
-      );
+        location.street === street,
+    );
   }
 
-  async isSupportableAddressByDaData(address: AddressResponseDto): Promise<boolean> {
+  async isSupportableAddressByDaData(
+    address: AddressResponseDto,
+  ): Promise<boolean> {
     const { display } = address;
 
     const result = await this.searchAddresses(display, true);

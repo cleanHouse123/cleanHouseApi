@@ -16,7 +16,11 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ScheduledOrdersService } from './services/scheduled-orders.service';
-import { CreateScheduledOrderDto, UpdateScheduledOrderDto, ScheduledOrderResponseDto } from './dto/scheduled-order.dto';
+import {
+  CreateScheduledOrderDto,
+  UpdateScheduledOrderDto,
+  ScheduledOrderResponseDto,
+} from './dto/scheduled-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../shared/decorators/get-user.decorator';
 
@@ -39,7 +43,9 @@ export class ScheduledOrdersController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Создать расписание заказов (только для подписчиков)' })
+  @ApiOperation({
+    summary: 'Создать расписание заказов (только для подписчиков)',
+  })
   @ApiResponse({
     status: 201,
     description: 'Расписание создано успешно',
@@ -53,7 +59,10 @@ export class ScheduledOrdersController {
     @Body() createScheduledOrderDto: CreateScheduledOrderDto,
     @GetUser() user: AuthenticatedUser,
   ): Promise<ScheduledOrderResponseDto> {
-    return this.scheduledOrdersService.createScheduledOrder(createScheduledOrderDto, user.id);
+    return this.scheduledOrdersService.createScheduledOrder(
+      createScheduledOrderDto,
+      user.id,
+    );
   }
 
   @Get('my-schedules')
@@ -95,7 +104,10 @@ export class ScheduledOrdersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateScheduledOrderDto: UpdateScheduledOrderDto,
   ): Promise<ScheduledOrderResponseDto> {
-    return this.scheduledOrdersService.updateSchedule(id, updateScheduledOrderDto);
+    return this.scheduledOrdersService.updateSchedule(
+      id,
+      updateScheduledOrderDto,
+    );
   }
 
   @Patch(':id/activate')

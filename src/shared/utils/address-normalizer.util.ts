@@ -77,4 +77,3 @@ export function compareDaDataAddresses(
   // Все поля должны совпадать
   return fields1.every((field, index) => field === fields2[index]);
 }
-

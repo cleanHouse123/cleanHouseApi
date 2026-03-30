@@ -63,9 +63,21 @@ export class UserService {
     });
   }
 
+  async findByPhoneIncludingDeleted(phone: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { phone },
+    });
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { email, deletedAt: IsNull() },
+    });
+  }
+
+  async findByEmailIncludingDeleted(email: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { email },
     });
   }
 
@@ -75,7 +87,9 @@ export class UserService {
     });
   }
 
-  async findByTelegramIdIncludingDeleted(telegramId: string): Promise<User | null> {
+  async findByTelegramIdIncludingDeleted(
+    telegramId: string,
+  ): Promise<User | null> {
     return this.userRepository.findOne({
       where: { telegramId },
     });
@@ -104,16 +118,16 @@ export class UserService {
       .set({ deletedAt: undefined })
       .where('id = :id', { id })
       .execute();
-    
+
     // Получаем обновленного пользователя
     const restoredUser = await this.userRepository.findOne({
       where: { id },
     });
-    
+
     if (!restoredUser) {
       throw new NotFoundException('Не удалось восстановить пользователя');
     }
-    
+
     return restoredUser;
   }
 
@@ -152,10 +166,13 @@ export class UserService {
     await this.userRepository.update(userId, { deviceToken });
   }
 
-  async update(id: string, updateUserDto: Partial<User>): Promise<User> {
+  async update(
+    id: string,
+    updateUserDto: Partial<User> & { password?: string },
+  ): Promise<User> {
     // Сначала ищем активного пользователя
     let user = await this.findById(id);
-    
+
     // Если не найден, проверяем удаленных (может быть только что восстановлен)
     if (!user) {
       user = await this.findByIdIncludingDeleted(id);
@@ -212,7 +229,19 @@ export class UserService {
       }
     }
 
-    return this.userRepository.save({ ...user, ...updateUserDto });
+    const updatePayload: Partial<User> = { ...updateUserDto };
+
+    if (updateUserDto.password && updateUserDto.password.trim() !== '') {
+      const saltRounds = 10;
+      updatePayload.hash_password = await bcrypt.hash(
+        updateUserDto.password,
+        saltRounds,
+      );
+    }
+
+    delete (updatePayload as { password?: string }).password;
+
+    return this.userRepository.save({ ...user, ...updatePayload });
   }
 
   async remove(id: string): Promise<void> {
@@ -259,6 +288,30 @@ export class UserService {
       );
     }
 
+    const deletedUserByEmail = await this.findByEmailIncludingDeleted(
+      createAdminDto.email,
+    );
+    const deletedUserByPhone = await this.findByPhoneIncludingDeleted(
+      createAdminDto.phone,
+    );
+
+    const restorableByEmail = deletedUserByEmail?.deletedAt
+      ? deletedUserByEmail
+      : null;
+    const restorableByPhone = deletedUserByPhone?.deletedAt
+      ? deletedUserByPhone
+      : null;
+
+    if (
+      restorableByEmail &&
+      restorableByPhone &&
+      restorableByEmail.id !== restorableByPhone.id
+    ) {
+      throw new ConflictException(
+        'Email и телефон уже привязаны к разным удаленным пользователям',
+      );
+    }
+
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(
       createAdminDto.password,
@@ -275,8 +328,44 @@ export class UserService {
       isEmailVerified: false,
     };
 
+    const restorableUser = restorableByEmail ?? restorableByPhone;
+    if (restorableUser) {
+      await this.restore(restorableUser.id);
+      return this.update(restorableUser.id, adminData);
+    }
+
     const admin = this.userRepository.create(adminData);
-    return this.userRepository.save(admin);
+    try {
+      return await this.userRepository.save(admin);
+    } catch (error: any) {
+      const isUniqueViolation =
+        error?.code === '23505' ||
+        error?.message?.includes('duplicate key') ||
+        error?.message?.includes('unique constraint');
+
+      if (!isUniqueViolation) {
+        throw error;
+      }
+
+      const fallbackByEmail = await this.findByEmailIncludingDeleted(
+        createAdminDto.email,
+      );
+      const fallbackByPhone = await this.findByPhoneIncludingDeleted(
+        createAdminDto.phone,
+      );
+      const fallbackRestorable = [fallbackByEmail, fallbackByPhone].find(
+        (user) => user?.deletedAt,
+      );
+
+      if (!fallbackRestorable) {
+        throw new ConflictException(
+          'Пользователь с таким email или телефоном уже существует',
+        );
+      }
+
+      await this.restore(fallbackRestorable.id);
+      return this.update(fallbackRestorable.id, adminData);
+    }
   }
 
   async createCurrier(createCurrierDto: CreateCurrierDto): Promise<User> {

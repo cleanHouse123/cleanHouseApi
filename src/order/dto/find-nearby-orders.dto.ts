@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, Min, Max, IsString, IsBoolean } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  Min,
+  Max,
+  IsString,
+  IsBoolean,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderStatus } from '../entities/order.entity';
 
@@ -95,4 +102,3 @@ export class FindNearbyOrdersDto {
   @IsString()
   customerSearch?: string;
 }
-

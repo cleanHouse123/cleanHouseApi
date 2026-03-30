@@ -16,7 +16,7 @@ export class FcmService {
   /**
    * Отправка уведомления на одно устройство
    * Send notification to a single device
-   * 
+   *
    * @param deviceToken - FCM device token
    * @param title - Заголовок уведомления
    * @param body - Текст уведомления
@@ -48,7 +48,7 @@ export class FcmService {
     // Парсим payload для извлечения orderId и type
     let orderId: string | undefined;
     let notificationType: string | undefined;
-    
+
     if (payload) {
       try {
         const payloadData = JSON.parse(payload);
@@ -103,7 +103,7 @@ export class FcmService {
     if (payload && !orderId) {
       routeInfo.legacyRoute = payload;
     }
-    
+
     if (Object.keys(routeInfo).length > 0) {
       console.log(
         `[sendNotificationToDevice] 📍 Navigation route info: ${JSON.stringify(routeInfo)}`,

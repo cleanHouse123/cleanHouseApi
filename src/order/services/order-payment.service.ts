@@ -180,7 +180,9 @@ export class OrderPaymentService {
         });
 
         payment = await this.paymentRepository.save(payment);
-        console.log(`✅ Создан новый платеж в БД: ${paymentId} для заказа ${orderId}`);
+        console.log(
+          `✅ Создан новый платеж в БД: ${paymentId} для заказа ${orderId}`,
+        );
       }
 
       // Сохраняем информацию о платеже в памяти для быстрого доступа
@@ -264,7 +266,7 @@ export class OrderPaymentService {
   // Обновление статуса платежа
   async updatePaymentStatus(paymentId: string, status: string) {
     console.log(`🔄 Обновление статуса платежа ${paymentId} на ${status}`);
-    
+
     // Обновляем в памяти
     const memoryPayment = this.payments.get(paymentId);
     if (memoryPayment) {
@@ -283,7 +285,7 @@ export class OrderPaymentService {
       dbPayment.status = status as PaymentStatus;
       await this.paymentRepository.save(dbPayment);
       console.log(`✅ Статус платежа ${paymentId} обновлен в БД: ${status}`);
-      
+
       // Возвращаем объект с правильной структурой
       return {
         id: dbPayment.id,
@@ -339,7 +341,7 @@ export class OrderPaymentService {
   async handleYookassaWebhook(webhookData: any) {
     console.log('📥 Обработка webhook от YooKassa для заказа');
     console.log('Webhook data:', JSON.stringify(webhookData, null, 2));
-    
+
     const { object: payment } = webhookData;
     const { orderId, paymentId } = payment.metadata || {};
 
@@ -363,9 +365,12 @@ export class OrderPaymentService {
         status = PaymentStatus.PENDING;
     }
 
-    const updatedPayment = await this.updatePaymentStatus(paymentId, status.toString());
+    const updatedPayment = await this.updatePaymentStatus(
+      paymentId,
+      status.toString(),
+    );
     console.log(`✅ Платеж обработан:`, updatedPayment);
-    
+
     return updatedPayment;
   }
 

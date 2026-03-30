@@ -17,10 +17,7 @@ export class UserAddressService {
     payload: CreateUserAddressDto,
   ): Promise<UserAddress> {
     if (payload.isSupportableArea) {
-      await this.userAddressRepository.update(
-        { userId },
-        { isPrimary: false },
-      );
+      await this.userAddressRepository.update({ userId }, { isPrimary: false });
     }
 
     const newAddress = this.userAddressRepository.create({
@@ -63,17 +60,16 @@ export class UserAddressService {
       addressName,
     } = params;
 
+    const queryBuilder = this.userAddressRepository
+      .createQueryBuilder('userAddress')
+      .leftJoinAndSelect('userAddress.user', 'user');
 
-    const queryBuilder = this.userAddressRepository.createQueryBuilder('userAddress').leftJoinAndSelect('userAddress.user', 'user');
+    console.log(userId, 'userIduserIduserIduserIduserId');
 
-
-    console.log(userId, "userIduserIduserIduserIduserId");
-    
     if (userId) {
-        queryBuilder.andWhere(
-          '(CAST("user"."id" AS TEXT) ILIKE :userId)',
-          { userId: `%${userId}%` }
-        );
+      queryBuilder.andWhere('(CAST("user"."id" AS TEXT) ILIKE :userId)', {
+        userId: `%${userId}%`,
+      });
     }
 
     if (addressName) {
@@ -81,7 +77,7 @@ export class UserAddressService {
       // TypeORM не может правильно обработать алиас в JSONB функциях
       queryBuilder.andWhere(
         '("userAddress"."address"->>\'display\' ILIKE :addressName OR "userAddress"."address"->>\'unrestricted_value\' ILIKE :addressName OR "userAddress"."address"->>\'value\' ILIKE :addressName)',
-        { addressName: `%${addressName}%` }
+        { addressName: `%${addressName}%` },
       );
     }
 
@@ -101,7 +97,9 @@ export class UserAddressService {
     };
   }
 
-  async getMostCommonStreets(limit: number = 10): Promise<{ street: string; count: number }[]> {
+  async getMostCommonStreets(
+    limit: number = 10,
+  ): Promise<{ street: string; count: number }[]> {
     const addresses = await this.userAddressRepository.find({
       where: {},
       select: ['address'],
@@ -111,7 +109,8 @@ export class UserAddressService {
 
     addresses.forEach((address) => {
       if (address.address) {
-        const street = address.address.street_with_type || address.address.street;
+        const street =
+          address.address.street_with_type || address.address.street;
         if (street) {
           const currentCount = streetCounts.get(street) || 0;
           streetCounts.set(street, currentCount + 1);

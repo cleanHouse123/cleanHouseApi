@@ -212,7 +212,10 @@ export class OrderPaymentPageController {
       html = html.replace(/{{amountKopecks}}/g, amountInKopecks);
       html = html.replace(/{{paymentUrl}}/g, payment.paymentUrl || '#');
       html = html.replace(/{{status}}/g, payment.status);
-      html = html.replace(/{{WEBSOCKET_URL}}/g, this.configService.getWebSocketUrl());
+      html = html.replace(
+        /{{WEBSOCKET_URL}}/g,
+        this.configService.getWebSocketUrl(),
+      );
 
       res.send(html);
     } catch (error) {

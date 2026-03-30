@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsArray, IsEnum, IsString } from 'class-validator';
+import {
+  IsOptional,
+  IsArray,
+  IsEnum,
+  IsString,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { UserRole } from 'src/shared/types/user.role';
 
 export class UpdateUserDto {
@@ -18,7 +25,10 @@ export class UpdateUserDto {
   @IsString()
   phone?: string;
 
-  @ApiProperty({ description: 'Username пользователя в Telegram', required: false })
+  @ApiProperty({
+    description: 'Username пользователя в Telegram',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   telegramUsername?: string;
@@ -33,4 +43,18 @@ export class UpdateUserDto {
   @IsArray()
   @IsEnum(UserRole, { each: true })
   roles?: UserRole[];
+
+  @ApiProperty({
+    description: 'Новый пароль пользователя',
+    required: false,
+    minLength: 8,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(8, { message: 'Пароль должен содержать минимум 8 символов' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+    message:
+      'Пароль должен содержать минимум одну строчную букву, одну заглавную букву и одну цифру',
+  })
+  password?: string;
 }

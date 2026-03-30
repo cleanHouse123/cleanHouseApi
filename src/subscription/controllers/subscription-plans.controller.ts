@@ -17,8 +17,16 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../../auth/guards/admin.guard';
 import { SubscriptionService } from '../subscription.service';
 import { SubscriptionPlanWithPriceDto } from '../dto/subscription-plan-with-price.dto';
-import { GetUserMetadata, UserMetadata } from '../../shared/decorators/get-user.decorator';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  GetUserMetadata,
+  UserMetadata,
+} from '../../shared/decorators/get-user.decorator';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 @ApiTags('Subscription Plans')
 @Controller('subscription-plans')
@@ -31,7 +39,10 @@ export class SubscriptionPlansController {
   @Get('client/with-prices')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Получить все планы подписок с финальными ценами для текущего пользователя' })
+  @ApiOperation({
+    summary:
+      'Получить все планы подписок с финальными ценами для текущего пользователя',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список планов подписок с ценами для пользователя',
@@ -44,7 +55,10 @@ export class SubscriptionPlansController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Получить все планы подписок (публичный, без цен для пользователя)' })
+  @ApiOperation({
+    summary:
+      'Получить все планы подписок (публичный, без цен для пользователя)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Список планов подписок',

@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from 'src/shared/types/user.role';
 
 export class UsersListDto {
-
   @ApiProperty({
     description: 'ID администратора',
     example: '123e4567-e89b-12d3-a456-426614174000',

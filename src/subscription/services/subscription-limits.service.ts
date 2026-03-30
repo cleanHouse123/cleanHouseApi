@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, Not } from 'typeorm';
-import { Subscription, SubscriptionStatus } from '../entities/subscription.entity';
+import {
+  Subscription,
+  SubscriptionStatus,
+} from '../entities/subscription.entity';
 import { Order, OrderStatus } from '../../order/entities/order.entity';
 
 export interface OrderLimitsCheck {
@@ -36,7 +39,6 @@ export class SubscriptionLimitsService {
     private orderRepository: Repository<Order>,
   ) {}
 
-
   /**
    * Проверяет лимиты заказов для пользователя
    * @param userId ID пользователя
@@ -48,10 +50,10 @@ export class SubscriptionLimitsService {
     numberPackages: number = 2,
   ): Promise<OrderLimitsCheck> {
     const activeSubscription = await this.subscriptionRepository.findOne({
-      where: { 
-        userId, 
-        status: SubscriptionStatus.ACTIVE 
-      }
+      where: {
+        userId,
+        status: SubscriptionStatus.ACTIVE,
+      },
     });
 
     if (!activeSubscription) {
@@ -76,7 +78,7 @@ export class SubscriptionLimitsService {
       activeSubscription.ordersLimit - activeSubscription.usedOrders,
     );
     const requiredOrders = this.calculateConsumedOrders(numberPackages);
-    
+
     // Если лимиты исчерпаны или недостаточно для запрошенного количества пакетов
     if (remainingOrders === 0 || remainingOrders < requiredOrders) {
       if (remainingOrders === 0) {
@@ -137,7 +139,7 @@ export class SubscriptionLimitsService {
     isUnlimited: boolean;
   }> {
     const limits = await this.checkOrderLimits(userId);
-    
+
     return {
       used: limits.usedOrders,
       total: limits.totalLimit,
@@ -152,7 +154,10 @@ export class SubscriptionLimitsService {
    * @param endDate Дата окончания подписки
    * @returns Объект с начальной и конечной датой периода
    */
-  private getLimitPeriod(startDate: Date, endDate: Date): { start: Date; end: Date } {
+  private getLimitPeriod(
+    startDate: Date,
+    endDate: Date,
+  ): { start: Date; end: Date } {
     const now = new Date();
     const subscriptionStart = new Date(startDate);
     const subscriptionEnd = new Date(endDate);
@@ -178,11 +183,11 @@ export class SubscriptionLimitsService {
    * @returns Информация о лимитах
    */
   async checkLimitsForSubscriptionType(
-    subscriptionType: string, 
-    userId: string
+    subscriptionType: string,
+    userId: string,
   ): Promise<OrderLimitsCheck> {
     const limits = await this.checkOrderLimits(userId);
-    
+
     // Если у пользователя нет подписки или тип не совпадает
     if (limits.subscriptionType !== subscriptionType) {
       return this.getEmptyLimits();
@@ -201,7 +206,7 @@ export class SubscriptionLimitsService {
     numberPackages: number = 2,
   ): Promise<void> {
     const subscription = await this.subscriptionRepository.findOne({
-      where: { userId, status: SubscriptionStatus.ACTIVE }
+      where: { userId, status: SubscriptionStatus.ACTIVE },
     });
 
     if (subscription && subscription.ordersLimit !== -1) {
@@ -211,7 +216,9 @@ export class SubscriptionLimitsService {
 
       await this.subscriptionRepository.update(subscription.id, {
         usedOrders: newUsedOrders,
-        ...(reachedOrExceededLimit ? { status: SubscriptionStatus.EXPIRED } : {}),
+        ...(reachedOrExceededLimit
+          ? { status: SubscriptionStatus.EXPIRED }
+          : {}),
       });
 
       this.logger.log(
@@ -235,7 +242,7 @@ export class SubscriptionLimitsService {
     numberPackages: number = 2,
   ): Promise<void> {
     const subscription = await this.subscriptionRepository.findOne({
-      where: { userId, status: SubscriptionStatus.ACTIVE }
+      where: { userId, status: SubscriptionStatus.ACTIVE },
     });
 
     if (subscription && subscription.ordersLimit !== -1 && subscription.usedOrders > 0) {
@@ -256,12 +263,17 @@ export class SubscriptionLimitsService {
    * @param subscriptionId ID подписки
    * @param reason Причина завершения ('time' или 'limit')
    */
-  private async expireSubscription(subscriptionId: string, reason: 'time' | 'limit'): Promise<void> {
+  private async expireSubscription(
+    subscriptionId: string,
+    reason: 'time' | 'limit',
+  ): Promise<void> {
     await this.subscriptionRepository.update(subscriptionId, {
-      status: SubscriptionStatus.EXPIRED
+      status: SubscriptionStatus.EXPIRED,
     });
-    
-    this.logger.log(`Подписка ${subscriptionId} завершена по причине: ${reason}`);
+
+    this.logger.log(
+      `Подписка ${subscriptionId} завершена по причине: ${reason}`,
+    );
   }
 
   /**
@@ -282,7 +294,9 @@ export class SubscriptionLimitsService {
   /**
    * Возвращает лимиты для безлимитной подписки
    */
-  private getUnlimitedSubscription(subscription: Subscription): OrderLimitsCheck {
+  private getUnlimitedSubscription(
+    subscription: Subscription,
+  ): OrderLimitsCheck {
     return {
       canCreateOrder: true,
       remainingOrders: -1, // безлимит

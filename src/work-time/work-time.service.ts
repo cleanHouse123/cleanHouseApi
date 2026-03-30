@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateWorkTimeDto } from './dto/create-work-time.dto';
@@ -13,7 +17,9 @@ export class WorkTimeService {
   ) {}
 
   async create(createWorkTimeDto: CreateWorkTimeDto): Promise<WorkTime> {
-    const existing = await this.workTimeRepository.find({ order: { startDate: 'ASC' } });
+    const existing = await this.workTimeRepository.find({
+      order: { startDate: 'ASC' },
+    });
     if (existing.length > 0) {
       throw new BadRequestException('Work time slot already exists');
     }
@@ -42,7 +48,10 @@ export class WorkTimeService {
     return workTime;
   }
 
-  async update(id: number, updateWorkTimeDto: UpdateWorkTimeDto): Promise<WorkTime> {
+  async update(
+    id: number,
+    updateWorkTimeDto: UpdateWorkTimeDto,
+  ): Promise<WorkTime> {
     const existing = await this.findOne(id);
 
     if (updateWorkTimeDto.startDate) {
@@ -50,13 +59,20 @@ export class WorkTimeService {
     }
     if (updateWorkTimeDto.startDate === null) existing.startDate = null;
 
-    if (updateWorkTimeDto.endDate) existing.endDate = this.normalizeToUtc(updateWorkTimeDto.endDate);
+    if (updateWorkTimeDto.endDate)
+      existing.endDate = this.normalizeToUtc(updateWorkTimeDto.endDate);
     if (updateWorkTimeDto.endDate === null) existing.endDate = null;
 
-    if (updateWorkTimeDto.startTime !== undefined) existing.startTime = updateWorkTimeDto.startTime ?? null;
-    if (updateWorkTimeDto.endTime !== undefined) existing.endTime = updateWorkTimeDto.endTime ?? null;
+    if (updateWorkTimeDto.startTime !== undefined)
+      existing.startTime = updateWorkTimeDto.startTime ?? null;
+    if (updateWorkTimeDto.endTime !== undefined)
+      existing.endTime = updateWorkTimeDto.endTime ?? null;
 
-    if (existing.startDate && existing.endDate && existing.endDate <= existing.startDate) {
+    if (
+      existing.startDate &&
+      existing.endDate &&
+      existing.endDate <= existing.startDate
+    ) {
       throw new BadRequestException('endDate must be after startDate');
     }
 
@@ -75,7 +91,8 @@ export class WorkTimeService {
         ? `${value}Z`
         : value;
     const date = new Date(normalizedString);
-    if (Number.isNaN(date.getTime())) throw new BadRequestException('Invalid date value');
+    if (Number.isNaN(date.getTime()))
+      throw new BadRequestException('Invalid date value');
     return new Date(date.toISOString()); // ensure UTC normalization
   }
 }

@@ -281,11 +281,17 @@ export class WebhookController {
 
     // Если metadata пустое, пытаемся найти платеж по yookassaId
     if (!isOrderPayment && !isSubscriptionPayment && payment.id) {
-      this.logger.log(`🔍 Metadata пустое, ищем платеж по yookassaId: ${payment.id}`);
-      
-      const orderPayment = await this.orderPaymentService.findByYookassaId(payment.id);
+      this.logger.log(
+        `🔍 Metadata пустое, ищем платеж по yookassaId: ${payment.id}`,
+      );
+
+      const orderPayment = await this.orderPaymentService.findByYookassaId(
+        payment.id,
+      );
       if (orderPayment) {
-        this.logger.log(`✅ Найден платеж заказа по yookassaId: ${orderPayment.id}`);
+        this.logger.log(
+          `✅ Найден платеж заказа по yookassaId: ${orderPayment.id}`,
+        );
         // Создаем правильный webhookData с metadata
         const correctedWebhookData = {
           ...webhookData,
@@ -300,9 +306,12 @@ export class WebhookController {
         return await this.handleOrderPayment(correctedWebhookData);
       }
 
-      const subscriptionPayment = await this.subscriptionPaymentService.findByYookassaId(payment.id);
+      const subscriptionPayment =
+        await this.subscriptionPaymentService.findByYookassaId(payment.id);
       if (subscriptionPayment) {
-        this.logger.log(`✅ Найден платеж подписки по yookassaId: ${subscriptionPayment.id}`);
+        this.logger.log(
+          `✅ Найден платеж подписки по yookassaId: ${subscriptionPayment.id}`,
+        );
         const correctedWebhookData = {
           ...webhookData,
           object: {
@@ -349,8 +358,13 @@ export class WebhookController {
         status: payment?.status,
       });
 
-      if (payment && (payment.status === 'paid' || payment.status === PaymentStatus.PAID)) {
-        this.logger.log(`✅ Платеж ${payment.id} успешно оплачен, обновляем статус заказа ${payment.orderId}`);
+      if (
+        payment &&
+        (payment.status === 'paid' || payment.status === PaymentStatus.PAID)
+      ) {
+        this.logger.log(
+          `✅ Платеж ${payment.id} успешно оплачен, обновляем статус заказа ${payment.orderId}`,
+        );
         // Получаем заказ для проверки текущего статуса
         const order = await this.orderRepository.findOne({
           where: { id: payment.orderId },
@@ -418,8 +432,13 @@ export class WebhookController {
             );
           }
         }
-      } else if (payment && (payment.status === 'failed' || payment.status === PaymentStatus.FAILED)) {
-        this.logger.log(`❌ Платеж ${payment.id} не прошел, статус: ${payment.status}`);
+      } else if (
+        payment &&
+        (payment.status === 'failed' || payment.status === PaymentStatus.FAILED)
+      ) {
+        this.logger.log(
+          `❌ Платеж ${payment.id} не прошел, статус: ${payment.status}`,
+        );
         // Отправляем уведомление об ошибке
         this.orderPaymentGateway.notifyPaymentError(
           payment.id,
@@ -522,9 +541,7 @@ export class WebhookController {
       this.logger.log(
         `[WebhookController] 📍 Sending notification with navigation route: ${navigationRoute} for order ${order.id}`,
       );
-      this.logger.log(
-        `[WebhookController] Notification payload: ${payload}`,
-      );
+      this.logger.log(`[WebhookController] Notification payload: ${payload}`);
 
       const validCouriers = couriers.filter(
         (c) => c.deviceToken && c.deviceToken.trim(),
@@ -560,7 +577,8 @@ export class WebhookController {
       validCouriers.forEach((c, i) => {
         const r = results[i];
         const success =
-          r?.status === 'fulfilled' && (r as PromiseFulfilledResult<any>).value?.success;
+          r?.status === 'fulfilled' &&
+          (r as PromiseFulfilledResult<any>).value?.success;
         if (success) {
           this.logger.log(
             `[WebhookController] ✅ Push ОТПРАВЛЕН: заказ ${order.id} оплачен -> курьер ${c.name} (${c.phone || c.id}), messageId: ${(r as PromiseFulfilledResult<any>).value?.messageId}`,
@@ -568,7 +586,7 @@ export class WebhookController {
         } else {
           const err =
             r?.status === 'rejected'
-              ? (r as PromiseRejectedResult).reason?.message
+              ? r.reason?.message
               : (r as PromiseFulfilledResult<any>)?.value?.error;
           this.logger.warn(
             `[WebhookController] ❌ Push НЕ отправлен: заказ ${order.id} -> курьер ${c.name}: ${err || 'unknown'}`,

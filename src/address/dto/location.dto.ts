@@ -25,7 +25,6 @@ export class LocationDto {
   updated_at: Date;
 }
 
-
 export class CreateLocationDto {
   @ApiProperty({ description: 'Регион', example: '1' })
   region: string | null;

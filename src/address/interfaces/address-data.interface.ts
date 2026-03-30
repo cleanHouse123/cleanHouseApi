@@ -109,7 +109,6 @@ export interface DaDataAddressResponse {
   suggestions: DaDataAddressSuggestion[];
 }
 
-
 export class DaDataAddressDataNormalized {
   value: string;
   unrestricted_value: string;

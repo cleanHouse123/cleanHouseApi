@@ -14,8 +14,9 @@ export function normalizePhoneToE164(
 ): string {
   const trimmed = rawPhone.trim();
   // Если номер только цифры (или цифры после +) — считаем международным и добавляем "+" при необходимости
-  const toParse =
-    trimmed.startsWith('+') ? trimmed : '+' + trimmed.replace(/\D/g, '');
+  const toParse = trimmed.startsWith('+')
+    ? trimmed
+    : '+' + trimmed.replace(/\D/g, '');
   const parsed = parsePhoneNumber(toParse, defaultCountry ?? 'RU');
   if (!parsed || !parsed.isValid()) {
     throw new Error('Invalid phone number');

@@ -9,7 +9,8 @@ export class SubscriptionPriceDto {
 
   @ApiProperty({
     example: 0,
-    description: 'Финальная цена с учетом скидок и бесплатных подписок в копейках',
+    description:
+      'Финальная цена с учетом скидок и бесплатных подписок в копейках',
   })
   finalPrice: number;
 
@@ -27,7 +28,8 @@ export class SubscriptionPriceDto {
   referralCount?: number;
 
   @ApiProperty({
-    example: 'Недостаточно приглашенных пользователей. Требуется: 3, текущее: 2',
+    example:
+      'Недостаточно приглашенных пользователей. Требуется: 3, текущее: 2',
     description: 'Причина, почему бесплатная подписка недоступна',
     required: false,
   })
@@ -39,4 +41,3 @@ export class SubscriptionPriceDto {
   })
   hasUsedFreeSubscription: boolean;
 }
-

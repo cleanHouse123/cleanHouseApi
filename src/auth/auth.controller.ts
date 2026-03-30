@@ -215,7 +215,10 @@ export class AuthController {
   ) {
     const ipAddress =
       req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
-    return this.authService.verifyTelegramLoginWidget(loginWidgetDto, ipAddress);
+    return this.authService.verifyTelegramLoginWidget(
+      loginWidgetDto,
+      ipAddress,
+    );
   }
 
   // ==================== TOKEN MANAGEMENT ====================
