@@ -28,7 +28,11 @@ export class PriceController {
     @Query('addressId') addressId?: string,
   ) {
     const userId = req.user?.userId || req.user?.id;
-    const packagesCount = numberPackages ? Number(numberPackages) : 1;
+    // Без query по умолчанию 2 пакета — как в PriceService.getOrderPrice и типовом заказе
+    const parsed =
+      numberPackages !== undefined ? Number(numberPackages) : NaN;
+    const packagesCount =
+      Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 2;
     const price = await this.priceService.getOrderPrice({
       userId,
       numberPackages: packagesCount,

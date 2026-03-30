@@ -120,6 +120,12 @@ export class OrderService {
       );
     }
 
+    if (paymentMethod === PaymentMethod.SUBSCRIPTION && numberPackages !== 2) {
+      throw new BadRequestException(
+        'По подписке доступен только заказ на 2 пакета (до 60 л).',
+      );
+    }
+
     // Если передан addressId, находим user-address и проверяем принадлежность пользователю
     let userAddress: UserAddress | null = null;
     if (createOrderDto.addressId) {
@@ -230,11 +236,13 @@ export class OrderService {
     // Флаг FIRST_ORDER_USED теперь устанавливается только после оплаты заказа
     // в методе updateStatus при переходе статуса на PAID
 
-    // Обновляем счетчик использованных заказов в подписке с учетом количества пакетов
-    await this.subscriptionLimitsService.incrementUsedOrders(
-      createOrderDto.customerId,
-      numberPackages,
-    );
+    // Считаем лимит подписки только для заказов, оплаченных по подписке
+    if (paymentMethod === PaymentMethod.SUBSCRIPTION) {
+      await this.subscriptionLimitsService.incrementUsedOrders(
+        createOrderDto.customerId,
+        numberPackages,
+      );
+    }
 
     // Если заказ оплачен через подписку, создаем автоматический платеж
     if (
@@ -667,10 +675,24 @@ export class OrderService {
       }
     }
 
-    // Если заказ отменен, уменьшаем счетчик использованных заказов
-    // if (updateOrderStatusDto.status === OrderStatus.CANCELED) {
-    //   await this.subscriptionLimitsService.decrementUsedOrders(order.customerId);
-    // }
+    // Отмена оплаченного заказа по подписке — возвращаем единицы лимита (по числу пакетов)
+    if (
+      updateOrderStatusDto.status === OrderStatus.CANCELED &&
+      previousStatus === OrderStatus.PAID
+    ) {
+      const subscriptionPayment = await this.paymentRepository.findOne({
+        where: {
+          orderId: order.id,
+          method: PaymentMethod.SUBSCRIPTION,
+        },
+      });
+      if (subscriptionPayment) {
+        await this.subscriptionLimitsService.decrementUsedOrders(
+          order.customerId,
+          order.numberPackages ?? 2,
+        );
+      }
+    }
 
     return this.findOne(id);
   }

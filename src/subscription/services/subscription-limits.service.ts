@@ -21,7 +21,7 @@ export interface OrderLimitsCheck {
 @Injectable()
 export class SubscriptionLimitsService {
   private readonly logger = new Logger(SubscriptionLimitsService.name);
-  // Бизнес-правило: 1 заказ = 2 пакета мусора
+  // Учёт лимита: потребление «заказов» от ceil(пакеты / 2); по подписке заказ — 2 пакета (60 л)
   private readonly PACKAGES_PER_ORDER = 2;
 
   private calculateConsumedOrders(numberPackages: number): number {
@@ -42,7 +42,7 @@ export class SubscriptionLimitsService {
   /**
    * Проверяет лимиты заказов для пользователя
    * @param userId ID пользователя
-   * @param numberPackages Количество пакетов (по умолчанию 1)
+   * @param numberPackages Количество пакетов (по умолчанию 2)
    * @returns Информация о лимитах и возможности создания заказа
    */
   async checkOrderLimits(
@@ -199,7 +199,7 @@ export class SubscriptionLimitsService {
   /**
    * Увеличивает счетчик использованных заказов после создания заказа
    * @param userId ID пользователя
-   * @param numberPackages Количество пакетов (по умолчанию 1)
+   * @param numberPackages Количество пакетов (по умолчанию 2)
    */
   async incrementUsedOrders(
     userId: string,

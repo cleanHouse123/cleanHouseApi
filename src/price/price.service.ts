@@ -28,13 +28,16 @@ export interface GetOrderPriceParams {
 
 @Injectable()
 export class PriceService {
-  private readonly ORDER_PRICE = 14900;
+  /** Разовый заказ: 1 пакет */
+  private readonly PRICE_ONE_PACKAGE = 14900;
+  /** Разовый заказ: 2 пакета (до 60 л) */
+  private readonly PRICE_TWO_PACKAGES = 19900;
   private readonly FIRST_ORDER_PRICE = 100;
 
-  private readonly PRICE_PER_PACKAGE = 14900;
-  private readonly PRICE_PER_PACKAGE_2 = 24900;
-  private readonly PRICE_PER_PACKAGE_3 = 34900;
-  private readonly PRICE_PER_PACKAGE_4 = 39900;
+  /** Ступени для 3+ пакетов (как раньше) */
+  private readonly PRICE_THREE_PACKAGES = 24900;
+  private readonly PRICE_FOUR_PACKAGES = 34900;
+  private readonly PRICE_FIVE_PACKAGES = 39900;
 
   constructor(
     @InjectRepository(User)
@@ -54,8 +57,8 @@ export class PriceService {
       addressDetails,
     } = params;
 
-    // Определяем базовую цену за один пакет
-    let basePricePerPackage: number = this.ORDER_PRICE;
+    // Базовая цена за один пакет (для логики «первого заказа»)
+    let basePricePerPackage: number = this.PRICE_ONE_PACKAGE;
 
     // Проверяем, может ли адрес получить скидку первого заказа
     let isAddressEligible = false;
@@ -117,58 +120,61 @@ export class PriceService {
       }
     }
 
-    // Если это первый заказ (скидка), скидка применяется только к первому пакету
-    // Остальные пакеты по полной цене (149 руб)
     const isFirstOrder = basePricePerPackage === this.FIRST_ORDER_PRICE;
-    const fullPrice = this.ORDER_PRICE; // 149 рублей в копейках
+    const perExtraAfterFive = this.PRICE_ONE_PACKAGE;
 
-    // Расчет финальной цены: 1 «вынос» = 2 пакета = 149 ₽; дальше ступени как раньше,
-    // но сдвинуты на +1 пакет (3 пакета = как раньше 2 пакета — 249 ₽ и т.д.)
-    // 1 пакет: 149 ₽ | 2 пакета: 149 ₽ (один вынос) | 3: 249 | 4: 349 | 5: 399
+    // Разовые тарифы: 1 пакет — 149 ₽, 2 пакета — 199 ₽; 3+ — прежние ступени
     if (numberPackages === 1) {
-      return isFirstOrder ? basePricePerPackage : this.PRICE_PER_PACKAGE;
+      return isFirstOrder ? basePricePerPackage : this.PRICE_ONE_PACKAGE;
     }
 
     if (numberPackages === 2) {
       if (isFirstOrder) {
-        // Первый заказ: 1 ₽ + 149 ₽ за один вынос (2 пакета)
-        return basePricePerPackage + fullPrice;
+        return basePricePerPackage + this.PRICE_TWO_PACKAGES;
       }
-      // Один вынос из подписки / базовая цена за 2 пакета
-      return this.PRICE_PER_PACKAGE;
+      return this.PRICE_TWO_PACKAGES;
     }
 
     if (numberPackages === 3) {
       if (isFirstOrder) {
-        // Скидка «первого заказа» на сумму тарифа (как раньше за 2 пакета до сдвига)
-        return basePricePerPackage + (this.PRICE_PER_PACKAGE_2 - this.FIRST_ORDER_PRICE);
+        return (
+          basePricePerPackage +
+          (this.PRICE_THREE_PACKAGES - this.FIRST_ORDER_PRICE)
+        );
       }
-      return this.PRICE_PER_PACKAGE_2;
+      return this.PRICE_THREE_PACKAGES;
     }
 
     if (numberPackages === 4) {
       if (isFirstOrder) {
-        return basePricePerPackage + (this.PRICE_PER_PACKAGE_3 - this.FIRST_ORDER_PRICE);
+        return (
+          basePricePerPackage +
+          (this.PRICE_FOUR_PACKAGES - this.FIRST_ORDER_PRICE)
+        );
       }
-      return this.PRICE_PER_PACKAGE_3;
+      return this.PRICE_FOUR_PACKAGES;
     }
 
     if (numberPackages === 5) {
       if (isFirstOrder) {
-        return basePricePerPackage + (this.PRICE_PER_PACKAGE_4 - this.FIRST_ORDER_PRICE);
+        return (
+          basePricePerPackage +
+          (this.PRICE_FIVE_PACKAGES - this.FIRST_ORDER_PRICE)
+        );
       }
-      return this.PRICE_PER_PACKAGE_4;
+      return this.PRICE_FIVE_PACKAGES;
     }
 
-    // Для большего количества пакетов — линейное добивание от тарифа «5 пакетов»
     if (isFirstOrder && numberPackages > 1) {
       return (
         basePricePerPackage +
-        (this.PRICE_PER_PACKAGE_4 - this.FIRST_ORDER_PRICE) +
-        (numberPackages - 5) * fullPrice
+        (this.PRICE_FIVE_PACKAGES - this.FIRST_ORDER_PRICE) +
+        (numberPackages - 5) * perExtraAfterFive
       );
     }
-    return this.PRICE_PER_PACKAGE_4 + (numberPackages - 5) * fullPrice;
+    return (
+      this.PRICE_FIVE_PACKAGES + (numberPackages - 5) * perExtraAfterFive
+    );
   }
 
   async getPriceByType(type: PriceType): Promise<number> {
@@ -180,7 +186,7 @@ export class PriceService {
       case PriceType.SUBSCRIPTION_YEARLY:
         return 960000;
       default:
-        return this.ORDER_PRICE;
+        return this.PRICE_ONE_PACKAGE;
     }
   }
 

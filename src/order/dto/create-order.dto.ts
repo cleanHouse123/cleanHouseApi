@@ -157,14 +157,14 @@ export class CreateOrderDto {
   coordinates?: CoordinatesDto;
 
   @ApiProperty({
-    description: 'Количество пакетов',
+    description: 'Количество пакетов (разово: от 1; по подписке — 2)',
     example: 2,
     required: false,
     default: 2,
   })
   @IsOptional()
   @IsNumber()
-  @Min(2)
+  @Min(1)
   @Type(() => Number)
   numberPackages?: number;
 
