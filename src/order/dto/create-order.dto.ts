@@ -158,13 +158,13 @@ export class CreateOrderDto {
 
   @ApiProperty({
     description: 'Количество пакетов',
-    example: 1,
+    example: 2,
     required: false,
-    default: 1,
+    default: 2,
   })
   @IsOptional()
   @IsNumber()
-  @Min(1)
+  @Min(2)
   @Type(() => Number)
   numberPackages?: number;
 

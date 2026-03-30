@@ -127,8 +127,8 @@ export class OrderResponseDto {
 
   @ApiProperty({
     description: 'Количество пакетов',
-    example: 1,
-    default: 1,
+    example: 2,
+    default: 2,
   })
   @Expose()
   numberPackages: number;

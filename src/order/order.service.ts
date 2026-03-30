@@ -70,7 +70,8 @@ export class OrderService {
       throw new NotFoundException('Клиент не найден');
     }
 
-    const numberPackages = createOrderDto.numberPackages || 1;
+    const numberPackages = createOrderDto.numberPackages ?? 2;
+    const requiredOrders = Math.ceil(numberPackages / 2);
 
     // Проверяем лимиты заказов для пользователя с учетом количества пакетов
     const limits = await this.subscriptionLimitsService.checkOrderLimits(
@@ -87,7 +88,7 @@ export class OrderService {
         : 'Превышен лимит заказов для вашей подписки';
 
       throw new BadRequestException(
-        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}, требуется: ${numberPackages}`,
+        `${reason}. Доступно: ${limits.remainingOrders} заказов из ${limits.totalLimit}, требуется: ${requiredOrders} (${numberPackages} пакетов)`,
       );
     }
 
@@ -812,7 +813,7 @@ export class OrderService {
       notes: order?.notes || '',
       paymentUrl: order?.paymentUrl || undefined,
       coordinates: order?.coordinates || undefined,
-      numberPackages: order?.numberPackages || 1,
+      numberPackages: order?.numberPackages || 2,
       assignedAt: order?.assignedAt || undefined,
       payments: order?.payments || [],
       createdAt: order?.createdAt || new Date(),

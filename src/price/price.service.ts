@@ -48,7 +48,7 @@ export class PriceService {
   async getOrderPrice(params: GetOrderPriceParams = {}): Promise<number> {
     const {
       userId,
-      numberPackages = 1,
+      numberPackages = 2,
       addressId,
       address,
       addressDetails,
@@ -118,38 +118,53 @@ export class PriceService {
     const isFirstOrder = basePricePerPackage === this.FIRST_ORDER_PRICE;
     const fullPrice = this.ORDER_PRICE; // 149 рублей в копейках
 
-    // Расчет финальной цены в зависимости от количества пакетов
-    // 1 пакет: 149 руб, 2 пакета: 249 руб, 3 пакета: 349 руб, 4 пакета: 399 руб
+    // Расчет финальной цены: 1 «вынос» = 2 пакета = 149 ₽; дальше ступени как раньше,
+    // но сдвинуты на +1 пакет (3 пакета = как раньше 2 пакета — 249 ₽ и т.д.)
+    // 1 пакет: 149 ₽ | 2 пакета: 149 ₽ (один вынос) | 3: 249 | 4: 349 | 5: 399
     if (numberPackages === 1) {
-      return isFirstOrder ? basePricePerPackage : this.PRICE_PER_PACKAGE; // 149 руб
-    } else if (numberPackages === 2) {
+      return isFirstOrder ? basePricePerPackage : this.PRICE_PER_PACKAGE;
+    }
+
+    if (numberPackages === 2) {
       if (isFirstOrder) {
-        // Первый пакет со скидкой (1 руб) + второй по полной цене (149 руб)
+        // Первый заказ: 1 ₽ + 149 ₽ за один вынос (2 пакета)
         return basePricePerPackage + fullPrice;
       }
-      return this.PRICE_PER_PACKAGE_2; // 249 руб
-    } else if (numberPackages === 3) {
-      if (isFirstOrder) {
-        // Первый пакет со скидкой (1 руб) + два по полной цене (149 руб каждый)
-        return basePricePerPackage + 2 * fullPrice;
-      }
-      return this.PRICE_PER_PACKAGE_3; // 349 руб
-    } else if (numberPackages === 4) {
-      if (isFirstOrder) {
-        // Первый пакет со скидкой (1 руб) + три по полной цене (149 руб каждый)
-        return basePricePerPackage + 3 * fullPrice;
-      }
-      return this.PRICE_PER_PACKAGE_4; // 399 руб
-    } else {
-      // Для большего количества пакетов используем стандартную логику
-      if (isFirstOrder && numberPackages > 1) {
-        // Первый пакет со скидкой + остальные по полной цене
-        return basePricePerPackage + (numberPackages - 1) * fullPrice;
-      } else {
-        // Обычный расчет: цена * количество пакетов
-        return basePricePerPackage * numberPackages;
-      }
+      // Один вынос из подписки / базовая цена за 2 пакета
+      return this.PRICE_PER_PACKAGE;
     }
+
+    if (numberPackages === 3) {
+      if (isFirstOrder) {
+        // Скидка «первого заказа» на сумму тарифа (как раньше за 2 пакета до сдвига)
+        return basePricePerPackage + (this.PRICE_PER_PACKAGE_2 - this.FIRST_ORDER_PRICE);
+      }
+      return this.PRICE_PER_PACKAGE_2;
+    }
+
+    if (numberPackages === 4) {
+      if (isFirstOrder) {
+        return basePricePerPackage + (this.PRICE_PER_PACKAGE_3 - this.FIRST_ORDER_PRICE);
+      }
+      return this.PRICE_PER_PACKAGE_3;
+    }
+
+    if (numberPackages === 5) {
+      if (isFirstOrder) {
+        return basePricePerPackage + (this.PRICE_PER_PACKAGE_4 - this.FIRST_ORDER_PRICE);
+      }
+      return this.PRICE_PER_PACKAGE_4;
+    }
+
+    // Для большего количества пакетов — линейное добивание от тарифа «5 пакетов»
+    if (isFirstOrder && numberPackages > 1) {
+      return (
+        basePricePerPackage +
+        (this.PRICE_PER_PACKAGE_4 - this.FIRST_ORDER_PRICE) +
+        (numberPackages - 5) * fullPrice
+      );
+    }
+    return this.PRICE_PER_PACKAGE_4 + (numberPackages - 5) * fullPrice;
   }
 
   async getPriceByType(type: PriceType): Promise<number> {

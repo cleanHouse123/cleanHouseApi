@@ -44,7 +44,7 @@ export class ScheduledOrdersService {
     }
 
     // Проверяем лимиты
-    const limits = await this.subscriptionLimitsService.checkOrderLimits(customerId);
+    const limits = await this.subscriptionLimitsService.checkOrderLimits(customerId, 2);
     
     if (!limits.canCreateOrder) {
       throw new BadRequestException('Превышен лимит заказов для вашей подписки');
@@ -218,7 +218,7 @@ export class ScheduledOrdersService {
     }
 
     // Проверяем лимиты подписки
-    const limits = await this.subscriptionLimitsService.checkOrderLimits(schedule.customerId);
+    const limits = await this.subscriptionLimitsService.checkOrderLimits(schedule.customerId, 2);
     
     if (!limits.canCreateOrder) {
       this.logger.warn(`Лимиты пользователя ${schedule.customerId} исчерпаны, деактивируем расписание ${schedule.id}`);
@@ -231,7 +231,7 @@ export class ScheduledOrdersService {
     if (this.shouldCreateOrder(schedule)) {
       const orderPrice = await this.priceService.getOrderPrice({
         userId: schedule.customerId,
-        numberPackages: 1,
+        numberPackages: 2,
         address: schedule.address,
         addressDetails: schedule.addressDetails,
       });
@@ -246,7 +246,7 @@ export class ScheduledOrdersService {
         price: orderPrice,
         scheduledAt: this.calculateNextOrderTime(schedule),
         status: OrderStatus.PAID, // Сразу оплачен через подписку
-        numberPackages: 1, // По умолчанию 1 пакет для автоматических заказов
+        numberPackages: 2, // По умолчанию 2 пакета для автоматических заказов
       });
 
       const savedOrder = await this.orderRepository.save(order);
@@ -261,7 +261,7 @@ export class ScheduledOrdersService {
       await this.paymentRepository.save(payment);
       
       // Обновляем счетчик лимитов
-      await this.subscriptionLimitsService.incrementUsedOrders(schedule.customerId);
+      await this.subscriptionLimitsService.incrementUsedOrders(schedule.customerId, 2);
       
       // Обновляем время последнего создания
       schedule.lastCreatedAt = new Date();

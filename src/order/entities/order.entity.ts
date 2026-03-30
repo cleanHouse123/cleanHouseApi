@@ -89,7 +89,7 @@ export class Order {
   @Column({ type: 'jsonb', nullable: true })
   coordinates?: { lat: number; lon: number };
 
-  @Column({ type: 'integer', default: 1 })
+  @Column({ type: 'integer', default: 2 })
   numberPackages: number;
 
   @Column({ type: 'timestamptz', nullable: true })

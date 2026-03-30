@@ -18,6 +18,16 @@ export interface OrderLimitsCheck {
 @Injectable()
 export class SubscriptionLimitsService {
   private readonly logger = new Logger(SubscriptionLimitsService.name);
+  // Бизнес-правило: 1 заказ = 2 пакета мусора
+  private readonly PACKAGES_PER_ORDER = 2;
+
+  private calculateConsumedOrders(numberPackages: number): number {
+    // На всякий случай защищаемся от некорректных значений.
+    const safeNumberPackages = Math.max(0, numberPackages || 0);
+    return safeNumberPackages === 0
+      ? 0
+      : Math.ceil(safeNumberPackages / this.PACKAGES_PER_ORDER);
+  }
 
   constructor(
     @InjectRepository(Subscription)
@@ -33,7 +43,10 @@ export class SubscriptionLimitsService {
    * @param numberPackages Количество пакетов (по умолчанию 1)
    * @returns Информация о лимитах и возможности создания заказа
    */
-  async checkOrderLimits(userId: string, numberPackages: number = 1): Promise<OrderLimitsCheck> {
+  async checkOrderLimits(
+    userId: string,
+    numberPackages: number = 2,
+  ): Promise<OrderLimitsCheck> {
     const activeSubscription = await this.subscriptionRepository.findOne({
       where: { 
         userId, 
@@ -58,10 +71,14 @@ export class SubscriptionLimitsService {
     }
 
     // Проверяем лимиты заказов
-    const remainingOrders = Math.max(0, activeSubscription.ordersLimit - activeSubscription.usedOrders);
+    const remainingOrders = Math.max(
+      0,
+      activeSubscription.ordersLimit - activeSubscription.usedOrders,
+    );
+    const requiredOrders = this.calculateConsumedOrders(numberPackages);
     
     // Если лимиты исчерпаны или недостаточно для запрошенного количества пакетов
-    if (remainingOrders === 0 || remainingOrders < numberPackages) {
+    if (remainingOrders === 0 || remainingOrders < requiredOrders) {
       if (remainingOrders === 0) {
         await this.expireSubscription(activeSubscription.id, 'limit');
         return this.getExpiredLimits('limit');
@@ -179,13 +196,17 @@ export class SubscriptionLimitsService {
    * @param userId ID пользователя
    * @param numberPackages Количество пакетов (по умолчанию 1)
    */
-  async incrementUsedOrders(userId: string, numberPackages: number = 1): Promise<void> {
+  async incrementUsedOrders(
+    userId: string,
+    numberPackages: number = 2,
+  ): Promise<void> {
     const subscription = await this.subscriptionRepository.findOne({
       where: { userId, status: SubscriptionStatus.ACTIVE }
     });
 
     if (subscription && subscription.ordersLimit !== -1) {
-      const newUsedOrders = subscription.usedOrders + numberPackages;
+      const consumedOrders = this.calculateConsumedOrders(numberPackages);
+      const newUsedOrders = subscription.usedOrders + consumedOrders;
       const reachedOrExceededLimit = newUsedOrders >= subscription.ordersLimit;
 
       await this.subscriptionRepository.update(subscription.id, {
@@ -194,7 +215,7 @@ export class SubscriptionLimitsService {
       });
 
       this.logger.log(
-        `Увеличен счетчик заказов для пользователя ${userId} на ${numberPackages}: ${newUsedOrders}/${subscription.ordersLimit}`,
+        `Увеличен счетчик заказов для пользователя ${userId} на ${consumedOrders} (из ${numberPackages} пакетов): ${newUsedOrders}/${subscription.ordersLimit}`,
       );
 
       if (reachedOrExceededLimit) {
@@ -209,17 +230,24 @@ export class SubscriptionLimitsService {
    * Уменьшает счетчик использованных заказов при отмене заказа
    * @param userId ID пользователя
    */
-  async decrementUsedOrders(userId: string): Promise<void> {
+  async decrementUsedOrders(
+    userId: string,
+    numberPackages: number = 2,
+  ): Promise<void> {
     const subscription = await this.subscriptionRepository.findOne({
       where: { userId, status: SubscriptionStatus.ACTIVE }
     });
 
     if (subscription && subscription.ordersLimit !== -1 && subscription.usedOrders > 0) {
+      const consumedOrders = this.calculateConsumedOrders(numberPackages);
+      const nextUsedOrders = Math.max(0, subscription.usedOrders - consumedOrders);
       await this.subscriptionRepository.update(subscription.id, {
-        usedOrders: subscription.usedOrders - 1
+        usedOrders: nextUsedOrders
       });
       
-      this.logger.log(`Уменьшен счетчик заказов для пользователя ${userId}: ${subscription.usedOrders - 1}/${subscription.ordersLimit}`);
+      this.logger.log(
+        `Уменьшен счетчик заказов для пользователя ${userId}: ${nextUsedOrders}/${subscription.ordersLimit}`,
+      );
     }
   }
 
