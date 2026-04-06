@@ -27,11 +27,11 @@ export class Location {
   street: string | null;
 
   /** Адм. район города (при division=administrative), для фильтра locations в DaData */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, default: null })
   city_district: string | null;
 
   /** Муниципальное поселение / внутригородской округ (при division=municipal), например «Ланское» */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, default: null })
   sub_area: string | null;
 
   @CreateDateColumn()
