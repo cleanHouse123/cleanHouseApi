@@ -1,63 +1,158 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AddressResponseDto } from '../dto/address-response.dto';
 import {
   DaDataAddressResponse,
   DaDataAddressSuggestion,
+  DaDataSuggestLocationFilter,
 } from '../interfaces/address-data.interface';
 import { Location } from '../entities/location.entity';
+
+/**
+ * Если в БД нет строк — подставляется из env (`DADATA_SUGGEST_LOCATIONS`) или этот список.
+ * Совпадает с продовым набором районов; муниципальные округа — через `sub_area` в БД или в env.
+ */
+const DEFAULT_SUGGEST_LOCATIONS: DaDataSuggestLocationFilter[] = [
+  { city: 'Кудрово' },
+  { city: 'Колтуши' },
+  { settlement: 'Янино-1' },
+  { settlement: 'Янино-2' },
+  { region: 'Ленинградская', area: 'Всеволожский' },
+  {
+    region: 'Ленинградская',
+    area: 'Всеволожский',
+    settlement: 'Микрорайон южный',
+  },
+  { city: 'Санкт-Петербург', city_district: 'Петроградский' },
+];
+
+function locationToDaDataFilter(
+  location: Location,
+): DaDataSuggestLocationFilter {
+  return {
+    region: location.region ?? undefined,
+    area: location.area ?? undefined,
+    city: location.city ?? undefined,
+    settlement: location.settlement ?? undefined,
+    street: location.street ?? undefined,
+    city_district: location.city_district ?? undefined,
+    sub_area: location.sub_area ?? undefined,
+  };
+}
+
+/**
+ * Учёт типичного ввода из админки: «Петроградский район» в колонке «населённый пункт» —
+ * для DaData в административном делении это район города СПб, не settlement.
+ */
+function normalizeLocationForDaData(location: Location): DaDataSuggestLocationFilter {
+  if (location.city_district?.trim() || location.sub_area?.trim()) {
+    return locationToDaDataFilter(location);
+  }
+
+  const settlement = location.settlement?.trim();
+  if (
+    settlement &&
+    !location.city?.trim() &&
+    !location.region?.trim() &&
+    (/\bрайон\b/i.test(settlement) || /\bр-н\b/i.test(settlement))
+  ) {
+    const district = settlement
+      .replace(/\s*район\s*$/i, '')
+      .replace(/\s*р-н\s*$/i, '')
+      .trim();
+    return {
+      region: location.region ?? undefined,
+      area: location.area ?? undefined,
+      city: 'Санкт-Петербург',
+      settlement: undefined,
+      street: location.street ?? undefined,
+      city_district: district || settlement,
+      sub_area: undefined,
+    };
+  }
+
+  return locationToDaDataFilter(location);
+}
+
+function isNonEmptyFilter(
+  filter: DaDataSuggestLocationFilter,
+): boolean {
+  return Object.values(filter).some((v) => v != null && v !== '');
+}
+
+function splitLocationsByDivisionKind(locations: DaDataSuggestLocationFilter[]): {
+  administrative: DaDataSuggestLocationFilter[];
+  municipal: DaDataSuggestLocationFilter[];
+} {
+  const administrative: DaDataSuggestLocationFilter[] = [];
+  const municipal: DaDataSuggestLocationFilter[] = [];
+  for (const loc of locations) {
+    if (loc.sub_area != null && loc.sub_area !== '') municipal.push(loc);
+    else administrative.push(loc);
+  }
+  return { administrative, municipal };
+}
+
+function dedupeSuggestions(
+  lists: AddressResponseDto[][],
+): AddressResponseDto[] {
+  const seen = new Set<string>();
+  const out: AddressResponseDto[] = [];
+  for (const list of lists) {
+    for (const item of list) {
+      const key = item.unrestricted_value || item.value;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
+}
 
 @Injectable()
 export class DaDataService {
   constructor(
+    private readonly configService: ConfigService,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
   ) {}
 
-  async searchAddresses(
-    query: string,
-    withLocations: boolean = true,
-  ): Promise<AddressResponseDto[]> {
+  private parseBaseSuggestLocations(): DaDataSuggestLocationFilter[] {
+    const fromEnv = this.configService.get<string>('DADATA_SUGGEST_LOCATIONS');
+    if (!fromEnv?.trim()) return DEFAULT_SUGGEST_LOCATIONS;
     try {
-      const url =
-        'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
-      const token = '8c514de4553ad490a0c95f2c8a51385ecb1afd31'; // TODO: вынести в конфигурацию
+      const parsed = JSON.parse(fromEnv) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0)
+        return parsed as DaDataSuggestLocationFilter[];
+    } catch {
+      /* оставляем DEFAULT_SUGGEST_LOCATIONS */
+    }
+    return DEFAULT_SUGGEST_LOCATIONS;
+  }
 
-      const locations = withLocations
-        ? await this.locationRepository.find()
-        : [];
-      const locationsData = locations.map((location) => ({
-        city: location.city,
-        settlement: location.settlement,
-        area: location.area,
-        region: location.region,
-        street: location.street,
-      }));
+  /**
+   * Секторы DaData: строки из БД (`location`), иначе env/DEFAULT.
+   * Ленинградская область / города / НП — в административном делении;
+   * поле `sub_area` — муниципальный сектор (отдельный запрос с division=municipal).
+   */
+  private async buildLocationsPayload(): Promise<DaDataSuggestLocationFilter[]> {
+    const rows = await this.locationRepository.find();
+    const fromDb = rows
+      .map(normalizeLocationForDaData)
+      .filter(isNonEmptyFilter);
+    if (fromDb.length > 0) return fromDb;
+    return this.parseBaseSuggestLocations();
+  }
 
-      const response = await fetch(url, {
-        method: 'POST',
-        mode: 'cors' as RequestMode,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: `Token ${token}`,
-        },
-        body: JSON.stringify({
-          query,
-          ...(withLocations ? { locations: locationsData } : {}),
-          locations_boost: [{ kladr_id: '78' }, { kladr_id: '47' }],
-          from_bound: { value: 'street' },
-          to_bound: { value: 'house' },
-          restrict_value: false,
-        }),
-      });
+  private mapSuggestionsToDto(
+    result: DaDataAddressResponse,
+  ): AddressResponseDto[] {
+    if (!result || !Array.isArray(result.suggestions)) return [];
 
-      const result: DaDataAddressResponse = await response.json();
-      if (!result || !Array.isArray(result.suggestions)) return [];
-
-      return result.suggestions.map(
-        (suggestion: DaDataAddressSuggestion): AddressResponseDto => {
+    return result.suggestions.map(
+      (suggestion: DaDataAddressSuggestion): AddressResponseDto => {
           const data = suggestion?.data ?? {};
           const cityOrSettlement = data.city || data.settlement || null;
           const cityOrSettlementWithType =
@@ -101,8 +196,75 @@ export class DaDataService {
             oktmo: data.oktmo,
             tax_office: data.tax_office,
           };
-        },
-      );
+      },
+    );
+  }
+
+  private async fetchSuggestions(
+    query: string,
+    token: string,
+    division: 'administrative' | 'municipal',
+    locations: DaDataSuggestLocationFilter[],
+  ): Promise<AddressResponseDto[]> {
+    if (locations.length === 0) return [];
+
+    const url =
+      'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
+
+    const response = await fetch(url, {
+      method: 'POST',
+      mode: 'cors' as RequestMode,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Token ${token}`,
+      },
+      body: JSON.stringify({
+        query,
+        division,
+        locations,
+        locations_boost: [{ kladr_id: '78' }, { kladr_id: '47' }],
+        from_bound: { value: 'street' },
+        to_bound: { value: 'house' },
+        restrict_value: false,
+      }),
+    });
+
+    const result: DaDataAddressResponse = await response.json();
+    return this.mapSuggestionsToDto(result);
+  }
+
+  async searchAddresses(query: string): Promise<AddressResponseDto[]> {
+    try {
+      const token =
+        this.configService.get<string>('DADATA_TOKEN') ||
+        this.configService.get<string>('DADATA_API_KEY');
+      if (!token) {
+        throw new Error(
+          'Задайте DADATA_TOKEN (или DADATA_API_KEY) в окружении',
+        );
+      }
+
+      const locationsPayload = await this.buildLocationsPayload();
+      const { administrative, municipal } =
+        splitLocationsByDivisionKind(locationsPayload);
+
+      const lists: AddressResponseDto[][] = [];
+      if (administrative.length > 0)
+        lists.push(
+          await this.fetchSuggestions(
+            query,
+            token,
+            'administrative',
+            administrative,
+          ),
+        );
+      if (municipal.length > 0)
+        lists.push(
+          await this.fetchSuggestions(query, token, 'municipal', municipal),
+        );
+
+      return dedupeSuggestions(lists);
     } catch (error) {
       throw new Error('Не удалось получить адреса');
     }
@@ -113,7 +275,6 @@ export class DaDataService {
     if (!region || !area || !city || !settlement || !street) return false;
 
     const locations = await this.locationRepository.find();
-    console.log(locations, 'locationslocationslocationslocationslocations');
 
     const locationsData = locations.map((location) => ({
       city: location.city,
@@ -138,7 +299,7 @@ export class DaDataService {
   ): Promise<boolean> {
     const { display } = address;
 
-    const result = await this.searchAddresses(display, true);
+    const result = await this.searchAddresses(display);
     return result.length > 0;
   }
 }

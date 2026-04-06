@@ -14,6 +14,18 @@ export class LocationDto {
   @ApiProperty({ description: 'Улица', example: '1' })
   street: string | null;
   @ApiProperty({
+    description:
+      'Административный район города (для DaData при административном делении)',
+    nullable: true,
+  })
+  city_district: string | null;
+  @ApiProperty({
+    description:
+      'Муниципальный округ / поселение (для DaData при муниципальном делении), напр. Ланское',
+    nullable: true,
+  })
+  sub_area: string | null;
+  @ApiProperty({
     description: 'Дата создания',
     example: '2024-01-15T10:30:00.000Z',
   })
@@ -34,4 +46,14 @@ export class CreateLocationDto {
   city: string | null;
   @ApiProperty({ description: 'Населенный пункт', example: '1' })
   settlement: string | null;
+  @ApiProperty({
+    description: 'Административный район города (фильтр DaData)',
+    nullable: true,
+  })
+  city_district: string | null;
+  @ApiProperty({
+    description: 'Муниципальный округ (фильтр DaData), напр. Ланское',
+    nullable: true,
+  })
+  sub_area: string | null;
 }

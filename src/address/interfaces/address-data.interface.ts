@@ -109,6 +109,24 @@ export interface DaDataAddressResponse {
   suggestions: DaDataAddressSuggestion[];
 }
 
+/**
+ * Элемент параметра `locations` в suggest/address.
+ * @see https://dadata.ru/api/suggest/address/
+ */
+export interface DaDataSuggestLocationFilter {
+  region?: string;
+  area?: string;
+  city?: string;
+  settlement?: string;
+  street?: string;
+  city_district?: string;
+  /** Муниципальное поселение / внутригородской округ при division=municipal */
+  sub_area?: string;
+  kladr_id?: string;
+  fias_id?: string;
+  country_iso_code?: string;
+}
+
 export class DaDataAddressDataNormalized {
   value: string;
   unrestricted_value: string;

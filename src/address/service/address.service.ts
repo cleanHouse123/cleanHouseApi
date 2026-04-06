@@ -27,11 +27,13 @@ export class AddressService {
         'location.city',
         'location.settlement',
         'location.street',
+        'location.city_district',
+        'location.sub_area',
         'location.created_at',
         'location.updated_at',
       ])
       .where(
-        'location.region IS NOT NULL OR location.area IS NOT NULL OR location.city IS NOT NULL OR location.settlement IS NOT NULL OR location.street IS NOT NULL',
+        'location.region IS NOT NULL OR location.area IS NOT NULL OR location.city IS NOT NULL OR location.settlement IS NOT NULL OR location.street IS NOT NULL OR location.city_district IS NOT NULL OR location.sub_area IS NOT NULL',
       )
       .getMany();
 
@@ -100,7 +102,7 @@ export class AddressService {
     normalizedQuery: string,
   ): Promise<AddressResponseDto[]> {
     try {
-      const apiResults = await this.daDataService.searchAddresses(query, false);
+      const apiResults = await this.daDataService.searchAddresses(query);
 
       if (apiResults.length > 0) {
         await this.saveToCache(normalizedQuery, apiResults);
