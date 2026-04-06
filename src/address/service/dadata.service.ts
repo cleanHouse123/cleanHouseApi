@@ -42,9 +42,16 @@ function locationToDaDataFilter(
   };
 }
 
+function isSaintPetersburgCityName(city: string | null | undefined): boolean {
+  const c = city?.trim();
+  if (!c) return true;
+  return /^санкт-петербург$/i.test(c) || /^спб$/i.test(c);
+}
+
 /**
- * Учёт типичного ввода из админки: «Петроградский район» в колонке «населённый пункт» —
- * для DaData в административном делении это район города СПб, не settlement.
+ * «Петроградский район» в settlement — для DaData это адм. район СПб (city + city_district),
+ * не населённый пункт. Раньше срабатывало только при пустом region — иначе в locations уходил
+ * неверный settlement и адреса (напр. Чкаловский пр.) не находились.
  */
 function normalizeLocationForDaData(location: Location): DaDataSuggestLocationFilter {
   if (location.city_district?.trim() || location.sub_area?.trim()) {
@@ -54,17 +61,14 @@ function normalizeLocationForDaData(location: Location): DaDataSuggestLocationFi
   const settlement = location.settlement?.trim();
   if (
     settlement &&
-    !location.city?.trim() &&
-    !location.region?.trim() &&
-    (/\bрайон\b/i.test(settlement) || /\bр-н\b/i.test(settlement))
+    (/\bрайон\b/i.test(settlement) || /\bр-н\b/i.test(settlement)) &&
+    isSaintPetersburgCityName(location.city)
   ) {
     const district = settlement
       .replace(/\s*район\s*$/i, '')
       .replace(/\s*р-н\s*$/i, '')
       .trim();
     return {
-      region: location.region ?? undefined,
-      area: location.area ?? undefined,
       city: 'Санкт-Петербург',
       settlement: undefined,
       street: location.street ?? undefined,
@@ -93,6 +97,41 @@ function splitLocationsByDivisionKind(locations: DaDataSuggestLocationFilter[]):
     else administrative.push(loc);
   }
   return { administrative, municipal };
+}
+
+/**
+ * В муниципальном делении у СПб внутригородской округ (вн.тер.г.) приходит в data.area как
+ * «муниципальный округ Ланское», а data.sub_area пустой. Параметр locations с полем sub_area
+ * для таких адресов не срабатывает — нужны region + area.
+ */
+function expandMunicipalFilterForSaintPetersburg(
+  f: DaDataSuggestLocationFilter,
+): DaDataSuggestLocationFilter {
+  const sub = f.sub_area?.trim();
+  if (!sub) return f;
+
+  const region = f.region?.trim();
+  const city = f.city?.trim();
+  const regionIsSpb =
+    !region ||
+    /^санкт-петербург$/i.test(region) ||
+    /^спб$/i.test(region);
+  const cityIsSpb =
+    !city ||
+    /^санкт-петербург$/i.test(city) ||
+    /^спб$/i.test(city);
+  if (!regionIsSpb || !cityIsSpb) return f;
+
+  const area = /муниципальный\s+округ/i.test(sub)
+    ? sub
+    : `муниципальный округ ${sub.replace(/^\s*муниципальный\s+округ\s*/i, '').trim()}`;
+
+  return {
+    region: 'Санкт-Петербург',
+    area,
+    street: f.street ?? undefined,
+    settlement: f.settlement ?? undefined,
+  };
 }
 
 function dedupeSuggestions(
@@ -208,6 +247,11 @@ export class DaDataService {
   ): Promise<AddressResponseDto[]> {
     if (locations.length === 0) return [];
 
+    const locationsPayload =
+      division === 'municipal'
+        ? locations.map(expandMunicipalFilterForSaintPetersburg)
+        : locations;
+
     const url =
       'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address';
 
@@ -222,7 +266,7 @@ export class DaDataService {
       body: JSON.stringify({
         query,
         division,
-        locations,
+        locations: locationsPayload,
         locations_boost: [{ kladr_id: '78' }, { kladr_id: '47' }],
         from_bound: { value: 'street' },
         to_bound: { value: 'house' },
