@@ -115,7 +115,7 @@ export class UserService {
     await this.userRepository
       .createQueryBuilder()
       .update(User)
-      .set({ deletedAt: undefined })
+      .set({ deletedAt: null })
       .where('id = :id', { id })
       .execute();
 
