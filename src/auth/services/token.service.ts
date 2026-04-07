@@ -10,6 +10,22 @@ export class TokenService {
     private configService: ConfigService,
   ) {}
 
+  private getAccessSecret(): string {
+    const secret = this.configService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
+    return secret;
+  }
+
+  private getRefreshSecret(): string {
+    const secret = this.configService.get<string>('JWT_SECRET_REFRESH');
+    if (!secret) {
+      throw new Error('JWT_SECRET_REFRESH is not configured');
+    }
+    return secret;
+  }
+
   async generateAccessToken(userId: string, email: string): Promise<string> {
     return this.jwtService.signAsync(
       {
@@ -17,7 +33,7 @@ export class TokenService {
         email,
       },
       {
-        secret: this.configService.get<string>('JWT_SECRET'),
+        secret: this.getAccessSecret(),
         expiresIn: expiresAccessIn,
       },
     );
@@ -30,7 +46,7 @@ export class TokenService {
         email,
       },
       {
-        secret: this.configService.get<string>('JWT_SECRET_REFRESH'),
+        secret: this.getRefreshSecret(),
         expiresIn: expiresRefreshIn,
       },
     );
@@ -38,7 +54,7 @@ export class TokenService {
 
   async verifyRefreshToken(refreshToken: string): Promise<{ userId: string }> {
     return this.jwtService.verifyAsync(refreshToken, {
-      secret: this.configService.get<string>('JWT_SECRET_REFRESH'),
+      secret: this.getRefreshSecret(),
     });
   }
 
@@ -46,7 +62,7 @@ export class TokenService {
     accessToken: string,
   ): Promise<{ userId: string; email: string }> {
     return this.jwtService.verifyAsync(accessToken, {
-      secret: this.configService.get<string>('JWT_SECRET'),
+      secret: this.getAccessSecret(),
     });
   }
 }

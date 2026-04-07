@@ -293,11 +293,11 @@ export class AuthService {
   private async generateAuthTokens(user: User): Promise<AuthResponseDto> {
     const accessToken = await this.tokenService.generateAccessToken(
       user.id,
-      user.name,
+      user.email ?? '',
     );
     const refreshToken = await this.tokenService.generateRefreshToken(
       user.id,
-      user.name,
+      user.email ?? '',
     );
 
     const refreshTokenHash = await hash(refreshToken, 10);
