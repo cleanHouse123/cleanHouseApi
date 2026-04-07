@@ -721,6 +721,12 @@ export class AuthService {
               `[Telegram Login] Попытка восстановления пользователя с id: ${deletedUser.id}`,
             );
             user = await this.userService.restore(deletedUser.id);
+            user = await this.userService.findByTelegramId(telegramId);
+            if (!user) {
+              throw new UnauthorizedException(
+                'Аккаунт удален и не может быть восстановлен. Обратитесь в поддержку',
+              );
+            }
             console.log(
               `[Telegram Login] Пользователь успешно восстановлен с telegramId: ${telegramId}, userId: ${user?.id}`,
             );
@@ -729,8 +735,9 @@ export class AuthService {
               `[Telegram Login] Ошибка восстановления пользователя с telegramId: ${telegramId}`,
               restoreError,
             );
-            // Если не удалось восстановить, продолжаем создавать нового пользователя
-            user = null;
+            throw new UnauthorizedException(
+              'Аккаунт удален и не может быть восстановлен. Обратитесь в поддержку',
+            );
           }
         }
       }

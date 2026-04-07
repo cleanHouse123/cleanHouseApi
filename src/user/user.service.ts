@@ -119,13 +119,15 @@ export class UserService {
       .where('id = :id', { id })
       .execute();
 
-    // Получаем обновленного пользователя
+    // Получаем только активного пользователя после восстановления
     const restoredUser = await this.userRepository.findOne({
-      where: { id },
+      where: { id, deletedAt: IsNull() },
     });
 
     if (!restoredUser) {
-      throw new NotFoundException('Не удалось восстановить пользователя');
+      throw new NotFoundException(
+        'Не удалось восстановить пользователя: аккаунт остается удаленным',
+      );
     }
 
     return restoredUser;
