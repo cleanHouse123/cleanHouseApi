@@ -1,4 +1,4 @@
-export const expiresAccessIn = '7m';
+export const expiresAccessIn = '30m';
 export const expiresRefreshIn = '15d';
 
 export const DEFAULT_PAGE = 1;
