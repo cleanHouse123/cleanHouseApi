@@ -19,9 +19,13 @@ export class TokenService {
   }
 
   private getRefreshSecret(): string {
-    const secret = this.configService.get<string>('JWT_SECRET_REFRESH');
+    const secret =
+      this.configService.get<string>('JWT_SECRET_REFRESH') ||
+      this.configService.get<string>('JWT_REFRESH_SECRET');
     if (!secret) {
-      throw new Error('JWT_SECRET_REFRESH is not configured');
+      throw new Error(
+        'JWT_SECRET_REFRESH or JWT_REFRESH_SECRET is not configured',
+      );
     }
     return secret;
   }

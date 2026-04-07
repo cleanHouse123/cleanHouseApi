@@ -9,9 +9,13 @@ export class JwtRefreshTokenStrategy extends PassportStrategy(
   'jwt-refresh-token',
 ) {
   constructor(private configService: ConfigService) {
-    const jwtRefreshSecret = configService.get<string>('JWT_SECRET_REFRESH');
+    const jwtRefreshSecret =
+      configService.get<string>('JWT_SECRET_REFRESH') ||
+      configService.get<string>('JWT_REFRESH_SECRET');
     if (!jwtRefreshSecret) {
-      throw new Error('JWT_SECRET_REFRESH is not configured');
+      throw new Error(
+        'JWT_SECRET_REFRESH or JWT_REFRESH_SECRET is not configured',
+      );
     }
 
     super({
