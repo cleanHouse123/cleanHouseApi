@@ -64,4 +64,12 @@ export class UsersListDto {
     example: '2024-01-15T10:30:00.000Z',
   })
   updatedAt: Date;
+
+  @ApiProperty({
+    description: 'Дата удаления (soft delete)',
+    example: '2024-01-16T10:30:00.000Z',
+    required: false,
+    nullable: true,
+  })
+  deletedAt?: Date | null;
 }

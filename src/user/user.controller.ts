@@ -161,6 +161,22 @@ export class UserController {
     return userResponse as UsersListDto;
   }
 
+  @Patch(':id/restore')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async restoreUser(
+    @Param('id') id: string,
+  ): Promise<{ message: string; user: UsersListDto }> {
+    const restoredUser = await this.userService.restore(id);
+    const { hash_password, refreshTokenHash, ...userResponse } = restoredUser;
+
+    return {
+      message: 'Пользователь успешно восстановлен',
+      user: userResponse as UsersListDto,
+    };
+  }
+
   @Delete(':id')
   @ApiBearerAuth('JWT')
   @UseGuards(JwtAuthGuard, RolesGuard)

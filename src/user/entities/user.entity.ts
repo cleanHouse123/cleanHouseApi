@@ -73,7 +73,7 @@ export class User {
   updatedAt: Date;
 
   @Column({ type: 'timestamp', nullable: true })
-  deletedAt?: Date;
+  deletedAt?: Date | null;
 
   @ManyToOne(() => AdToken, (adToken) => adToken.users, { nullable: true })
   adToken: AdToken;

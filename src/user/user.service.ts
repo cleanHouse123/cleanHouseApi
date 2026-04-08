@@ -11,7 +11,7 @@ import { CreateAdminDto } from './dto/create-admin.dto';
 import { UserRole } from 'src/shared/types/user.role';
 import * as bcrypt from 'bcrypt';
 import { AdminResponseDto } from './dto/admin-response.dto';
-import { FindUsersQueryDto } from './dto/filter-users.dto';
+import { DeletedUsersFilter, FindUsersQueryDto } from './dto/filter-users.dto';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/shared/constants';
 import { UsersListDto } from './dto/users-list.dto';
 import { CreateCurrierDto } from './dto/create-currier.dto';
@@ -24,6 +24,22 @@ export class UserService {
     private readonly userRepository: Repository<User>,
     private readonly adTokenService: AdTokenService,
   ) {}
+
+  private mapUserToListDto(user: User): UsersListDto {
+    return {
+      id: user.id,
+      roles: user.roles,
+      name: user.name,
+      email: user.email || '',
+      phone: user.phone,
+      telegramUsername: user.telegramUsername,
+      isPhoneVerified: user.isPhoneVerified,
+      isEmailVerified: user.isEmailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      deletedAt: user.deletedAt ?? null,
+    };
+  }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     const { adToken, ...userData } = createUserDto;
@@ -402,6 +418,7 @@ export class UserService {
       name: admin.name,
       email: admin.email || '',
       phone: admin.phone,
+      telegramUsername: admin.telegramUsername,
       isPhoneVerified: admin.isPhoneVerified,
       isEmailVerified: admin.isEmailVerified,
       createdAt: admin.createdAt,
@@ -420,8 +437,14 @@ export class UserService {
     queryBuilder
       .where('NOT (:adminRole = ANY(user.roles))', {
         adminRole: UserRole.ADMIN,
-      })
-      .andWhere('user.deletedAt IS NULL');
+      });
+
+    if (query.deleted === DeletedUsersFilter.DELETED) {
+      queryBuilder.andWhere('user.deletedAt IS NOT NULL');
+    } else if (query.deleted !== DeletedUsersFilter.ALL) {
+      // По умолчанию возвращаем только активных пользователей
+      queryBuilder.andWhere('user.deletedAt IS NULL');
+    }
 
     if (query.name) {
       queryBuilder.andWhere('user.name ILIKE :name', {
@@ -450,17 +473,7 @@ export class UserService {
     const [users, total] = await queryBuilder.getManyAndCount();
 
     return {
-      data: users.map((user) => ({
-        id: user.id,
-        roles: user.roles,
-        name: user.name,
-        email: user.email || '',
-        phone: user.phone,
-        isPhoneVerified: user.isPhoneVerified,
-        isEmailVerified: user.isEmailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      })),
+      data: users.map((user) => this.mapUserToListDto(user)),
       total,
       page: currentPage,
       limit,

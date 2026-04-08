@@ -260,6 +260,76 @@ export class AuthService {
     );
   }
 
+  private async findActiveUserByDeletedReference(
+    deletedUser: User,
+    preferredOrder: Array<'phone' | 'email' | 'telegram'> = [],
+  ): Promise<User | null> {
+    const lookupOrder: Array<'phone' | 'email' | 'telegram'> = [
+      ...preferredOrder,
+      'phone',
+      'email',
+      'telegram',
+    ];
+    const processed = new Set<'phone' | 'email' | 'telegram'>();
+
+    for (const lookupField of lookupOrder) {
+      if (processed.has(lookupField)) {
+        continue;
+      }
+      processed.add(lookupField);
+
+      if (lookupField === 'phone' && deletedUser.phone) {
+        const userByPhone = await this.userService.findByPhone(deletedUser.phone);
+        if (userByPhone) {
+          return userByPhone;
+        }
+      }
+
+      if (lookupField === 'email' && deletedUser.email) {
+        const userByEmail = await this.userService.findByEmail(deletedUser.email);
+        if (userByEmail) {
+          return userByEmail;
+        }
+      }
+
+      if (lookupField === 'telegram' && deletedUser.telegramId) {
+        const userByTelegram = await this.userService.findByTelegramId(
+          deletedUser.telegramId,
+        );
+        if (userByTelegram) {
+          return userByTelegram;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private async restoreUserWithFallback(
+    deletedUser: User,
+    preferredOrder: Array<'phone' | 'email' | 'telegram'> = [],
+  ): Promise<User> {
+    try {
+      return await this.userService.restore(deletedUser.id);
+    } catch (restoreError) {
+      if (!this.isUniqueViolation(restoreError)) {
+        throw restoreError;
+      }
+
+      // Если восстановление упало на unique-конфликте,
+      // берем активный аккаунт с тем же phone/email/telegramId.
+      const fallbackUser = await this.findActiveUserByDeletedReference(
+        deletedUser,
+        preferredOrder,
+      );
+      if (fallbackUser) {
+        return fallbackUser;
+      }
+
+      throw restoreError;
+    }
+  }
+
   private async findOrRestoreByPhone(phone: string): Promise<User | null> {
     const activeUser = await this.userService.findByPhone(phone);
     if (activeUser) {
@@ -269,7 +339,11 @@ export class AuthService {
     const deletedUser =
       await this.userService.findByPhoneIncludingDeleted(phone);
     if (deletedUser?.deletedAt) {
-      return this.userService.restore(deletedUser.id);
+      return this.restoreUserWithFallback(deletedUser, [
+        'phone',
+        'telegram',
+        'email',
+      ]);
     }
 
     return deletedUser ?? null;
@@ -284,7 +358,32 @@ export class AuthService {
     const deletedUser =
       await this.userService.findByEmailIncludingDeleted(email);
     if (deletedUser?.deletedAt) {
-      return this.userService.restore(deletedUser.id);
+      return this.restoreUserWithFallback(deletedUser, [
+        'email',
+        'phone',
+        'telegram',
+      ]);
+    }
+
+    return deletedUser ?? null;
+  }
+
+  private async findOrRestoreByTelegramId(
+    telegramId: string,
+  ): Promise<User | null> {
+    const activeUser = await this.userService.findByTelegramId(telegramId);
+    if (activeUser) {
+      return activeUser;
+    }
+
+    const deletedUser =
+      await this.userService.findByTelegramIdIncludingDeleted(telegramId);
+    if (deletedUser?.deletedAt) {
+      return this.restoreUserWithFallback(deletedUser, [
+        'telegram',
+        'phone',
+        'email',
+      ]);
     }
 
     return deletedUser ?? null;
@@ -391,15 +490,7 @@ export class AuthService {
   ): Promise<AuthResponseDto> {
     const { email, password } = loginDto;
 
-    let user = await this.userService.findByEmail(email);
-    if (!user) {
-      const deletedUser = await this.userService.findByEmailIncludingDeleted(
-        email,
-      );
-      if (deletedUser?.deletedAt) {
-        throw new UnauthorizedException('Аккаунт удален');
-      }
-    }
+    const user = await this.findOrRestoreByEmail(email);
 
     if (!user) {
       throw new UnauthorizedException('Неверные учетные данные');
@@ -700,47 +791,10 @@ export class AuthService {
         `[Telegram Login] Поиск пользователя с telegramId: ${telegramId}`,
       );
 
-      let user = await this.userService.findByTelegramId(telegramId);
+      let user = await this.findOrRestoreByTelegramId(telegramId);
       console.log(
-        `[Telegram Login] Активный пользователь найден: ${user ? 'да' : 'нет'}`,
+        `[Telegram Login] Пользователь найден/восстановлен: ${user ? 'да' : 'нет'}`,
       );
-
-      // Если пользователь не найден, проверяем удаленных пользователей
-      if (!user) {
-        // Ищем удаленного пользователя с таким telegramId
-        const deletedUser =
-          await this.userService.findByTelegramIdIncludingDeleted(telegramId);
-        console.log(
-          `[Telegram Login] Удаленный пользователь найден: ${deletedUser ? 'да' : 'нет'}`,
-        );
-
-        if (deletedUser) {
-          try {
-            // Восстанавливаем удаленного пользователя
-            console.log(
-              `[Telegram Login] Попытка восстановления пользователя с id: ${deletedUser.id}`,
-            );
-            user = await this.userService.restore(deletedUser.id);
-            user = await this.userService.findByTelegramId(telegramId);
-            if (!user) {
-              throw new UnauthorizedException(
-                'Аккаунт удален и не может быть восстановлен. Обратитесь в поддержку',
-              );
-            }
-            console.log(
-              `[Telegram Login] Пользователь успешно восстановлен с telegramId: ${telegramId}, userId: ${user?.id}`,
-            );
-          } catch (restoreError: any) {
-            console.error(
-              `[Telegram Login] Ошибка восстановления пользователя с telegramId: ${telegramId}`,
-              restoreError,
-            );
-            throw new UnauthorizedException(
-              'Аккаунт удален и не может быть восстановлен. Обратитесь в поддержку',
-            );
-          }
-        }
-      }
 
       // Если пользователь не найден, создаем нового
       if (!user) {
@@ -797,51 +851,12 @@ export class AuthService {
             if (user) {
               // Пользователь уже создан другим запросом
               console.log('User already exists (race condition)');
-            } else if (
-              createError.code === '23505' ||
-              createError.message?.includes('duplicate key') ||
-              createError.message?.includes('unique constraint')
-            ) {
-              // Ошибка уникальности - проверяем, какое поле конфликтует
-
-              // Проверяем по telegramId (включая удаленных)
-              const deletedByTelegramId =
-                await this.userService.findByTelegramIdIncludingDeleted(
-                  telegramId,
+            } else if (this.isUniqueViolation(createError)) {
+              user = await this.findOrRestoreByTelegramId(telegramId);
+              if (!user) {
+                throw new UnauthorizedException(
+                  `Не удалось восстановить или создать пользователя: ${createError.message || 'Неизвестная ошибка'}`,
                 );
-              if (deletedByTelegramId) {
-                try {
-                  // Восстанавливаем удаленного пользователя
-                  user = await this.userService.restore(deletedByTelegramId.id);
-                  console.log('Restored deleted user by telegramId');
-                } catch (restoreError: any) {
-                  console.error(
-                    'Ошибка восстановления пользователя при создании:',
-                    restoreError,
-                  );
-                  // Если не удалось восстановить, пробуем найти активного пользователя
-                  user = await this.userService.findByTelegramId(telegramId);
-                  if (!user) {
-                    throw new UnauthorizedException(
-                      `Не удалось восстановить или создать пользователя: ${restoreError.message || 'Неизвестная ошибка'}`,
-                    );
-                  }
-                }
-              } else {
-                // Проверяем активных пользователей
-                user = await this.userService.findByTelegramId(telegramId);
-                if (user) {
-                  // Пользователь уже существует с этим telegramId
-                  console.log('User found by telegramId after error');
-                } else {
-                  // Непонятная ошибка уникальности - пробуем найти пользователя еще раз
-                  user = await this.userService.findByTelegramId(telegramId);
-                  if (!user) {
-                    throw new UnauthorizedException(
-                      `Ошибка создания пользователя: ${createError.message || 'Неизвестная ошибка'}`,
-                    );
-                  }
-                }
               }
             } else if (createError instanceof ConflictException) {
               // Обработка ConflictException - проверяем по telegramId
@@ -855,6 +870,27 @@ export class AuthService {
           }
         }
       } else {
+        // Если нашли пользователя по fallback (например, по phone/email),
+        // убеждаемся, что telegramId привязан к активному аккаунту.
+        if (user.telegramId !== telegramId) {
+          try {
+            await this.userService.update(user.id, { telegramId });
+            user.telegramId = telegramId;
+          } catch (updateTelegramIdError: any) {
+            if (this.isUniqueViolation(updateTelegramIdError)) {
+              const existingTelegramUser =
+                await this.userService.findByTelegramId(telegramId);
+              if (existingTelegramUser) {
+                user = existingTelegramUser;
+              } else {
+                throw updateTelegramIdError;
+              }
+            } else {
+              throw updateTelegramIdError;
+            }
+          }
+        }
+
         // Обновляем имя пользователя, если изменилось
         let newName = loginWidgetDto.first_name || '';
         if (loginWidgetDto.last_name) {
