@@ -19,6 +19,7 @@ import { SmsProviderService } from '../../sms/services/sms-provider.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailRegisterDto } from '../dto/email-register.dto';
 import { EmailLoginDto } from '../dto/email-login.dto';
+import { RegisterProfileDto } from '../dto/register-profile.dto';
 import { CreateUserDto } from '../../user/dto/create-user.dto';
 import { TelegramSendCodeDto } from '../dto/telegram-send-code.dto';
 import { TelegramVerifyCodeDto } from '../dto/telegram-verify-code.dto';
@@ -27,6 +28,7 @@ import { VerificationCode } from '../entities/verification-code.entity';
 import { AdTokenService } from '../../ad-tokens/ad-token.service';
 import { AdToken } from 'src/ad-tokens/ad-token.entity';
 import { UserMetadata } from 'src/shared/decorators/get-user.decorator';
+import { normalizePhoneToE164 } from 'src/shared/utils/phone-normalizer.util';
 
 @Injectable()
 export class AuthService {
@@ -165,7 +167,12 @@ export class AuthService {
     channel: 'whatsapp' | 'sms' | 'auto' = 'auto',
   ): Promise<{ message: string; code?: string; channel?: string }> {
     try {
-      const forceDev = this.isTestPhone(phone) || isDev;
+      const nodeEnv =
+        this.configService.get<string>('NODE_ENV') ||
+        process.env.NODE_ENV ||
+        'development';
+      const allowDevBypass = nodeEnv !== 'production';
+      const forceDev = allowDevBypass && (this.isTestPhone(phone) || !!isDev);
       const code = forceDev ? '123456' : this.generateVerificationCode();
 
       if (forceDev) {
@@ -230,6 +237,12 @@ export class AuthService {
   }
 
   private formatPhoneNumber(phoneNumber: string): string {
+    try {
+      return normalizePhoneToE164(phoneNumber);
+    } catch {
+      // fallback ниже для legacy-потоков
+    }
+
     // Убираем все символы кроме цифр
     const digits = phoneNumber.replace(/\D/g, '');
 
@@ -248,8 +261,21 @@ export class AuthService {
       return '+7' + digits;
     }
 
-    // Возвращаем как есть, если уже в правильном формате
-    return phoneNumber.startsWith('+') ? phoneNumber : '+' + digits;
+    throw new Error('Некорректный номер телефона');
+  }
+
+  private normalizePhoneForRegistration(phoneNumber: string): string {
+    const trimmed = phoneNumber.trim();
+    if (!trimmed) {
+      return trimmed;
+    }
+
+    const digits = trimmed.replace(/\D/g, '');
+    if (!digits) {
+      return trimmed;
+    }
+
+    return `+${digits}`;
   }
 
   private isUniqueViolation(error: any): boolean {
@@ -417,6 +443,85 @@ export class AuthService {
 
   async validateUserPassword(hash_password: string, password: string) {
     return compare(password, hash_password);
+  }
+
+  async register(
+    registerDto: RegisterProfileDto,
+    ipAddress?: string,
+  ): Promise<AuthResponseDto> {
+    const normalizedEmail = registerDto.email.trim().toLowerCase();
+    const normalizedName = registerDto.name.trim();
+    const normalizedPhone = this.normalizePhoneForRegistration(registerDto.phone);
+    const rawPassword = registerDto.password.trim();
+    const passwordHash = await hash(rawPassword, 10);
+
+    const existingActiveByEmail =
+      await this.userService.findByEmail(normalizedEmail);
+    if (existingActiveByEmail) {
+      throw new ConflictException('Пользователь с таким email уже существует');
+    }
+
+    const existingActiveByPhone =
+      await this.userService.findByPhone(normalizedPhone);
+    if (existingActiveByPhone) {
+      throw new ConflictException(
+        'Пользователь с таким номером телефона уже существует',
+      );
+    }
+
+    const deletedByEmail =
+      await this.userService.findByEmailIncludingDeleted(normalizedEmail);
+    if (deletedByEmail?.deletedAt) {
+      throw new ConflictException('Пользователь с таким email уже существует');
+    }
+
+    const deletedByPhone =
+      await this.userService.findByPhoneIncludingDeleted(normalizedPhone);
+    if (deletedByPhone?.deletedAt) {
+      throw new ConflictException(
+        'Пользователь с таким номером телефона уже существует',
+      );
+    }
+
+    let user: User | null = null;
+    try {
+      user = await this.userService.create({
+        name: normalizedName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        isEmailVerified: false,
+        isPhoneVerified: false,
+        roles: [UserRole.CUSTOMER],
+        hash_password: passwordHash,
+      });
+    } catch (error: any) {
+      if (!this.isUniqueViolation(error)) {
+        throw error;
+      }
+
+      // Защита от race condition: в момент создания запись уже могла появиться.
+      const concurrentUserByEmail =
+        await this.userService.findByEmail(normalizedEmail);
+      if (concurrentUserByEmail) {
+        throw new ConflictException('Пользователь с таким email уже существует');
+      }
+
+      const concurrentUserByPhone =
+        await this.userService.findByPhone(normalizedPhone);
+      if (concurrentUserByPhone) {
+        throw new ConflictException(
+          'Пользователь с таким номером телефона уже существует',
+        );
+      }
+
+      throw new ConflictException('Пользователь уже существует');
+    }
+
+    if (ipAddress) {
+      await this.userService.updateLastLogin(user.id);
+    }
+
+    return this.generateAuthTokens(user);
   }
 
   // Регистрация через email/password

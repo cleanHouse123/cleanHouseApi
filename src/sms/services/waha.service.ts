@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse } from 'axios';
+import { normalizePhoneToE164 } from '../../shared/utils/phone-normalizer.util';
 
 export interface WahaResponse {
   success: boolean;
@@ -35,48 +36,40 @@ export class WahaService {
    * Нормализует номер телефона для WhatsApp
    */
   private normalizePhoneNumber(phoneNumber: string): string {
-    // Убираем все символы кроме цифр
-    let normalized = phoneNumber.replace(/\D/g, '');
+    const cleaned = phoneNumber.replace(/\s+/g, '').trim();
 
-    // Если номер начинается с 8, заменяем на 7 (Россия/Беларусь)
-    if (normalized.startsWith('8')) {
-      normalized = '7' + normalized.substring(1);
-    }
-
-    // Если номер начинается с +, убираем его
-    if (normalized.startsWith('+')) {
-      normalized = normalized.substring(1);
-    }
-
-    // Если номер начинается с 7, добавляем код страны
-    if (normalized.startsWith('7') && normalized.length === 11) {
-      // Российский номер
-      return normalized;
-    }
-
-    // Если номер начинается с 375, это Беларусь
-    if (normalized.startsWith('375')) {
-      return normalized;
-    }
-
-    // Если номер начинается с 48, это Польша
-    if (normalized.startsWith('48')) {
-      return normalized;
-    }
-
-    // Для других стран добавляем код по умолчанию
-    if (
-      !normalized.startsWith('7') &&
-      !normalized.startsWith('375') &&
-      !normalized.startsWith('48')
-    ) {
-      // Если номер короткий, добавляем код страны по умолчанию
-      if (normalized.length < 10) {
-        normalized = '7' + normalized;
+    // Приводим к E.164 и для WAHA убираем "+"
+    try {
+      return normalizePhoneToE164(cleaned).replace('+', '');
+    } catch {
+      // Фолбэк для локальных российских номеров (10-значный/11-значный с 8)
+      const digitsOnly = cleaned.replace(/\D/g, '');
+      if (!digitsOnly) {
+        throw new Error('Пустой номер телефона');
       }
+      if (digitsOnly.length === 10) {
+        return `7${digitsOnly}`;
+      }
+      if (digitsOnly.length === 11 && digitsOnly.startsWith('8')) {
+        return `7${digitsOnly.substring(1)}`;
+      }
+      if (digitsOnly.length === 11 && digitsOnly.startsWith('7')) {
+        return digitsOnly;
+      }
+      throw new Error(`Некорректный номер телефона: ${phoneNumber}`);
     }
+  }
 
-    return normalized;
+  private formatAxiosError(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const responseData = error.response?.data;
+      return `${error.message}; status=${status ?? 'unknown'}; data=${JSON.stringify(responseData ?? {})}`;
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return String(error);
   }
 
   /**
@@ -86,7 +79,6 @@ export class WahaService {
   async checkNumberExists(phoneNumber: string): Promise<boolean> {
     try {
       const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
-      console.log(normalizedPhone, 'normalizedPhone');
 
       this.logger.log(
         `Проверка номера в WhatsApp: ${phoneNumber} -> ${normalizedPhone}`,
@@ -121,10 +113,10 @@ export class WahaService {
       return exists;
     } catch (error) {
       this.logger.error(
-        `Ошибка при проверке номера в WhatsApp: ${error.message}`,
+        `Ошибка при проверке номера в WhatsApp: ${this.formatAxiosError(error)}`,
       );
       throw new Error(
-        `Не удалось проверить номер в WhatsApp: ${error.message}`,
+        `Не удалось проверить номер в WhatsApp: ${this.formatAxiosError(error)}`,
       );
     }
   }
@@ -182,10 +174,10 @@ export class WahaService {
       return response.data;
     } catch (error) {
       this.logger.error(
-        `Ошибка при отправке WhatsApp сообщения: ${error.message}`,
+        `Ошибка при отправке WhatsApp сообщения: ${this.formatAxiosError(error)}`,
       );
       throw new Error(
-        `Не удалось отправить WhatsApp сообщение: ${error.message}`,
+        `Не удалось отправить WhatsApp сообщение: ${this.formatAxiosError(error)}`,
       );
     }
   }
@@ -220,7 +212,9 @@ export class WahaService {
         chatId: response.data.chatId,
       };
     } catch (error) {
-      this.logger.error(`Ошибка при проверке номера: ${error.message}`);
+      this.logger.error(
+        `Ошибка при проверке номера: ${this.formatAxiosError(error)}`,
+      );
       throw error;
     }
   }
@@ -238,7 +232,9 @@ export class WahaService {
       });
       return response.status === 200 && response.data.message === 'pong';
     } catch (error) {
-      this.logger.error(`WAHA сервис недоступен: ${error.message}`);
+      this.logger.error(
+        `WAHA сервис недоступен: ${this.formatAxiosError(error)}`,
+      );
       return false;
     }
   }
@@ -264,7 +260,7 @@ export class WahaService {
       return status === 'WORKING';
     } catch (error) {
       this.logger.error(
-        `Ошибка проверки статуса WAHA сессии: ${error.message}`,
+        `Ошибка проверки статуса WAHA сессии: ${this.formatAxiosError(error)}`,
       );
       return false;
     }

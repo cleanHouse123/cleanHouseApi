@@ -20,6 +20,7 @@ import { Request } from 'express';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { EmailLoginDto } from './dto/email-login.dto';
 import { EmailRegisterDto } from './dto/email-register.dto';
+import { RegisterProfileDto } from './dto/register-profile.dto';
 import { RefreshTokensDto } from './dto/refresh-tokens.dto';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { VerifySmsDto } from './dto/verify-sms.dto';
@@ -72,6 +73,19 @@ export class AuthController {
     const ipAddress =
       req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
     return this.authService.authenticateWithEmail(loginDto, ipAddress);
+  }
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Основная регистрация пользователя (имя, email, телефон, пароль)',
+    description:
+      'Основной метод регистрации. Требует имя, email, телефон и пароль. Без верификации email/телефона, проверяется только уникальность email и телефона.',
+  })
+  async register(@Body() registerDto: RegisterProfileDto, @Req() req: Request) {
+    const ipAddress =
+      req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    return this.authService.register(registerDto, ipAddress);
   }
 
   // ==================== SMS AUTHENTICATION ====================
