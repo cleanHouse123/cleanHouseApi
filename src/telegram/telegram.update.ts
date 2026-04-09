@@ -1,7 +1,7 @@
 import { On, Start, Update } from '@grammyjs/nestjs';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Context, Keyboard } from 'grammy';
+import { Context, InlineKeyboard, Keyboard } from 'grammy';
 import { TelegramService } from './telegram.service';
 import { LinkPhoneByTelegramService } from './link-phone-by-telegram.service';
 import { TelegramNotifyGroupService } from './telegram-notify-group.service';
@@ -15,6 +15,15 @@ const MESSAGES = {
     'Сначала войдите в приложение через Telegram, затем снова нажмите «Поделиться контактом» здесь.',
   invalid_phone:
     'Не удалось распознать номер. Проверьте формат и попробуйте снова.',
+  own_contact_only:
+    'Нужно поделиться именно своим номером через кнопку «Поделиться телефоном».',
+  private_chat_only:
+    'Для привязки номера откройте личный чат с ботом и нажмите «Поделиться телефоном».',
+  app_hint: 'Откройте приложение по кнопке ниже.',
+  help: `Что можно сделать в боте:
+1) Нажмите «Поделиться телефоном» для привязки аккаунта.
+2) Нажмите «Открыть приложение» для входа в приложение.
+3) Если не получается войти, сначала авторизуйтесь через Telegram в приложении, затем снова отправьте контакт.`,
   error: 'Произошла ошибка. Попробуйте позже или поделитесь контактом снова.',
 } as const;
 
@@ -32,8 +41,47 @@ export class TelegramUpdate {
     private readonly telegramNotifyGroupService: TelegramNotifyGroupService,
   ) {}
 
+  private getAppUrl(): string {
+    const rawUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      this.configService.get<string>('WEB_APP_URL') ||
+      this.configService.get<string>('BASE_URL') ||
+      'http://localhost:5173';
+
+    if (/^https?:\/\//i.test(rawUrl)) {
+      return rawUrl;
+    }
+
+    return `https://${rawUrl}`;
+  }
+
   private getPhoneNumberButton(ctx: Context) {
-    return new Keyboard().requestContact('Поделиться телефоном').resized();
+    return new Keyboard()
+      .requestContact('Поделиться телефоном')
+      .row()
+      .text('Открыть приложение')
+      .text('Помощь')
+      .resized()
+      .persistent();
+  }
+
+  private getOpenAppInlineKeyboard(): InlineKeyboard {
+    return new InlineKeyboard().url('Открыть приложение', this.getAppUrl());
+  }
+
+  private getActionsInlineKeyboard(): InlineKeyboard {
+    return new InlineKeyboard()
+      .url('Открыть приложение', this.getAppUrl())
+      .text('Помощь', 'help');
+  }
+
+  private async sendHelpMessage(ctx: Context): Promise<void> {
+    await ctx.reply(MESSAGES.help, {
+      reply_markup: this.getPhoneNumberButton(ctx),
+    });
+    await ctx.reply(MESSAGES.app_hint, {
+      reply_markup: this.getActionsInlineKeyboard(),
+    });
   }
 
   @Start()
@@ -43,6 +91,9 @@ export class TelegramUpdate {
       'Привет! Используй /getphone для получения вашего номера. Или нажмите на кнопку ниже. \n',
       { reply_markup: keyboard },
     );
+    await ctx.reply(MESSAGES.app_hint, {
+      reply_markup: this.getActionsInlineKeyboard(),
+    });
   }
 
   @On('message:contact')
@@ -50,7 +101,23 @@ export class TelegramUpdate {
     if (!ctx.message?.contact || !ctx.from?.id) {
       return;
     }
+    const keyboard = this.getPhoneNumberButton(ctx);
+
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(MESSAGES.private_chat_only, { reply_markup: keyboard });
+      return;
+    }
+
     const telegramId = String(ctx.from.id);
+
+    if (
+      ctx.message.contact.user_id &&
+      String(ctx.message.contact.user_id) !== telegramId
+    ) {
+      await ctx.reply(MESSAGES.own_contact_only, { reply_markup: keyboard });
+      return;
+    }
+
     const rawPhone = ctx.message.contact.phone_number;
     const telegramUsername = ctx.from.username ?? undefined;
 
@@ -60,7 +127,7 @@ export class TelegramUpdate {
       telegramUsername,
     );
     if (result.ok) {
-      await ctx.reply(MESSAGES.success);
+      await ctx.reply(MESSAGES.success, { reply_markup: keyboard });
       return;
     }
 
@@ -72,7 +139,7 @@ export class TelegramUpdate {
           : result.reason === 'invalid_phone'
             ? MESSAGES.invalid_phone
             : MESSAGES.error;
-    await ctx.reply(message);
+    await ctx.reply(message, { reply_markup: keyboard });
   }
 
   @On('message:text')
@@ -80,11 +147,11 @@ export class TelegramUpdate {
     if (!ctx.message || !ctx.message.text || !ctx.from?.id) {
       return;
     }
+    const keyboard = this.getPhoneNumberButton(ctx);
 
     const text = ctx.message.text;
 
     if (text === '/getphone') {
-      const keyboard = this.getPhoneNumberButton(ctx);
       return await ctx.reply(
         'поделись номером чтобы авторизоваться в выносмусора',
         {
@@ -93,10 +160,41 @@ export class TelegramUpdate {
       );
     }
 
+    if (text === '/help' || text === 'Помощь') {
+      await this.sendHelpMessage(ctx);
+      return;
+    }
+
+    if (text === 'Открыть приложение') {
+      await ctx.reply(MESSAGES.app_hint, {
+        reply_markup: this.getOpenAppInlineKeyboard(),
+      });
+      return;
+    }
+
     // Обычная обработка текста (эхо)
     await ctx.reply(
       `пока у меня нет других функций кроме поделиться телефоном`,
+      {
+        reply_markup: keyboard,
+      },
     );
+  }
+
+  @On('callback_query:data')
+  async onCallbackQuery(ctx: Context) {
+    const data = ctx.callbackQuery?.data;
+    if (!data) {
+      return;
+    }
+
+    if (data === 'help') {
+      await ctx.answerCallbackQuery();
+      await this.sendHelpMessage(ctx);
+      return;
+    }
+
+    await ctx.answerCallbackQuery();
   }
 
   /**

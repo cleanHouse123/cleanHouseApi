@@ -149,6 +149,13 @@ export class UserService {
     return restoredUser;
   }
 
+  async clearTelegramLink(id: string): Promise<void> {
+    await this.userRepository.query(
+      'UPDATE "user" SET "telegramId" = NULL, "telegramUsername" = NULL WHERE id = $1',
+      [id],
+    );
+  }
+
   async updatePhoneVerification(
     userId: string,
     isVerified: boolean,
