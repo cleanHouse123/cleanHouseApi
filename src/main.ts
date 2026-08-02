@@ -10,6 +10,7 @@ async function bootstrap() {
   moment.tz.setDefault('UTC');
 
   const app = await NestFactory.create(AppModule);
+  console.log('[bootstrap] Nest application created');
   app.enableCors({
     allowedHeaders: '*',
     origin: '*',
@@ -33,6 +34,7 @@ async function bootstrap() {
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);
+  console.log('[bootstrap] Swagger configured');
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -42,6 +44,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   const port = process.env.PORT ?? 3000;
+  console.log(`[bootstrap] Starting HTTP listener on port ${port}`);
   await app.listen(port, '0.0.0.0');
   console.log(`Application is running on port ${port}`);
 }

@@ -18,6 +18,8 @@ import { TelegramNotifyGroup } from './entities/telegram-notify-group.entity';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         token: configService.get<string>('TELEGRAM_BOT_TOKEN') ?? '',
+        useWebhook:
+          configService.get<string>('TELEGRAM_BOT_POLLING_ENABLED') !== 'true',
       }),
       inject: [ConfigService],
     }),
