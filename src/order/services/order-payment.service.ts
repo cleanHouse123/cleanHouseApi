@@ -86,12 +86,14 @@ export class OrderPaymentService {
       const isTestMode =
         this.configService.get<string>('YOOKASSA_USE_TEST_MODE') === 'true' ||
         secretKey?.startsWith('test_');
+      const useMockPayments =
+        this.configService.get<string>('YOOKASSA_MOCK_PAYMENTS') === 'true';
 
       let yookassaPayment: any;
 
-      if (isTestMode) {
+      if (useMockPayments) {
         // Используем mock для тестовых данных
-        console.log('Using mock YooKassa payment for test mode');
+        console.log('Using mock YooKassa payment');
         yookassaPayment = {
           id: `mock_${paymentId}`,
           confirmation: {
@@ -101,7 +103,9 @@ export class OrderPaymentService {
         };
       } else {
         // Создаем реальный платеж в YooKassa
-        console.log('Creating real YooKassa payment');
+        console.log(
+          `Creating ${isTestMode ? 'test' : 'live'} YooKassa payment`,
+        );
 
         // Создаем данные для платежа
         const paymentData: any = {
