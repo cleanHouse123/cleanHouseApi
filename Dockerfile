@@ -26,4 +26,4 @@ COPY --from=builder /app/firebase-service-account.json.base64 ./firebase-service
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/src/main"]
