@@ -82,9 +82,10 @@ export class OrderPaymentService {
       // Создаем новый платеж только если его нет
       const paymentId = uuidv4();
 
-      // Проверяем, используются ли тестовые данные
-      const shopId = this.configService.get('YOOKASSA_SHOP_ID');
-      const isTestMode = shopId?.startsWith('test_');
+      const secretKey = this.configService.get<string>('YOOKASSA_SECRET_KEY');
+      const isTestMode =
+        this.configService.get<string>('YOOKASSA_USE_TEST_MODE') === 'true' ||
+        secretKey?.startsWith('test_');
 
       let yookassaPayment: any;
 

@@ -252,10 +252,11 @@ export class PaymentService {
         'http://localhost:5173',
       );
 
-      // Проверяем, используются ли тестовые данные
-      const shopId = this.configService.get('YOOKASSA_SHOP_ID');
-      const isTestMode = shopId?.startsWith('test_');
-      console.log('YooKassa config check:', { shopId, isTestMode });
+      const secretKey = this.configService.get<string>('YOOKASSA_SECRET_KEY');
+      const isTestMode =
+        this.configService.get<string>('YOOKASSA_USE_TEST_MODE') === 'true' ||
+        secretKey?.startsWith('test_');
+      console.log('YooKassa config check:', { isTestMode });
 
       let yookassaPayment: any;
 
