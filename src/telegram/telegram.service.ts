@@ -21,7 +21,11 @@ export class TelegramService implements OnModuleInit {
     this.botToken = botToken;
   }
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
+    void this.configureBotMenu();
+  }
+
+  private async configureBotMenu(): Promise<void> {
     try {
       await this.bot.api.setMyCommands([
         {
