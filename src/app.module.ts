@@ -54,7 +54,9 @@ import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.e
           username: configService.get<string>('DATABASE_USER'),
           password: configService.get<string>('DATABASE_PASSWORD'),
           database: configService.get<string>('DATABASE_NAME'),
-          synchronize: true,
+          synchronize:
+            process.env.TYPEORM_SYNCHRONIZE === 'true' ||
+            process.env.NODE_ENV !== 'production',
           // migrationsRun: true,
           // migrations: ['dist/migrations/*.js'],
           timezone: 'UTC',
