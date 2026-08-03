@@ -29,6 +29,7 @@ import {
   PaymentSubject,
   PaymentMode,
 } from '../../shared/dto/receipt.dto';
+import { joinUrl } from '../../shared/utils/url.util';
 import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
 
 @Injectable()
@@ -286,11 +287,10 @@ export class PaymentService {
           userId,
         });
 
-        const frontendUrl = this.configService.get<string>(
-          'FRONTEND_URL',
-          'http://localhost:5173',
+        const returnUrl = joinUrl(
+          frontendUrl,
+          `/payment/result?paymentId=${paymentId}&type=subscription`,
         );
-        const returnUrl = `${frontendUrl}/payment/result?paymentId=${paymentId}&type=subscription`;
         console.log('Return URL:', returnUrl);
 
         // Создаем данные для платежа

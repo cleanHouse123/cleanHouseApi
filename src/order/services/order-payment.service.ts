@@ -18,6 +18,7 @@ import {
   PaymentSubject,
   PaymentMode,
 } from '../../shared/dto/receipt.dto';
+import { joinUrl } from '../../shared/utils/url.util';
 import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
 
 @Injectable()
@@ -107,6 +108,11 @@ export class OrderPaymentService {
           `Creating ${isTestMode ? 'test' : 'live'} YooKassa payment`,
         );
 
+        const returnUrl = joinUrl(
+          frontendUrl,
+          `/payment/result?paymentId=${paymentId}&type=order`,
+        );
+
         // Создаем данные для платежа
         const paymentData: any = {
           amount: {
@@ -115,7 +121,7 @@ export class OrderPaymentService {
           },
           confirmation: {
             type: ConfirmationEnum.redirect,
-            return_url: `${frontendUrl}/payment/result?paymentId=${paymentId}&type=order`,
+            return_url: returnUrl,
           },
           description: `Оплата заказа №${orderId}`,
           capture: true, // Автоматический захват средств
