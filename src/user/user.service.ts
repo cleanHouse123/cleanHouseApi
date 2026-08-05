@@ -394,6 +394,11 @@ export class UserService {
   }
 
   async createCurrier(createCurrierDto: CreateCurrierDto): Promise<User> {
+    const existingUserByEmail = await this.findByEmail(createCurrierDto.email);
+    if (existingUserByEmail) {
+      throw new ConflictException('Пользователь с таким email уже существует');
+    }
+
     const existingUserByPhone = await this.findByPhone(createCurrierDto.phone);
     if (existingUserByPhone) {
       throw new ConflictException(
@@ -401,13 +406,44 @@ export class UserService {
       );
     }
 
+    const deletedUserByEmail = await this.findByEmailIncludingDeleted(
+      createCurrierDto.email,
+    );
+    const deletedUserByPhone = await this.findByPhoneIncludingDeleted(
+      createCurrierDto.phone,
+    );
+
+    const restorableByEmail = deletedUserByEmail?.deletedAt
+      ? deletedUserByEmail
+      : null;
+    const restorableByPhone = deletedUserByPhone?.deletedAt
+      ? deletedUserByPhone
+      : null;
+
+    if (
+      restorableByEmail &&
+      restorableByPhone &&
+      restorableByEmail.id !== restorableByPhone.id
+    ) {
+      throw new ConflictException(
+        'Email и телефон уже привязаны к разным удаленным пользователям',
+      );
+    }
+
     const currierData = {
       name: createCurrierDto.name,
+      email: createCurrierDto.email,
       phone: createCurrierDto.phone,
       roles: [UserRole.CURRIER],
       isPhoneVerified: false,
       isEmailVerified: false,
     };
+
+    const restorableUser = restorableByEmail ?? restorableByPhone;
+    if (restorableUser) {
+      await this.restore(restorableUser.id);
+      return this.update(restorableUser.id, currierData);
+    }
 
     const currier = this.userRepository.create(currierData);
     return this.userRepository.save(currier);
