@@ -25,6 +25,17 @@ export class CreatePaymentDto {
   @IsEnum(SubscriptionType)
   subscriptionType: SubscriptionType;
 
+  @ApiProperty({
+    example:
+      'https://xn--80ad4adfbofbt7f.xn--p1ai/payment/result?returnUrl=%2Fsubscriptions',
+    description:
+      'URL возврата после оплаты. Разрешены текущий web-origin и cleanhousemobile:// deep link.',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  returnUrl?: string;
+
   // amount убран - цена вычисляется на сервере на основе плана и прав на бесплатную подписку
 }
 
