@@ -174,6 +174,12 @@ export class PaymentService {
           { subscriptionId },
         );
         finalAmount = reservation.finalAmount;
+        // Отражаем скидку в цене подписки, чтобы запись совпадала с реальным списанием.
+        await manager.update(
+          Subscription,
+          { id: subscriptionId },
+          { price: finalAmount },
+        );
       } else if (freeSubscriptionCheck.eligible) {
         finalAmount = 0;
         // Помечаем, что использована бесплатная подписка (в транзакции для атомарности)

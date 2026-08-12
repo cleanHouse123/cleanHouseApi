@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
   EntityManager,
+  LessThan,
   QueryFailedError,
   Repository,
 } from 'typeorm';
@@ -268,18 +269,19 @@ export class CouponService {
   async releaseStale(olderThanMinutes: number): Promise<number> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60_000);
     const stale = await this.redemptionRepo.find({
-      where: { status: CouponRedemptionStatus.RESERVED },
+      where: {
+        status: CouponRedemptionStatus.RESERVED,
+        createdAt: LessThan(cutoff),
+      },
     });
     let released = 0;
     for (const row of stale) {
-      if (row.createdAt < cutoff) {
-        await this.releaseBy(
-          row.orderId
-            ? { orderId: row.orderId }
-            : { subscriptionId: row.subscriptionId! },
-        );
-        released++;
-      }
+      await this.releaseBy(
+        row.orderId
+          ? { orderId: row.orderId }
+          : { subscriptionId: row.subscriptionId! },
+      );
+      released++;
     }
     return released;
   }
