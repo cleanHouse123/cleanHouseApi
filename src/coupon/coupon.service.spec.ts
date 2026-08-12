@@ -177,8 +177,9 @@ describe('CouponService.reserve', () => {
 
   it('increments cap atomically, inserts reserved row, commits', async () => {
     await makeService();
-    manager.findOne.mockResolvedValue(
-      activeCoupon({ maxRedemptions: 100, redeemedCount: 0 }),
+    const coupon = activeCoupon({ maxRedemptions: 100, redeemedCount: 0 });
+    manager.findOne.mockImplementation((entity: any) =>
+      Promise.resolve(entity === Coupon ? coupon : null),
     );
     manager.createQueryBuilder.mockReturnValue(buildUpdateChain(1));
     const res = await service.reserve(
@@ -199,8 +200,9 @@ describe('CouponService.reserve', () => {
     await makeService();
     // Passes the in-memory check (0 < 1) but a concurrent reserve already took
     // the last slot, so the atomic conditional UPDATE affects 0 rows.
-    manager.findOne.mockResolvedValue(
-      activeCoupon({ maxRedemptions: 1, redeemedCount: 0 }),
+    const coupon = activeCoupon({ maxRedemptions: 1, redeemedCount: 0 });
+    manager.findOne.mockImplementation((entity: any) =>
+      Promise.resolve(entity === Coupon ? coupon : null),
     );
     manager.createQueryBuilder.mockReturnValue(buildUpdateChain(0));
     await expect(

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { Coupon, CouponScope } from './entities/coupon.entity';
 import {
   CouponRedemption,
@@ -115,9 +115,76 @@ export class CouponService {
   }
 
   /**
-   * Atomically reserve a redemption at payment-link creation time, inside a
-   * transaction. Increments the global cap conditionally (no oversell) and
-   * inserts a RESERVED row (unique (couponId,userId) blocks reuse).
+   * Reserve a redemption on an existing transaction manager. Use this from a
+   * caller that already owns a transaction (order/subscription payment flow) so
+   * the reservation commits or rolls back atomically together with the purchase.
+   * Increments the global cap conditionally (no oversell) and inserts a RESERVED
+   * row (unique (couponId,userId) blocks reuse, also enforced at the DB level).
+   */
+  async reserveWith(
+    m: EntityManager,
+    code: string,
+    scope: CouponScope,
+    userId: string,
+    baseAmount: number,
+    planId: string | null,
+    target: RedemptionTarget,
+  ): Promise<CouponValidation & { redemptionId: string }> {
+    const coupon = await m.findOne(Coupon, {
+      where: { code: normalizeCode(code) },
+    });
+    this.assertUsable(coupon, scope, baseAmount, planId);
+
+    const existing = await m.findOne(CouponRedemption, {
+      where: { couponId: coupon!.id, userId },
+    });
+    if (existing) throw new CouponAlreadyUsedError();
+
+    // Atomic global-cap capture.
+    const upd = await m
+      .createQueryBuilder()
+      .update(Coupon)
+      .set({ redeemedCount: () => 'redeemedCount + 1' })
+      .where('id = :id', { id: coupon!.id })
+      .andWhere('(maxRedemptions IS NULL OR redeemedCount < maxRedemptions)')
+      .execute();
+    if (!upd.affected) throw new CouponLimitReachedError();
+
+    const finalAmount = computeFinalAmount(coupon!, baseAmount);
+    let redemption: CouponRedemption;
+    try {
+      redemption = await m.save(
+        CouponRedemption,
+        m.create(CouponRedemption, {
+          couponId: coupon!.id,
+          userId,
+          status: CouponRedemptionStatus.RESERVED,
+          orderId: target.orderId ?? null,
+          subscriptionId: target.subscriptionId ?? null,
+          amountBefore: baseAmount,
+          amountAfter: finalAmount,
+        }),
+      );
+    } catch (e) {
+      // Unique (couponId,userId) violation under a concurrent reserve.
+      if (e instanceof QueryFailedError && (e as any).code === '23505') {
+        throw new CouponAlreadyUsedError();
+      }
+      throw e;
+    }
+
+    return {
+      coupon: coupon!,
+      baseAmount,
+      finalAmount,
+      discountAmount: baseAmount - finalAmount,
+      redemptionId: redemption.id,
+    };
+  }
+
+  /**
+   * Standalone reserve that owns its transaction. Use when the caller is not
+   * already inside a transaction.
    */
   async reserve(
     code: string,
@@ -131,44 +198,17 @@ export class CouponService {
     await qr.connect();
     await qr.startTransaction();
     try {
-      const m = qr.manager;
-      const coupon = await m.findOne(Coupon, {
-        where: { code: normalizeCode(code) },
-      });
-      this.assertUsable(coupon, scope, baseAmount, planId);
-
-      // Atomic global-cap capture.
-      const upd = await m
-        .createQueryBuilder()
-        .update(Coupon)
-        .set({ redeemedCount: () => 'redeemedCount + 1' })
-        .where('id = :id', { id: coupon!.id })
-        .andWhere('(maxRedemptions IS NULL OR redeemedCount < maxRedemptions)')
-        .execute();
-      if (!upd.affected) throw new CouponLimitReachedError();
-
-      const finalAmount = computeFinalAmount(coupon!, baseAmount);
-      const redemption = await m.save(
-        CouponRedemption,
-        m.create(CouponRedemption, {
-          couponId: coupon!.id,
-          userId,
-          status: CouponRedemptionStatus.RESERVED,
-          orderId: target.orderId ?? null,
-          subscriptionId: target.subscriptionId ?? null,
-          amountBefore: baseAmount,
-          amountAfter: finalAmount,
-        }),
-      );
-
-      await qr.commitTransaction();
-      return {
-        coupon: coupon!,
+      const res = await this.reserveWith(
+        qr.manager,
+        code,
+        scope,
+        userId,
         baseAmount,
-        finalAmount,
-        discountAmount: baseAmount - finalAmount,
-        redemptionId: redemption.id,
-      };
+        planId,
+        target,
+      );
+      await qr.commitTransaction();
+      return res;
     } catch (e) {
       await qr.rollbackTransaction();
       throw e;
