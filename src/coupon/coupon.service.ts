@@ -217,12 +217,29 @@ export class CouponService {
     }
   }
 
-  /** Idempotent: confirm a reserved redemption on successful payment. */
-  async confirmBy(where: RedemptionTarget): Promise<void> {
-    await this.redemptionRepo.update(
+  /** Idempotent: confirm a reserved redemption on an existing transaction manager. */
+  async confirmWith(m: EntityManager, where: RedemptionTarget): Promise<void> {
+    await m.update(
+      CouponRedemption,
       { ...where, status: CouponRedemptionStatus.RESERVED },
       { status: CouponRedemptionStatus.CONFIRMED },
     );
+  }
+
+  /** Idempotent: confirm a reserved redemption on successful payment. */
+  async confirmBy(where: RedemptionTarget): Promise<void> {
+    await this.confirmWith(this.dataSource.manager, where);
+  }
+
+  /** Release a reserved redemption on an existing transaction manager. */
+  async releaseWith(m: EntityManager, where: RedemptionTarget): Promise<void> {
+    const row = await m.findOne(CouponRedemption, {
+      where: { ...where, status: CouponRedemptionStatus.RESERVED },
+    });
+    if (row) {
+      await m.delete(CouponRedemption, { id: row.id });
+      await m.decrement(Coupon, { id: row.couponId }, 'redeemedCount', 1);
+    }
   }
 
   /** Release a reserved redemption (payment failed/canceled/expired). */
@@ -231,14 +248,7 @@ export class CouponService {
     await qr.connect();
     await qr.startTransaction();
     try {
-      const m = qr.manager;
-      const row = await m.findOne(CouponRedemption, {
-        where: { ...where, status: CouponRedemptionStatus.RESERVED },
-      });
-      if (row) {
-        await m.delete(CouponRedemption, { id: row.id });
-        await m.decrement(Coupon, { id: row.couponId }, 'redeemedCount', 1);
-      }
+      await this.releaseWith(qr.manager, where);
       await qr.commitTransaction();
     } catch (e) {
       await qr.rollbackTransaction();

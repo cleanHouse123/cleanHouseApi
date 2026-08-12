@@ -22,6 +22,8 @@ import { PriceValidationService } from './price-validation.service';
 import { AuditService } from './audit.service';
 import { PaymentAuditAction } from '../entities/payment-audit.entity';
 import { FreeSubscriptionService } from './free-subscription.service';
+import { CouponService } from '../../coupon/coupon.service';
+import { CouponScope } from '../../coupon/entities/coupon.entity';
 import {
   ReceiptDto,
   ReceiptItemDto,
@@ -45,6 +47,7 @@ export class PaymentService {
     private dataSource: DataSource,
     private yookassaService: YookassaService,
     private freeSubscriptionService: FreeSubscriptionService,
+    private couponService: CouponService,
   ) {}
 
   // Создание данных для чека подписки
@@ -86,6 +89,7 @@ export class PaymentService {
     customerEmail?: string,
     ipAddress?: string,
     userAgent?: string,
+    couponCode?: string,
   ): Promise<SubscriptionPaymentResponseDto> {
     return await this.dataSource.transaction(async (manager) => {
       // Проверяем существование подписки и права доступа
@@ -157,7 +161,20 @@ export class PaymentService {
 
       // Вычисляем финальную сумму на сервере
       let finalAmount = subscriptionPlan.priceInKopecks;
-      if (freeSubscriptionCheck.eligible) {
+      if (couponCode) {
+        // Купон имеет приоритет и заменяет авто-скидки (реферальную бесплатную).
+        // Резервируем погашение в этой же транзакции — атомарно с платежом.
+        const reservation = await this.couponService.reserveWith(
+          manager,
+          couponCode,
+          CouponScope.SUBSCRIPTION,
+          userId,
+          subscriptionPlan.priceInKopecks,
+          planId,
+          { subscriptionId },
+        );
+        finalAmount = reservation.finalAmount;
+      } else if (freeSubscriptionCheck.eligible) {
         finalAmount = 0;
         // Помечаем, что использована бесплатная подписка (в транзакции для атомарности)
         // Если пользователь уже использовал, выбросит ошибку и транзакция откатится
@@ -488,6 +505,19 @@ export class PaymentService {
           metadata: { oldStatus, newStatus: status },
         },
       );
+
+      // Погашение купона: подтверждаем ТОЛЬКО при успехе, освобождаем ТОЛЬКО при
+      // окончательном неуспехе. Промежуточные статусы (processing/pending) не трогают
+      // резерв, иначе купон освободится до завершения оплаты.
+      if (status === SubscriptionPaymentStatus.SUCCESS) {
+        await this.couponService.confirmWith(manager, {
+          subscriptionId: payment.subscriptionId,
+        });
+      } else if (status === SubscriptionPaymentStatus.FAILED) {
+        await this.couponService.releaseWith(manager, {
+          subscriptionId: payment.subscriptionId,
+        });
+      }
 
       return payment;
     });

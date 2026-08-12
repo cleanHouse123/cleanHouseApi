@@ -22,6 +22,7 @@ import { UserModule } from '../user/user.module';
 import { SubscriptionLimitsService } from './services/subscription-limits.service';
 import { FreeSubscriptionService } from './services/free-subscription.service';
 import { AdTokenModule } from '../ad-tokens/ad-token.module';
+import { CouponModule } from '../coupon/coupon.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AdTokenModule } from '../ad-tokens/ad-token.module';
     ]),
     UserModule,
     AdTokenModule,
+    CouponModule,
   ],
   controllers: [
     SubscriptionController,
