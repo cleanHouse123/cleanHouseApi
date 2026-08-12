@@ -14,6 +14,8 @@ import { Subscription } from './subscription/entities/subscription.entity';
 import { SubscriptionPayment } from './subscription/entities/subscription-payment.entity';
 import { PaymentAudit } from './subscription/entities/payment-audit.entity';
 import { SubscriptionPlan } from './subscription/entities/subscription-plan.entity';
+import { Coupon } from './coupon/entities/coupon.entity';
+import { CouponRedemption } from './coupon/entities/coupon-redemption.entity';
 import { AddressCache } from './address/entities/address-cache.entity';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
@@ -35,6 +37,7 @@ import { WorkTime } from './work-time/entities/work-time.entity';
 import { ReferralFreeSubscriptionUsage } from './subscription/entities/referral-free-subscription-usage.entity';
 import { FcmModule } from './fcm/fcm.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { CouponModule } from './coupon/coupon.module';
 import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.entity';
 
 @Module({
@@ -57,8 +60,8 @@ import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.e
           synchronize:
             process.env.TYPEORM_SYNCHRONIZE === 'true' ||
             process.env.NODE_ENV !== 'production',
-          // migrationsRun: true,
-          // migrations: ['dist/migrations/*.js'],
+          migrations: ['dist/migrations/*.js'],
+          migrationsRun: process.env.NODE_ENV === 'production',
           timezone: 'UTC',
           dateStrings: true,
           extra: {
@@ -74,6 +77,8 @@ import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.e
             SubscriptionPayment,
             PaymentAudit,
             SubscriptionPlan,
+            Coupon,
+            CouponRedemption,
             AddressCache,
             Location,
             AdToken,
@@ -105,6 +110,7 @@ import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.e
     WorkTimeModule,
     FcmModule,
     TelegramModule,
+    CouponModule,
   ],
   controllers: [AppController],
   providers: [AppService],
