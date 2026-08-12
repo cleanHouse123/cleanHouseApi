@@ -31,7 +31,9 @@ export class CouponController {
   @Post('validate')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Проверить промокод и получить итоговую цену (превью)' })
+  @ApiOperation({
+    summary: 'Проверить промокод и получить итоговую цену (превью)',
+  })
   validate(
     @Body(ValidationPipe) dto: ValidateCouponDto,
     @GetUserMetadata() user: UserMetadata,

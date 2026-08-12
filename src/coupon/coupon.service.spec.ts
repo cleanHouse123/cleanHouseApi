@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -51,7 +52,10 @@ describe('CouponService.validate', () => {
       providers: [
         CouponService,
         { provide: getRepositoryToken(Coupon), useValue: couponRepo },
-        { provide: getRepositoryToken(CouponRedemption), useValue: redemptionRepo },
+        {
+          provide: getRepositoryToken(CouponRedemption),
+          useValue: redemptionRepo,
+        },
         { provide: getRepositoryToken(SubscriptionPlan), useValue: {} },
         { provide: DataSource, useValue: {} },
       ],
@@ -68,7 +72,13 @@ describe('CouponService.validate', () => {
 
   it('normalizes code to uppercase in lookup', async () => {
     couponRepo.findOne.mockResolvedValue(activeCoupon());
-    await service.validate('kvartal1', CouponScope.SUBSCRIPTION, 'u1', 20000, null);
+    await service.validate(
+      'kvartal1',
+      CouponScope.SUBSCRIPTION,
+      'u1',
+      20000,
+      null,
+    );
     expect(couponRepo.findOne).toHaveBeenCalledWith({
       where: { code: 'KVARTAL1' },
     });
@@ -82,16 +92,26 @@ describe('CouponService.validate', () => {
   });
 
   it('scope mismatch -> CouponScopeMismatchError', async () => {
-    couponRepo.findOne.mockResolvedValue(activeCoupon({ scope: CouponScope.ORDER }));
+    couponRepo.findOne.mockResolvedValue(
+      activeCoupon({ scope: CouponScope.ORDER }),
+    );
     await expect(
       service.validate('KVARTAL1', CouponScope.SUBSCRIPTION, 'u1', 20000, null),
     ).rejects.toBeInstanceOf(CouponScopeMismatchError);
   });
 
   it('plan mismatch -> CouponPlanMismatchError', async () => {
-    couponRepo.findOne.mockResolvedValue(activeCoupon({ subscriptionPlanId: 'planA' }));
+    couponRepo.findOne.mockResolvedValue(
+      activeCoupon({ subscriptionPlanId: 'planA' }),
+    );
     await expect(
-      service.validate('KVARTAL1', CouponScope.SUBSCRIPTION, 'u1', 20000, 'planB'),
+      service.validate(
+        'KVARTAL1',
+        CouponScope.SUBSCRIPTION,
+        'u1',
+        20000,
+        'planB',
+      ),
     ).rejects.toBeInstanceOf(CouponPlanMismatchError);
   });
 
@@ -163,7 +183,10 @@ describe('CouponService.reserve', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         CouponService,
-        { provide: getRepositoryToken(Coupon), useValue: { findOne: jest.fn() } },
+        {
+          provide: getRepositoryToken(Coupon),
+          useValue: { findOne: jest.fn() },
+        },
         {
           provide: getRepositoryToken(CouponRedemption),
           useValue: { findOne: jest.fn(), find: jest.fn() },

@@ -24,6 +24,8 @@ export interface GetOrderPriceParams {
   addressId?: string;
   address?: string;
   addressDetails?: AddressDetailsComparable | null;
+  /** Не применять авто-скидку «первый заказ 1₽» (используется, когда применяется купон). */
+  skipFirstOrderDiscount?: boolean;
 }
 
 @Injectable()
@@ -55,6 +57,7 @@ export class PriceService {
       addressId,
       address,
       addressDetails,
+      skipFirstOrderDiscount = false,
     } = params;
 
     // Базовая цена за один пакет (для логики «первого заказа»)
@@ -114,7 +117,7 @@ export class PriceService {
         // Если уже есть заказ за 1 рубль (в любом статусе), первый заказ уже использован
         const isUserFirstOrder = !hasFirstOrder;
 
-        if (isUserFirstOrder && isAddressEligible) {
+        if (isUserFirstOrder && isAddressEligible && !skipFirstOrderDiscount) {
           basePricePerPackage = this.FIRST_ORDER_PRICE;
         }
       }

@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, QueryFailedError, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { Coupon, CouponScope } from './entities/coupon.entity';
 import {
   CouponRedemption,
@@ -167,7 +172,8 @@ export class CouponService {
       );
     } catch (e) {
       // Unique (couponId,userId) violation under a concurrent reserve.
-      if (e instanceof QueryFailedError && (e as any).code === '23505') {
+      const pgCode = (e as QueryFailedError & { code?: string }).code;
+      if (e instanceof QueryFailedError && pgCode === '23505') {
         throw new CouponAlreadyUsedError();
       }
       throw e;
@@ -343,7 +349,9 @@ export class CouponService {
       if (!plan) throw new BadRequestException('План не найден');
       baseAmount = plan.priceInKopecks;
     } else {
-      throw new BadRequestException('Превью для заказов пока не поддерживается');
+      throw new BadRequestException(
+        'Превью для заказов пока не поддерживается',
+      );
     }
     const v = await this.validate(
       dto.code,

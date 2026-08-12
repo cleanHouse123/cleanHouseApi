@@ -14,6 +14,7 @@ import { Review } from './entities/review.entity';
 import { User } from '../user/entities/user.entity';
 import { UserAddress } from '../address/entities/user-address';
 import { TelegramModule } from '../telegram/telegram.module';
+import { CouponModule } from '../coupon/coupon.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { TelegramModule } from '../telegram/telegram.module';
     SubscriptionModule,
     PriceModule,
     TelegramModule,
+    CouponModule,
   ],
   controllers: [OrderController, OrderPaymentPageController],
   providers: [

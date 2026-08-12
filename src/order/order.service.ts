@@ -36,6 +36,9 @@ import { UserAddress } from '../address/entities/user-address';
 import { AddressUsageFeature } from '../shared/types/address-features';
 import { TelegramService } from '../telegram/telegram.service';
 import { TelegramNotifyGroupService } from '../telegram/telegram-notify-group.service';
+import { v4 as uuidv4 } from 'uuid';
+import { CouponService } from '../coupon/coupon.service';
+import { CouponScope } from '../coupon/entities/coupon.entity';
 
 @Injectable()
 export class OrderService {
@@ -58,6 +61,7 @@ export class OrderService {
     private telegramService: TelegramService,
     private telegramNotifyGroupService: TelegramNotifyGroupService,
     private dataSource: DataSource,
+    private couponService: CouponService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -143,12 +147,17 @@ export class OrderService {
       }
     }
 
+    const applyCoupon =
+      !!createOrderDto.couponCode && orderStatus === OrderStatus.NEW;
+
     const orderPrice = await this.priceService.getOrderPrice({
       userId: createOrderDto.customerId,
       numberPackages,
       addressId: createOrderDto.addressId,
       address: createOrderDto.address,
       addressDetails: createOrderDto.addressDetails,
+      // Купон заменяет авто-скидку «первый заказ 1₽» (одна скидка, купон в приоритете).
+      skipFirstOrderDiscount: applyCoupon,
     });
 
     // Строгая проверка: если цена = 1 рубль, проверяем, что у пользователя еще нет ЛЮБОГО заказа за 1 рубль
@@ -167,6 +176,22 @@ export class OrderService {
           'Первый заказ за 1 рубль уже был использован. На один аккаунт разрешен только один первый заказ (независимо от статуса).',
         );
       }
+    }
+
+    // Применяем купон ДО создания заказа: резервируем погашение по заранее
+    // сгенерированному id заказа. Если купон невалиден — заказ не создаётся.
+    const orderId = uuidv4();
+    let finalPrice = orderPrice;
+    if (applyCoupon) {
+      const reservation = await this.couponService.reserve(
+        createOrderDto.couponCode!,
+        CouponScope.ORDER,
+        createOrderDto.customerId,
+        orderPrice,
+        null,
+        { orderId },
+      );
+      finalPrice = reservation.finalAmount;
     }
 
     // Преобразуем координаты из фронта в нужный формат
@@ -207,12 +232,13 @@ export class OrderService {
     console.log('ScheduledAt:', scheduledAt);
 
     const order = this.orderRepository.create({
+      id: orderId,
       customerId: createOrderDto.customerId,
       address: createOrderDto.address,
       addressId: createOrderDto.addressId,
       addressDetails: createOrderDto.addressDetails,
       description: createOrderDto.description,
-      price: orderPrice,
+      price: finalPrice,
       notes: createOrderDto.notes,
       scheduledAt,
       status: orderStatus,

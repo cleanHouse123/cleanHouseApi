@@ -11,7 +11,9 @@ export class ValidateCouponDto {
   @IsEnum(CouponScope)
   scope: CouponScope;
 
-  @ApiPropertyOptional({ description: 'ID плана подписки (для scope=subscription)' })
+  @ApiPropertyOptional({
+    description: 'ID плана подписки (для scope=subscription)',
+  })
   @IsOptional()
   @IsUUID()
   planId?: string;
