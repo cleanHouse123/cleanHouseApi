@@ -383,11 +383,15 @@ export class CouponService {
       baseAmount,
       dto.planId ?? null,
     );
+    // Клиент платит по выгодной для него скидке: если авто-скидка (первый
+    // заказ за 1 ₽) дешевле купона, купон не применяется.
+    const finalAmount = Math.min(v.finalAmount, priceWithoutCoupon);
+
     return {
       valid: true,
       baseAmount: v.baseAmount,
-      finalAmount: v.finalAmount,
-      discountAmount: v.discountAmount,
+      finalAmount,
+      discountAmount: v.baseAmount - finalAmount,
       priceWithoutCoupon,
     };
   }

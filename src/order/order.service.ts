@@ -147,17 +147,21 @@ export class OrderService {
       }
     }
 
-    const applyCoupon =
+    const wantsCoupon =
       !!createOrderDto.couponCode && orderStatus === OrderStatus.NEW;
 
-    const orderPrice = await this.priceService.getOrderPrice({
+    const priceParams = {
       userId: createOrderDto.customerId,
       numberPackages,
       addressId: createOrderDto.addressId,
       address: createOrderDto.address,
       addressDetails: createOrderDto.addressDetails,
-      // Купон заменяет авто-скидку «первый заказ 1₽» (одна скидка, купон в приоритете).
-      skipFirstOrderDiscount: applyCoupon,
+    };
+
+    // Цена с авто-скидкой «первый заказ 1₽» — с ней сравнивается цена по купону
+    const orderPrice = await this.priceService.getOrderPrice({
+      ...priceParams,
+      skipFirstOrderDiscount: false,
     });
 
     // Строгая проверка: если цена = 1 рубль, проверяем, что у пользователя еще нет ЛЮБОГО заказа за 1 рубль
@@ -182,16 +186,35 @@ export class OrderService {
     // сгенерированному id заказа. Если купон невалиден — заказ не создаётся.
     const orderId = uuidv4();
     let finalPrice = orderPrice;
-    if (applyCoupon) {
-      const reservation = await this.couponService.reserve(
+    if (wantsCoupon) {
+      // Купон считается от цены без авто-скидки: одновременно скидки не складываются
+      const priceWithoutAutoDiscount = await this.priceService.getOrderPrice({
+        ...priceParams,
+        skipFirstOrderDiscount: true,
+      });
+
+      // Невалидный купон бросит исключение и заказ не создастся
+      const preview = await this.couponService.validate(
         createOrderDto.couponCode!,
         CouponScope.ORDER,
         createOrderDto.customerId,
-        orderPrice,
+        priceWithoutAutoDiscount,
         null,
-        { orderId },
       );
-      finalPrice = reservation.finalAmount;
+
+      // Применяем ту скидку, что выгоднее клиенту. Если купон проигрывает
+      // авто-скидке, не тратим его погашение.
+      if (preview.finalAmount < orderPrice) {
+        const reservation = await this.couponService.reserve(
+          createOrderDto.couponCode!,
+          CouponScope.ORDER,
+          createOrderDto.customerId,
+          priceWithoutAutoDiscount,
+          null,
+          { orderId },
+        );
+        finalPrice = reservation.finalAmount;
+      }
     }
 
     // Преобразуем координаты из фронта в нужный формат

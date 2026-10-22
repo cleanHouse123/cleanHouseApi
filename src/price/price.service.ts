@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../user/entities/user.entity';
@@ -41,14 +42,27 @@ export class PriceService {
   private readonly PRICE_FOUR_PACKAGES = 34900;
   private readonly PRICE_FIVE_PACKAGES = 39900;
 
+  /**
+   * Сколько пакетов входит в базовый вынос за 1 ₽ на первом заказе.
+   * Меняется переменной окружения FIRST_ORDER_INCLUDED_PACKAGES без правки кода.
+   */
+  private readonly firstOrderIncludedPackages: number;
+
   constructor(
+    private readonly configService: ConfigService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(UserAddress)
     private readonly userAddressRepository: Repository<UserAddress>,
-  ) {}
+  ) {
+    const configured = Number(
+      this.configService.get<string>('FIRST_ORDER_INCLUDED_PACKAGES'),
+    );
+    this.firstOrderIncludedPackages =
+      Number.isInteger(configured) && configured > 0 ? configured : 2;
+  }
 
   async getOrderPrice(params: GetOrderPriceParams = {}): Promise<number> {
     const {
@@ -140,15 +154,16 @@ export class PriceService {
       return regularPrice(numberPackages);
     }
 
-    // Первый заказ: базовый вынос (до 2 пакетов) стоит 1 ₽, пакеты сверх базы
-    // оплачиваются по разнице с тарифом на 2 пакета.
-    if (numberPackages <= 2) {
+    // Первый заказ: базовый вынос стоит 1 ₽, пакеты сверх базы оплачиваются
+    // по разнице с тарифом на базовое количество пакетов.
+    const included = this.firstOrderIncludedPackages;
+    if (numberPackages <= included) {
       return this.FIRST_ORDER_PRICE;
     }
 
     return (
       this.FIRST_ORDER_PRICE +
-      (regularPrice(numberPackages) - this.PRICE_TWO_PACKAGES)
+      (regularPrice(numberPackages) - regularPrice(included))
     );
   }
 

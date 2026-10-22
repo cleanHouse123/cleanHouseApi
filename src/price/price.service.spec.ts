@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { PriceService } from './price.service';
 import { User } from '../user/entities/user.entity';
 import { Order } from '../order/entities/order.entity';
@@ -15,6 +16,8 @@ describe('PriceService.getOrderPrice', () => {
   const buildService = async (opts: {
     /** есть ли у пользователя уже заказ за 1 ₽ */
     usedFirstOrder: boolean;
+    /** сколько пакетов входит в базовый вынос за 1 ₽ */
+    includedPackages?: string;
   }) => {
     const userRepository = {
       findOne: jest.fn().mockResolvedValue({ id: 'u1' }),
@@ -45,6 +48,15 @@ describe('PriceService.getOrderPrice', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         PriceService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) =>
+              key === 'FIRST_ORDER_INCLUDED_PACKAGES'
+                ? opts.includedPackages
+                : undefined,
+          },
+        },
         { provide: getRepositoryToken(User), useValue: userRepository },
         { provide: getRepositoryToken(Order), useValue: orderRepository },
         {
@@ -132,6 +144,44 @@ describe('PriceService.getOrderPrice', () => {
           skipFirstOrderDiscount: true,
         }),
       ).resolves.toBe(19900);
+    });
+  });
+
+  describe('настраиваемая база первого заказа', () => {
+    it('с FIRST_ORDER_INCLUDED_PACKAGES=3 три пакета тоже стоят 1 ₽', async () => {
+      const service = await buildService({
+        usedFirstOrder: false,
+        includedPackages: '3',
+      });
+
+      await expect(
+        service.getOrderPrice({
+          userId: 'u1',
+          numberPackages: 3,
+          addressId: FIRST_ORDER_ADDRESS,
+        }),
+      ).resolves.toBe(100);
+
+      // четвёртый пакет считается по разнице с тарифом на три
+      await expect(
+        service.getOrderPrice({
+          userId: 'u1',
+          numberPackages: 4,
+          addressId: FIRST_ORDER_ADDRESS,
+        }),
+      ).resolves.toBe(100 + (34900 - 24900));
+    });
+
+    it('без переменной база остаётся два пакета', async () => {
+      const service = await buildService({ usedFirstOrder: false });
+
+      await expect(
+        service.getOrderPrice({
+          userId: 'u1',
+          numberPackages: 3,
+          addressId: FIRST_ORDER_ADDRESS,
+        }),
+      ).resolves.toBe(5100);
     });
   });
 });

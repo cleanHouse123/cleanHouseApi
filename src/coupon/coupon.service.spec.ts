@@ -278,9 +278,10 @@ describe('CouponService.validateForPreview — превью для заказа'
       }),
     );
     // первый вызов — база для купона, второй — цена без купона
+    // (авто-скидки нет: первый заказ уже использован)
     priceService.getOrderPrice
       .mockResolvedValueOnce(20000)
-      .mockResolvedValueOnce(100);
+      .mockResolvedValueOnce(20000);
 
     const res = await service.validateForPreview(
       { code: 'KVARTAL1', scope: CouponScope.ORDER, numberPackages: 2 } as any,
@@ -292,7 +293,7 @@ describe('CouponService.validateForPreview — превью для заказа'
       baseAmount: 20000,
       finalAmount: 18000,
       discountAmount: 2000,
-      priceWithoutCoupon: 100,
+      priceWithoutCoupon: 20000,
     });
     expect(priceService.getOrderPrice).toHaveBeenNthCalledWith(
       1,
@@ -302,6 +303,29 @@ describe('CouponService.validateForPreview — превью для заказа'
       2,
       expect.objectContaining({ skipFirstOrderDiscount: false }),
     );
+  });
+
+  it('не применяет купон, если авто-скидка выгоднее', async () => {
+    couponRepo.findOne.mockResolvedValue(
+      activeCoupon({
+        scope: CouponScope.ORDER,
+        discountType: CouponDiscountType.PERCENT,
+        value: 20,
+      }),
+    );
+    // база без авто-скидки 199 ₽, с первым заказом — 1 ₽
+    priceService.getOrderPrice
+      .mockResolvedValueOnce(19900)
+      .mockResolvedValueOnce(100);
+
+    const res = await service.validateForPreview(
+      { code: 'KVARTAL1', scope: CouponScope.ORDER, numberPackages: 2 } as any,
+      'u1',
+    );
+
+    expect(res.finalAmount).toBe(100);
+    expect(res.discountAmount).toBe(19800);
+    expect(res.priceWithoutCoupon).toBe(100);
   });
 
   it('передаёт адрес и количество пакетов в расчёт цены', async () => {
