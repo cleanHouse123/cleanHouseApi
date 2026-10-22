@@ -18,7 +18,7 @@ import {
   PaymentSubject,
   PaymentMode,
 } from '../../shared/dto/receipt.dto';
-import { joinUrl } from '../../shared/utils/url.util';
+import { buildPaymentReturnUrl } from '../../shared/utils/payment-return-url.util';
 import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
 import { CouponService } from '../../coupon/coupon.service';
 
@@ -71,6 +71,7 @@ export class OrderPaymentService {
     orderId: string,
     amount: number,
     customerEmail?: string,
+    returnUrl?: string,
   ): Promise<OrderPaymentResponseDto> {
     try {
       const baseUrl = this.configService.get<string>(
@@ -110,10 +111,14 @@ export class OrderPaymentService {
           `Creating ${isTestMode ? 'test' : 'live'} YooKassa payment`,
         );
 
-        const returnUrl = joinUrl(
+        const paymentReturnUrl = buildPaymentReturnUrl({
           frontendUrl,
-          `/payment/result?paymentId=${paymentId}&type=order`,
-        );
+          fallbackPath: '/payment/result',
+          paymentId,
+          type: 'order',
+          returnUrl,
+          extraParams: { orderId },
+        });
 
         // Создаем данные для платежа
         const paymentData: any = {
@@ -123,7 +128,7 @@ export class OrderPaymentService {
           },
           confirmation: {
             type: ConfirmationEnum.redirect,
-            return_url: returnUrl,
+            return_url: paymentReturnUrl,
           },
           description: `Оплата заказа №${orderId}`,
           capture: true, // Автоматический захват средств

@@ -23,6 +23,17 @@ export class CreateOrderPaymentDto {
   @IsOptional()
   @IsEmail()
   customerEmail?: string;
+
+  @ApiProperty({
+    example:
+      'https://xn--80ad4adfbofbt7f.xn--p1ai/payment/result?returnUrl=%2Forders',
+    description:
+      'URL возврата после оплаты. Разрешены текущий web-origin и cleanhousemobile:// deep link.',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  returnUrl?: string;
 }
 
 export class OrderPaymentResponseDto {

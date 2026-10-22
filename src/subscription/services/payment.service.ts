@@ -31,7 +31,7 @@ import {
   PaymentSubject,
   PaymentMode,
 } from '../../shared/dto/receipt.dto';
-import { joinUrl } from '../../shared/utils/url.util';
+import { buildPaymentReturnUrl } from '../../shared/utils/payment-return-url.util';
 import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
 
 @Injectable()
@@ -90,6 +90,7 @@ export class PaymentService {
     ipAddress?: string,
     userAgent?: string,
     couponCode?: string,
+    returnUrl?: string,
   ): Promise<SubscriptionPaymentResponseDto> {
     return await this.dataSource.transaction(async (manager) => {
       // Проверяем существование подписки и права доступа
@@ -310,11 +311,15 @@ export class PaymentService {
           userId,
         });
 
-        const returnUrl = joinUrl(
+        const paymentReturnUrl = buildPaymentReturnUrl({
           frontendUrl,
-          `/payment/result?paymentId=${paymentId}&type=subscription`,
-        );
-        console.log('Return URL:', returnUrl);
+          fallbackPath: '/payment/result',
+          paymentId,
+          type: 'subscription',
+          returnUrl,
+          extraParams: { subscriptionId },
+        });
+        console.log('Return URL:', paymentReturnUrl);
 
         // Создаем данные для платежа
         const paymentData: any = {
@@ -324,7 +329,7 @@ export class PaymentService {
           },
           confirmation: {
             type: ConfirmationEnum.redirect,
-            return_url: returnUrl,
+            return_url: paymentReturnUrl,
           },
           description: `Оплата подписки ${subscriptionType}`,
           capture: true, // Автоматический захват средств
