@@ -6,10 +6,12 @@ import { SubscriptionPlan } from '../subscription/entities/subscription-plan.ent
 import { CouponService } from './coupon.service';
 import { CouponController } from './coupon.controller';
 import { CouponCron } from './coupon.cron';
+import { PriceModule } from '../price/price.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Coupon, CouponRedemption, SubscriptionPlan]),
+    PriceModule,
   ],
   controllers: [CouponController],
   providers: [CouponService, CouponCron],

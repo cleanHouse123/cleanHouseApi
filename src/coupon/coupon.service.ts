@@ -7,6 +7,7 @@ import {
   QueryFailedError,
   Repository,
 } from 'typeorm';
+import { PriceService } from '../price/price.service';
 import { Coupon, CouponScope } from './entities/coupon.entity';
 import {
   CouponRedemption,
@@ -51,6 +52,7 @@ export class CouponService {
     @InjectRepository(SubscriptionPlan)
     private readonly planRepo: Repository<SubscriptionPlan>,
     private readonly dataSource: DataSource,
+    private readonly priceService: PriceService,
   ) {}
 
   private scopeMatches(coupon: Coupon, scope: CouponScope): boolean {
@@ -343,6 +345,10 @@ export class CouponService {
     userId: string,
   ): Promise<CouponValidationResponseDto> {
     let baseAmount = 0;
+    // Цена без промокода, с учётом автоскидок: нужна, чтобы клиент увидел,
+    // что промокод вытесняет скидку «первый заказ за 1 ₽» и бывает невыгоден.
+    let priceWithoutCoupon = 0;
+
     if (dto.scope === CouponScope.SUBSCRIPTION) {
       if (!dto.planId) {
         throw new BadRequestException('planId обязателен для подписки');
@@ -350,11 +356,26 @@ export class CouponService {
       const plan = await this.planRepo.findOne({ where: { id: dto.planId } });
       if (!plan) throw new BadRequestException('План не найден');
       baseAmount = plan.priceInKopecks;
+      priceWithoutCoupon = plan.priceInKopecks;
     } else {
-      throw new BadRequestException(
-        'Превью для заказов пока не поддерживается',
-      );
+      // Считаем теми же вызовами, что и создание заказа, иначе превью разойдётся с фактом
+      const orderParams = {
+        userId,
+        numberPackages: dto.numberPackages,
+        addressId: dto.addressId,
+        address: dto.address,
+        addressDetails: dto.addressDetails as never,
+      };
+      baseAmount = await this.priceService.getOrderPrice({
+        ...orderParams,
+        skipFirstOrderDiscount: true,
+      });
+      priceWithoutCoupon = await this.priceService.getOrderPrice({
+        ...orderParams,
+        skipFirstOrderDiscount: false,
+      });
     }
+
     const v = await this.validate(
       dto.code,
       dto.scope,
@@ -367,6 +388,7 @@ export class CouponService {
       baseAmount: v.baseAmount,
       finalAmount: v.finalAmount,
       discountAmount: v.discountAmount,
+      priceWithoutCoupon,
     };
   }
 }

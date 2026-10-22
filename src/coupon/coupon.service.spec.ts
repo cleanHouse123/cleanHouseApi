@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { CouponService } from './coupon.service';
+import { PriceService } from '../price/price.service';
 import {
   Coupon,
   CouponDiscountType,
@@ -43,10 +44,12 @@ const activeCoupon = (over: Partial<Coupon> = {}): Coupon =>
 describe('CouponService.validate', () => {
   let service: CouponService;
   let couponRepo: any;
+  let priceService: any;
   let redemptionRepo: any;
 
   beforeEach(async () => {
     couponRepo = { findOne: jest.fn() };
+    priceService = { getOrderPrice: jest.fn() };
     redemptionRepo = { findOne: jest.fn().mockResolvedValue(null) };
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -58,6 +61,7 @@ describe('CouponService.validate', () => {
         },
         { provide: getRepositoryToken(SubscriptionPlan), useValue: {} },
         { provide: DataSource, useValue: {} },
+        { provide: PriceService, useValue: priceService },
       ],
     }).compile();
     service = moduleRef.get(CouponService);
@@ -193,6 +197,10 @@ describe('CouponService.reserve', () => {
         },
         { provide: getRepositoryToken(SubscriptionPlan), useValue: {} },
         { provide: DataSource, useValue: { createQueryRunner: () => qr } },
+        {
+          provide: PriceService,
+          useValue: { getOrderPrice: jest.fn() },
+        },
       ],
     }).compile();
     service = moduleRef.get(CouponService);
@@ -234,5 +242,94 @@ describe('CouponService.reserve', () => {
       }),
     ).rejects.toBeInstanceOf(CouponLimitReachedError);
     expect(qr.rollbackTransaction).toHaveBeenCalled();
+  });
+});
+
+describe('CouponService.validateForPreview — превью для заказа', () => {
+  let service: CouponService;
+  let couponRepo: any;
+  let priceService: any;
+
+  beforeEach(async () => {
+    couponRepo = { findOne: jest.fn() };
+    priceService = { getOrderPrice: jest.fn() };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        CouponService,
+        { provide: getRepositoryToken(Coupon), useValue: couponRepo },
+        {
+          provide: getRepositoryToken(CouponRedemption),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
+        { provide: getRepositoryToken(SubscriptionPlan), useValue: {} },
+        { provide: DataSource, useValue: {} },
+        { provide: PriceService, useValue: priceService },
+      ],
+    }).compile();
+    service = moduleRef.get(CouponService);
+  });
+
+  it('считает скидку от цены без автоскидки первого заказа', async () => {
+    couponRepo.findOne.mockResolvedValue(
+      activeCoupon({
+        scope: CouponScope.ORDER,
+        discountType: CouponDiscountType.PERCENT,
+        value: 10,
+      }),
+    );
+    // первый вызов — база для купона, второй — цена без купона
+    priceService.getOrderPrice
+      .mockResolvedValueOnce(20000)
+      .mockResolvedValueOnce(100);
+
+    const res = await service.validateForPreview(
+      { code: 'KVARTAL1', scope: CouponScope.ORDER, numberPackages: 2 } as any,
+      'u1',
+    );
+
+    expect(res).toEqual({
+      valid: true,
+      baseAmount: 20000,
+      finalAmount: 18000,
+      discountAmount: 2000,
+      priceWithoutCoupon: 100,
+    });
+    expect(priceService.getOrderPrice).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ skipFirstOrderDiscount: true }),
+    );
+    expect(priceService.getOrderPrice).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ skipFirstOrderDiscount: false }),
+    );
+  });
+
+  it('передаёт адрес и количество пакетов в расчёт цены', async () => {
+    couponRepo.findOne.mockResolvedValue(
+      activeCoupon({
+        scope: CouponScope.BOTH,
+        discountType: CouponDiscountType.FIXED_AMOUNT,
+        value: 5000,
+      }),
+    );
+    priceService.getOrderPrice.mockResolvedValue(30000);
+
+    await service.validateForPreview(
+      {
+        code: 'KVARTAL1',
+        scope: CouponScope.ORDER,
+        numberPackages: 4,
+        addressId: 'a1',
+      } as any,
+      'u1',
+    );
+
+    expect(priceService.getOrderPrice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u1',
+        numberPackages: 4,
+        addressId: 'a1',
+      }),
+    );
   });
 });
