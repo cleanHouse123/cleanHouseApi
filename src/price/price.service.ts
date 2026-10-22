@@ -127,56 +127,28 @@ export class PriceService {
     const perExtraAfterFive = this.PRICE_ONE_PACKAGE;
 
     // Разовые тарифы: 1 пакет — 149 ₽, 2 пакета — 199 ₽; 3+ — прежние ступени
-    if (numberPackages === 1) {
-      return isFirstOrder ? basePricePerPackage : this.PRICE_ONE_PACKAGE;
+    const regularPrice = (packages: number): number => {
+      if (packages === 1) return this.PRICE_ONE_PACKAGE;
+      if (packages === 2) return this.PRICE_TWO_PACKAGES;
+      if (packages === 3) return this.PRICE_THREE_PACKAGES;
+      if (packages === 4) return this.PRICE_FOUR_PACKAGES;
+      if (packages === 5) return this.PRICE_FIVE_PACKAGES;
+      return this.PRICE_FIVE_PACKAGES + (packages - 5) * perExtraAfterFive;
+    };
+
+    if (!isFirstOrder) {
+      return regularPrice(numberPackages);
     }
 
-    if (numberPackages === 2) {
-      if (isFirstOrder) {
-        return basePricePerPackage + this.PRICE_TWO_PACKAGES;
-      }
-      return this.PRICE_TWO_PACKAGES;
+    // Первый заказ: базовый вынос (до 2 пакетов) стоит 1 ₽, пакеты сверх базы
+    // оплачиваются по разнице с тарифом на 2 пакета.
+    if (numberPackages <= 2) {
+      return this.FIRST_ORDER_PRICE;
     }
 
-    if (numberPackages === 3) {
-      if (isFirstOrder) {
-        return (
-          basePricePerPackage +
-          (this.PRICE_THREE_PACKAGES - this.FIRST_ORDER_PRICE)
-        );
-      }
-      return this.PRICE_THREE_PACKAGES;
-    }
-
-    if (numberPackages === 4) {
-      if (isFirstOrder) {
-        return (
-          basePricePerPackage +
-          (this.PRICE_FOUR_PACKAGES - this.FIRST_ORDER_PRICE)
-        );
-      }
-      return this.PRICE_FOUR_PACKAGES;
-    }
-
-    if (numberPackages === 5) {
-      if (isFirstOrder) {
-        return (
-          basePricePerPackage +
-          (this.PRICE_FIVE_PACKAGES - this.FIRST_ORDER_PRICE)
-        );
-      }
-      return this.PRICE_FIVE_PACKAGES;
-    }
-
-    if (isFirstOrder && numberPackages > 1) {
-      return (
-        basePricePerPackage +
-        (this.PRICE_FIVE_PACKAGES - this.FIRST_ORDER_PRICE) +
-        (numberPackages - 5) * perExtraAfterFive
-      );
-    }
     return (
-      this.PRICE_FIVE_PACKAGES + (numberPackages - 5) * perExtraAfterFive
+      this.FIRST_ORDER_PRICE +
+      (regularPrice(numberPackages) - this.PRICE_TWO_PACKAGES)
     );
   }
 
