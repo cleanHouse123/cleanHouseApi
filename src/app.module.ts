@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -60,7 +61,9 @@ import { TelegramNotifyGroup } from './telegram/entities/telegram-notify-group.e
           synchronize:
             process.env.TYPEORM_SYNCHRONIZE === 'true' ||
             process.env.NODE_ENV !== 'production',
-          migrations: ['dist/migrations/*.js'],
+          // Собранные миграции лежат рядом с этим файлом (dist/src/migrations),
+          // поэтому путь строится от __dirname, а не от рабочего каталога
+          migrations: [join(__dirname, 'migrations', '*{.js,.ts}')],
           migrationsRun: process.env.NODE_ENV === 'production',
           timezone: 'UTC',
           dateStrings: true,
