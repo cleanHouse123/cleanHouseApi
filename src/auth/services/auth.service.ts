@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -530,6 +531,14 @@ export class AuthService {
     ipAddress?: string,
   ): Promise<AuthResponseDto> {
     const { email, password, name } = registerDto;
+
+    // Регистрация выдаёт роль администратора, поэтому по умолчанию закрыта.
+    // Включается переменной окружения на время создания учётной записи.
+    if (
+      this.configService.get<string>('ALLOW_ADMIN_REGISTRATION') !== 'true'
+    ) {
+      throw new ForbiddenException('Регистрация администраторов отключена');
+    }
 
     // Проверяем, что пользователь с таким email не существует
     const existingUser = await this.userService.findByEmail(email);
