@@ -16,6 +16,7 @@ import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/shared/constants';
 import { UsersListDto } from './dto/users-list.dto';
 import { CreateCurrierDto } from './dto/create-currier.dto';
 import { AdTokenService } from '../ad-tokens/ad-token.service';
+import { SaveConsentsDto } from './dto/save-consents.dto';
 
 @Injectable()
 export class UserService {
@@ -189,6 +190,32 @@ export class UserService {
 
   async updateDeviceToken(userId: string, deviceToken: string): Promise<void> {
     await this.userRepository.update(userId, { deviceToken });
+  }
+
+  /**
+   * Фиксирует согласия пользователя: дату акцепта оферты, согласия на обработку
+   * персональных данных и на рекламную рассылку. Рекламное согласие можно отозвать.
+   */
+  async saveConsents(
+    userId: string,
+    consents: SaveConsentsDto,
+  ): Promise<void> {
+    const now = new Date();
+    const payload: Partial<User> = {
+      marketingConsentAt: consents.marketing ? now : null,
+    };
+
+    if (consents.terms) {
+      payload.termsAcceptedAt = now;
+    }
+    if (consents.personalData) {
+      payload.personalDataConsentAt = now;
+    }
+    if (consents.revision) {
+      payload.legalDocsRevision = consents.revision;
+    }
+
+    await this.userRepository.update(userId, payload);
   }
 
   async update(

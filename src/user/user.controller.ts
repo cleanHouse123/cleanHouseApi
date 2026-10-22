@@ -22,6 +22,7 @@ import { FindUsersQueryDto } from './dto/filter-users.dto';
 import { CreateCurrierDto } from './dto/create-currier.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AddDeviceTokenDto } from './dto/add-device-token.dto';
+import { SaveConsentsDto } from './dto/save-consents.dto';
 import {
   GetUserMetadata,
   UserMetadata,
@@ -120,6 +121,22 @@ export class UserController {
     console.log('addDeviceTokenDto', addDeviceTokenDto);
     console.log('user', user);
     return { message: 'Device token успешно обновлен' };
+  }
+
+  @Post('me/consents')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
+  @ApiBody({
+    type: SaveConsentsDto,
+    description:
+      'Зафиксировать согласия пользователя (оферта, обработка ПДн, рекламная рассылка)',
+  })
+  async saveConsents(
+    @GetUserMetadata() user: UserMetadata,
+    @Body() saveConsentsDto: SaveConsentsDto,
+  ): Promise<{ message: string }> {
+    await this.userService.saveConsents(user.userId, saveConsentsDto);
+    return { message: 'Согласия сохранены' };
   }
 
   @Patch('me')
