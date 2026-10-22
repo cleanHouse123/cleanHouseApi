@@ -254,6 +254,7 @@ export class SubscriptionController {
       userEmail,
       ipAddress,
       userAgent,
+      createPaymentDto.couponCode,
       createPaymentDto.returnUrl,
     );
   }

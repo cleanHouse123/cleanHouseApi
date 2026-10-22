@@ -20,6 +20,7 @@ import {
 } from '../../shared/dto/receipt.dto';
 import { buildPaymentReturnUrl } from '../../shared/utils/payment-return-url.util';
 import { VatCodesEnum } from 'nestjs-yookassa/dist/interfaces/receipt-details.interface';
+import { CouponService } from '../../coupon/coupon.service';
 
 @Injectable()
 export class OrderPaymentService {
@@ -30,6 +31,7 @@ export class OrderPaymentService {
     private paymentRepository: Repository<Payment>,
     private configService: ConfigService,
     private yookassaService: YookassaService,
+    private couponService: CouponService,
   ) {}
 
   // Создание данных для чека заказа
@@ -301,6 +303,14 @@ export class OrderPaymentService {
       dbPayment.status = status as PaymentStatus;
       await this.paymentRepository.save(dbPayment);
       console.log(`✅ Статус платежа ${paymentId} обновлен в БД: ${status}`);
+
+      // Погашение купона: подтверждаем при оплате, освобождаем при отмене/неуспехе.
+      // Промежуточные статусы (pending/waiting_for_capture/refunded) не трогают резерв.
+      if (status === 'paid') {
+        await this.couponService.confirmBy({ orderId: dbPayment.orderId });
+      } else if (status === 'failed' || status === 'canceled') {
+        await this.couponService.releaseBy({ orderId: dbPayment.orderId });
+      }
 
       // Возвращаем объект с правильной структурой
       return {

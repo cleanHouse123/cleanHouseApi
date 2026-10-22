@@ -5,6 +5,7 @@ import { Context, InlineKeyboard, Keyboard } from 'grammy';
 import { TelegramService } from './telegram.service';
 import { LinkPhoneByTelegramService } from './link-phone-by-telegram.service';
 import { TelegramNotifyGroupService } from './telegram-notify-group.service';
+import { TelegramConsentService } from './telegram-consent.service';
 
 const MESSAGES = {
   success:
@@ -25,6 +26,22 @@ const MESSAGES = {
 2) Нажмите «Открыть приложение» для входа в приложение.
 3) Если не получается войти, сначала авторизуйтесь через Telegram в приложении, затем снова отправьте контакт.`,
   error: 'Произошла ошибка. Попробуйте позже или поделитесь контактом снова.',
+  consent_accepted:
+    'Спасибо! Согласие принято. Теперь нажмите «Поделиться телефоном», чтобы привязать аккаунт.',
+  marketing_accepted:
+    'Согласие на рекламную рассылку получено. Отозвать его можно в любой момент — напишите нам или в личном кабинете.',
+  consent_required:
+    'Чтобы продолжить, сначала подтвердите согласие с документами кнопкой «Принимаю» выше.',
+} as const;
+
+/** Редакция документов, с которой соглашается пользователь */
+const LEGAL_REVISION = '22 октября 2026 г.';
+
+const LEGAL_PATHS = {
+  offer: '/offer',
+  personalData: '/consent-personal-data',
+  privacy: '/privacy-policy',
+  marketing: '/consent-marketing',
 } as const;
 
 const BOT_IN_STATUSES = ['member', 'administrator', 'restricted'] as const;
@@ -39,6 +56,7 @@ export class TelegramUpdate {
     private readonly configService: ConfigService,
     private readonly linkPhoneByTelegramService: LinkPhoneByTelegramService,
     private readonly telegramNotifyGroupService: TelegramNotifyGroupService,
+    private readonly telegramConsentService: TelegramConsentService,
   ) {}
 
   private getAppUrl(): string {
@@ -53,6 +71,55 @@ export class TelegramUpdate {
     }
 
     return `https://${rawUrl}`;
+  }
+
+  private getLegalUrl(path: string): string {
+    return `${this.getAppUrl().replace(/\/$/, '')}${path}`;
+  }
+
+  /**
+   * Сообщение о документах направляется ДО сбора персональных данных
+   * (номера телефона), со ссылками на оферту, согласие на обработку ПДн
+   * и политику конфиденциальности.
+   */
+  private getConsentMessage(): string {
+    return [
+      'Привет! Это сервис «Чисто дома» — вынос мусора от двери.',
+      '',
+      'Чтобы привязать аккаунт, нам нужен ваш номер телефона.',
+      'Нажимая «Принимаю», вы подтверждаете ознакомление и принятие условий Оферты и даёте Согласие на обработку персональных данных в соответствии с Политикой конфиденциальности.',
+      '',
+      'Вы также можете дать согласие на рекламную рассылку, чтобы узнавать о скидках и акциях — это необязательно.',
+      '',
+      'Документы доступны по кнопкам ниже.',
+    ].join('\n');
+  }
+
+  private getConsentInlineKeyboard(): InlineKeyboard {
+    return new InlineKeyboard()
+      .url('Оферта', this.getLegalUrl(LEGAL_PATHS.offer))
+      .row()
+      .url(
+        'Согласие на обработку ПДн',
+        this.getLegalUrl(LEGAL_PATHS.personalData),
+      )
+      .row()
+      .url(
+        'Политика конфиденциальности',
+        this.getLegalUrl(LEGAL_PATHS.privacy),
+      )
+      .row()
+      .url('Согласие на рекламную рассылку', this.getLegalUrl(LEGAL_PATHS.marketing))
+      .row()
+      .text('Принимаю', 'legal_accept')
+      .text('Принимаю + реклама', 'legal_accept_marketing');
+  }
+
+  private async sendConsentMessage(ctx: Context): Promise<void> {
+    await ctx.reply(this.getConsentMessage(), {
+      reply_markup: this.getConsentInlineKeyboard(),
+      link_preview_options: { is_disabled: true },
+    });
   }
 
   private getPhoneNumberButton(ctx: Context) {
@@ -86,14 +153,20 @@ export class TelegramUpdate {
 
   @Start()
   async onStart(ctx: Context) {
-    const keyboard = this.getPhoneNumberButton(ctx);
-    await ctx.reply(
-      'Привет! Используй /getphone для получения вашего номера. Или нажмите на кнопку ниже. \n',
-      { reply_markup: keyboard },
-    );
-    await ctx.reply(MESSAGES.app_hint, {
-      reply_markup: this.getActionsInlineKeyboard(),
-    });
+    const telegramId = ctx.from?.id ? String(ctx.from.id) : null;
+
+    // Телефон запрашиваем только после согласия с документами
+    if (telegramId && this.telegramConsentService.has(telegramId)) {
+      await ctx.reply('С возвращением! Нажмите «Поделиться телефоном», чтобы привязать аккаунт.', {
+        reply_markup: this.getPhoneNumberButton(ctx),
+      });
+      await ctx.reply(MESSAGES.app_hint, {
+        reply_markup: this.getActionsInlineKeyboard(),
+      });
+      return;
+    }
+
+    await this.sendConsentMessage(ctx);
   }
 
   @On('message:contact')
@@ -109,6 +182,11 @@ export class TelegramUpdate {
     }
 
     const telegramId = String(ctx.from.id);
+
+    if (!this.telegramConsentService.has(telegramId)) {
+      await this.sendConsentMessage(ctx);
+      return;
+    }
 
     if (
       ctx.message.contact.user_id &&
@@ -127,6 +205,7 @@ export class TelegramUpdate {
       telegramUsername,
     );
     if (result.ok) {
+      await this.telegramConsentService.persist(telegramId, LEGAL_REVISION);
       await ctx.reply(MESSAGES.success, { reply_markup: keyboard });
       return;
     }
@@ -152,6 +231,10 @@ export class TelegramUpdate {
     const text = ctx.message.text;
 
     if (text === '/getphone') {
+      if (!this.telegramConsentService.has(String(ctx.from.id))) {
+        await this.sendConsentMessage(ctx);
+        return;
+      }
       return await ctx.reply(
         'поделись номером чтобы авторизоваться в выносмусора',
         {
@@ -173,6 +256,11 @@ export class TelegramUpdate {
     }
 
     // Обычная обработка текста (эхо)
+    if (!this.telegramConsentService.has(String(ctx.from.id))) {
+      await this.sendConsentMessage(ctx);
+      return;
+    }
+
     await ctx.reply(
       `пока у меня нет других функций кроме поделиться телефоном`,
       {
@@ -191,6 +279,34 @@ export class TelegramUpdate {
     if (data === 'help') {
       await ctx.answerCallbackQuery();
       await this.sendHelpMessage(ctx);
+      return;
+    }
+
+    if (data === 'legal_accept' || data === 'legal_accept_marketing') {
+      const telegramId = ctx.from?.id ? String(ctx.from.id) : null;
+      if (!telegramId) {
+        await ctx.answerCallbackQuery();
+        return;
+      }
+
+      await this.telegramConsentService.accept(telegramId, LEGAL_REVISION);
+      if (data === 'legal_accept_marketing') {
+        await this.telegramConsentService.acceptMarketing(
+          telegramId,
+          LEGAL_REVISION,
+        );
+      }
+
+      await ctx.answerCallbackQuery({ text: 'Согласие принято' });
+      await ctx.reply(MESSAGES.consent_accepted, {
+        reply_markup: this.getPhoneNumberButton(ctx),
+      });
+      if (data === 'legal_accept_marketing') {
+        await ctx.reply(MESSAGES.marketing_accepted);
+      }
+      await ctx.reply(MESSAGES.app_hint, {
+        reply_markup: this.getActionsInlineKeyboard(),
+      });
       return;
     }
 

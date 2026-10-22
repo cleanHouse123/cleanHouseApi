@@ -87,6 +87,15 @@ export class CreateOrderDto {
   customerId: string;
 
   @ApiProperty({
+    description: 'Промокод',
+    example: 'KVARTAL1',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
+
+  @ApiProperty({
     description: 'Адрес для уборки',
     example: 'ул. Пушкина, д. 10, кв. 5',
   })

@@ -6,6 +6,7 @@ import { NestjsGrammyModule } from '@grammyjs/nestjs';
 import { TelegramService } from './telegram.service';
 import { LinkPhoneByTelegramService } from './link-phone-by-telegram.service';
 import { TelegramNotifyGroupService } from './telegram-notify-group.service';
+import { TelegramConsentService } from './telegram-consent.service';
 import { UserModule } from '../user/user.module';
 import { TelegramNotifyGroup } from './entities/telegram-notify-group.entity';
 import type { BotConfig, Context } from 'grammy';
@@ -70,6 +71,7 @@ function getTelegramBotInfo(
     TelegramService,
     LinkPhoneByTelegramService,
     TelegramNotifyGroupService,
+    TelegramConsentService,
   ],
   exports: [TelegramService, TelegramNotifyGroupService],
 })

@@ -25,7 +25,13 @@
     "delete-all-orders": "ts-node scripts/delete-all-orders.ts",
     "test-user-roles": "ts-node scripts/test-user-roles.ts",
     "check-orders": "ts-node scripts/check-and-delete-remaining-orders.ts",
-    "delete-all-orders-force": "ts-node scripts/delete-all-orders-force.ts"
+    "delete-all-orders-force": "ts-node scripts/delete-all-orders-force.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "typeorm": "typeorm-ts-node-commonjs -d src/data-source.ts",
+    "migration:run": "yarn typeorm migration:run",
+    "migration:revert": "yarn typeorm migration:revert",
+    "migration:generate": "yarn typeorm migration:generate"
   },
   "dependencies": {
     "@grammyjs/nestjs": "^0.3.4",

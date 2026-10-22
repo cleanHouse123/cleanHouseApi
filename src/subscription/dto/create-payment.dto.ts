@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsUUID, IsEnum, IsOptional } from 'class-validator';
 import { SubscriptionType } from '../entities/subscription.entity';
 
@@ -24,6 +24,11 @@ export class CreatePaymentDto {
   })
   @IsEnum(SubscriptionType)
   subscriptionType: SubscriptionType;
+
+  @ApiPropertyOptional({ description: 'Промокод', example: 'KVARTAL1' })
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 
   @ApiProperty({
     example:

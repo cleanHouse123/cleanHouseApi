@@ -66,6 +66,22 @@ export class User {
   })
   usageFeatures: UsageFeaturesEnum[];
 
+  /** Акцепт оферты и пользовательского соглашения */
+  @Column({ type: 'timestamp', nullable: true })
+  termsAcceptedAt?: Date | null;
+
+  /** Согласие на обработку персональных данных (включая поручение третьим лицам) */
+  @Column({ type: 'timestamp', nullable: true })
+  personalDataConsentAt?: Date | null;
+
+  /** Согласие на получение рекламной рассылки, может быть отозвано */
+  @Column({ type: 'timestamp', nullable: true })
+  marketingConsentAt?: Date | null;
+
+  /** Редакция документов, с которой согласился пользователь */
+  @Column({ nullable: true })
+  legalDocsRevision?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
