@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../user/entities/user.entity';
@@ -41,14 +42,27 @@ export class PriceService {
   private readonly PRICE_FOUR_PACKAGES = 34900;
   private readonly PRICE_FIVE_PACKAGES = 39900;
 
+  /**
+   * Сколько пакетов входит в базовый вынос за 1 ₽ на первом заказе.
+   * Меняется переменной окружения FIRST_ORDER_INCLUDED_PACKAGES без правки кода.
+   */
+  private readonly firstOrderIncludedPackages: number;
+
   constructor(
+    private readonly configService: ConfigService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(UserAddress)
     private readonly userAddressRepository: Repository<UserAddress>,
-  ) {}
+  ) {
+    const configured = Number(
+      this.configService.get<string>('FIRST_ORDER_INCLUDED_PACKAGES'),
+    );
+    this.firstOrderIncludedPackages =
+      Number.isInteger(configured) && configured > 0 ? configured : 2;
+  }
 
   async getOrderPrice(params: GetOrderPriceParams = {}): Promise<number> {
     const {
@@ -127,56 +141,29 @@ export class PriceService {
     const perExtraAfterFive = this.PRICE_ONE_PACKAGE;
 
     // Разовые тарифы: 1 пакет — 149 ₽, 2 пакета — 199 ₽; 3+ — прежние ступени
-    if (numberPackages === 1) {
-      return isFirstOrder ? basePricePerPackage : this.PRICE_ONE_PACKAGE;
+    const regularPrice = (packages: number): number => {
+      if (packages === 1) return this.PRICE_ONE_PACKAGE;
+      if (packages === 2) return this.PRICE_TWO_PACKAGES;
+      if (packages === 3) return this.PRICE_THREE_PACKAGES;
+      if (packages === 4) return this.PRICE_FOUR_PACKAGES;
+      if (packages === 5) return this.PRICE_FIVE_PACKAGES;
+      return this.PRICE_FIVE_PACKAGES + (packages - 5) * perExtraAfterFive;
+    };
+
+    if (!isFirstOrder) {
+      return regularPrice(numberPackages);
     }
 
-    if (numberPackages === 2) {
-      if (isFirstOrder) {
-        return basePricePerPackage + this.PRICE_TWO_PACKAGES;
-      }
-      return this.PRICE_TWO_PACKAGES;
+    // Первый заказ: базовый вынос стоит 1 ₽, пакеты сверх базы оплачиваются
+    // по разнице с тарифом на базовое количество пакетов.
+    const included = this.firstOrderIncludedPackages;
+    if (numberPackages <= included) {
+      return this.FIRST_ORDER_PRICE;
     }
 
-    if (numberPackages === 3) {
-      if (isFirstOrder) {
-        return (
-          basePricePerPackage +
-          (this.PRICE_THREE_PACKAGES - this.FIRST_ORDER_PRICE)
-        );
-      }
-      return this.PRICE_THREE_PACKAGES;
-    }
-
-    if (numberPackages === 4) {
-      if (isFirstOrder) {
-        return (
-          basePricePerPackage +
-          (this.PRICE_FOUR_PACKAGES - this.FIRST_ORDER_PRICE)
-        );
-      }
-      return this.PRICE_FOUR_PACKAGES;
-    }
-
-    if (numberPackages === 5) {
-      if (isFirstOrder) {
-        return (
-          basePricePerPackage +
-          (this.PRICE_FIVE_PACKAGES - this.FIRST_ORDER_PRICE)
-        );
-      }
-      return this.PRICE_FIVE_PACKAGES;
-    }
-
-    if (isFirstOrder && numberPackages > 1) {
-      return (
-        basePricePerPackage +
-        (this.PRICE_FIVE_PACKAGES - this.FIRST_ORDER_PRICE) +
-        (numberPackages - 5) * perExtraAfterFive
-      );
-    }
     return (
-      this.PRICE_FIVE_PACKAGES + (numberPackages - 5) * perExtraAfterFive
+      this.FIRST_ORDER_PRICE +
+      (regularPrice(numberPackages) - regularPrice(included))
     );
   }
 
