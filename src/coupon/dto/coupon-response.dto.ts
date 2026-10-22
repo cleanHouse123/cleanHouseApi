@@ -12,4 +12,11 @@ export class CouponValidationResponseDto {
 
   @ApiProperty({ description: 'Размер скидки в копейках' })
   discountAmount: number;
+
+  @ApiProperty({
+    description:
+      'Цена без промокода в копейках, с учётом автоскидок. Если она меньше ' +
+      'finalAmount, промокод клиенту невыгоден',
+  })
+  priceWithoutCoupon: number;
 }
