@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ScheduledOrder } from '../entities/scheduled-order.entity';
+import { UserAddress } from '../../address/entities/user-address';
 import {
   CreateScheduledOrderDto,
   UpdateScheduledOrderDto,
@@ -30,6 +31,8 @@ export class ScheduledOrdersService {
   constructor(
     @InjectRepository(ScheduledOrder)
     private scheduledOrderRepository: Repository<ScheduledOrder>,
+    @InjectRepository(UserAddress)
+    private userAddressRepository: Repository<UserAddress>,
     private subscriptionLimitsService: SubscriptionLimitsService,
     private subscriptionService: SubscriptionService,
     private orderService: OrderService,
@@ -44,18 +47,25 @@ export class ScheduledOrdersService {
     customerId: string,
   ): Promise<ScheduledOrderResponseDto> {
     await this.assertCanSchedule(customerId);
+    await this.assertOwnAddress(dto.addressId, customerId);
+
+    const startDate = new Date(dto.startDate);
 
     const scheduledOrder = this.scheduledOrderRepository.create({
       customerId: customerId,
       address: dto.address,
+      addressId: dto.addressId,
       addressDetails: dto.addressDetails,
       description: dto.description,
       notes: dto.notes,
       frequency: dto.frequency,
       preferredTime: dto.preferredTime,
       daysOfWeek: dto.daysOfWeek,
-      startDate: new Date(dto.startDate),
+      startDate,
       endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      // вынос на startDate уже оформлен вручную — иначе крон создал бы
+      // на него второй такой же заказ
+      lastCreatedAt: dto.firstPickupAlreadyOrdered ? startDate : undefined,
     });
 
     const savedScheduledOrder =
@@ -241,6 +251,7 @@ export class ScheduledOrdersService {
     const order = await this.orderService.create({
       customerId: schedule.customerId,
       address: schedule.address,
+      addressId: schedule.addressId,
       addressDetails: schedule.addressDetails,
       description: schedule.description,
       notes: schedule.notes,
@@ -277,6 +288,26 @@ export class ScheduledOrdersService {
     }
 
     return schedule;
+  }
+
+  /** Адрес из справочника клиента — чужой брать нельзя */
+  private async assertOwnAddress(
+    addressId: string | undefined,
+    customerId: string,
+  ): Promise<void> {
+    if (!addressId) {
+      return;
+    }
+
+    const address = await this.userAddressRepository.findOne({
+      where: { id: addressId, userId: customerId },
+    });
+
+    if (!address) {
+      throw new BadRequestException(
+        'Адрес не найден или не принадлежит данному пользователю',
+      );
+    }
   }
 
   /** Расписания доступны только подписчикам, у которых остался лимит */
