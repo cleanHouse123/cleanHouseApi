@@ -1,14 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, Not, IsNull } from 'typeorm';
+import { Repository, LessThan, Not, IsNull, In } from 'typeorm';
 import { Order, OrderStatus } from '../../order/entities/order.entity';
 import { FcmService } from '../../fcm/fcm.service';
+
+/** Насколько заказ должен опоздать, чтобы будить курьера */
+const OVERDUE_THRESHOLD_MINUTES = 10;
+
+/**
+ * Статусы, в которых заказ ещё можно выполнить. Отменённый или не оплаченный
+ * заказ просроченным не считается: курьеру по нему делать нечего.
+ */
+const ACTIVE_STATUSES = [OrderStatus.ASSIGNED, OrderStatus.IN_PROGRESS];
 
 @Injectable()
 export class OverdueNotificationService {
   private readonly logger = new Logger(OverdueNotificationService.name);
-  private notifiedOrders = new Set<string>(); // Для отслеживания уже уведомленных заказов
 
   constructor(
     @InjectRepository(Order)
@@ -20,87 +28,42 @@ export class OverdueNotificationService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async checkOverdueOrders() {
     try {
-      this.logger.log('Проверка просроченных заказов...');
-
       const now = new Date();
 
-      // Находим заказы, которые просрочены:
-      // - scheduledAt в прошлом
-      // - статус ASSIGNED или IN_PROGRESS
-      // - есть назначенный курьер
       const overdueOrders = await this.orderRepository.find({
         where: {
           scheduledAt: LessThan(now),
-          status: Not(OrderStatus.DONE),
+          status: In(ACTIVE_STATUSES),
           currierId: Not(IsNull()),
+          // по заказу уже уведомляли — отметка переживает рестарт процесса
+          overdueNotifiedAt: IsNull(),
         },
         relations: ['currier', 'customer'],
       });
 
-      this.logger.log(`Найдено ${overdueOrders.length} просроченных заказов`);
+      if (overdueOrders.length === 0) {
+        return;
+      }
+
+      this.logger.log(
+        `Найдено ${overdueOrders.length} просроченных заказов без уведомления`,
+      );
 
       for (const order of overdueOrders) {
-        // Пропускаем если уже уведомляли
-        if (this.notifiedOrders.has(order.id)) {
-          continue;
-        }
-
-        // Пропускаем если нет scheduledAt
         if (!order.scheduledAt) {
           continue;
         }
 
-        // Вычисляем просрочку
-        const scheduledTime = new Date(order.scheduledAt);
-        const diffMs = now.getTime() - scheduledTime.getTime();
-        const overdueMinutes = Math.floor(diffMs / (1000 * 60));
+        const overdueMinutes = Math.floor(
+          (now.getTime() - new Date(order.scheduledAt).getTime()) / 60000,
+        );
 
-        // Уведомляем только если просрочка больше 10 минут
-        if (overdueMinutes < 10) {
+        if (overdueMinutes < OVERDUE_THRESHOLD_MINUTES) {
           continue;
         }
 
-        // Обновляем overdueMinutes в БД
-        await this.orderRepository.update(order.id, {
-          overdueMinutes,
-        });
-
-        // Отправляем уведомление курьеру
-        if (order.currierId) {
-          try {
-            const result = await this.fcmService.sendToUser(
-              order.currierId,
-              '⚠️ Просроченный заказ',
-              `Заказ #${order.id.slice(-8)} просрочен на ${overdueMinutes} мин`,
-              {
-                orderId: order.id,
-                type: 'order_overdue',
-                overdueMinutes: overdueMinutes.toString(),
-              },
-            );
-            const courierName = order.currier?.name || order.currierId;
-            if (result.success) {
-              this.logger.log(
-                `[OverdueNotification] ✅ Push ОТПРАВЛЕН: курьер ${courierName}, заказ ${order.id} (просрочен ${overdueMinutes} мин)`,
-              );
-            } else {
-              this.logger.warn(
-                `[OverdueNotification] ❌ Push НЕ отправлен: курьер ${courierName}, заказ ${order.id}: ${result.error}`,
-              );
-            }
-          } catch (error: any) {
-            this.logger.error(
-              `[OverdueNotification] Ошибка отправки push курьеру ${order.currierId}: ${error?.message}`,
-            );
-          }
-        }
-
-        // Добавляем в список уведомленных
-        this.notifiedOrders.add(order.id);
+        await this.notifyCourier(order, overdueMinutes, now);
       }
-
-      // Очищаем список уведомленных заказов от завершенных
-      this.cleanupNotifiedOrders(overdueOrders);
     } catch (error) {
       this.logger.error(
         `Ошибка при проверке просроченных заказов: ${error.message}`,
@@ -108,17 +71,49 @@ export class OverdueNotificationService {
     }
   }
 
-  // Очищаем notifiedOrders от завершенных заказов
-  private cleanupNotifiedOrders(currentOverdueOrders: Order[]) {
-    const currentOverdueIds = new Set(
-      currentOverdueOrders.map((order) => order.id),
-    );
+  private async notifyCourier(
+    order: Order,
+    overdueMinutes: number,
+    now: Date,
+  ): Promise<void> {
+    if (!order.currierId) {
+      return;
+    }
 
-    // Удаляем из notifiedOrders те заказы, которых больше нет в списке просроченных
-    this.notifiedOrders.forEach((orderId) => {
-      if (!currentOverdueIds.has(orderId)) {
-        this.notifiedOrders.delete(orderId);
+    try {
+      const result = await this.fcmService.sendToUser(
+        order.currierId,
+        '⚠️ Просроченный заказ',
+        `Заказ #${order.id.slice(-8)} просрочен на ${overdueMinutes} мин`,
+        {
+          orderId: order.id,
+          type: 'order_overdue',
+          overdueMinutes: overdueMinutes.toString(),
+        },
+      );
+
+      const courierName = order.currier?.name || order.currierId;
+
+      if (result.success) {
+        this.logger.log(
+          `[OverdueNotification] ✅ Push ОТПРАВЛЕН: курьер ${courierName}, заказ ${order.id} (просрочен ${overdueMinutes} мин)`,
+        );
+      } else {
+        this.logger.warn(
+          `[OverdueNotification] ❌ Push НЕ отправлен: курьер ${courierName}, заказ ${order.id}: ${result.error}`,
+        );
       }
+    } catch (error: any) {
+      this.logger.error(
+        `[OverdueNotification] Ошибка отправки push курьеру ${order.currierId}: ${error?.message}`,
+      );
+    }
+
+    // отметку ставим в любом случае: повторять неудачный push каждые 5 минут
+    // до бесконечности смысла нет, просрочку видно в админке
+    await this.orderRepository.update(order.id, {
+      overdueMinutes,
+      overdueNotifiedAt: now,
     });
   }
 

@@ -98,6 +98,14 @@ export class Order {
   @Column({ type: 'integer', nullable: true })
   overdueMinutes?: number;
 
+  /**
+   * Когда курьеру ушёл push о просрочке. Хранится в базе, а не в памяти
+   * процесса: иначе каждый выкат присылал бы уведомления заново по всем
+   * старым просроченным заказам.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  overdueNotifiedAt?: Date;
+
   @OneToMany(() => Payment, (payment) => payment.order, {
     cascade: true,
   })
