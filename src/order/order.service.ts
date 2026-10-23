@@ -1265,7 +1265,9 @@ export class OrderService {
       return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
     }
 
-    const paidKopecks = Math.round(Number(payment.amount) * 100);
+    // payment.amount хранится в копейках, как и order.price: колонка decimal
+    // досталась от старой схемы, но значения в неё кладут уже в копейках
+    const paidKopecks = Math.round(Number(payment.amount));
 
     if (dto.refund === RefundDecision.NONE) {
       if (!dto.reason?.trim()) {
@@ -1306,7 +1308,8 @@ export class OrderService {
     });
 
     payment.refundId = refund.id;
-    payment.refundAmount = refundKopecks / 100;
+    // в тех же единицах, что и amount — в копейках
+    payment.refundAmount = refundKopecks;
     payment.refundStatus = refund.status as unknown as RefundStatus;
     payment.refundReason = dto.reason?.trim();
     payment.refundDecidedAt = new Date();
@@ -1340,6 +1343,8 @@ export class OrderService {
       where: {
         status: PaymentStatus.PAID,
         refundStatus: IsNull(),
+        // заказы по подписке деньгами не оплачивались — возвращать нечего
+        yookassaId: Not(IsNull()),
         order: { status: OrderStatus.CANCELED },
       },
       relations: ['order', 'order.customer'],
