@@ -159,6 +159,26 @@ describe('RefundService', () => {
     ).rejects.toThrow('Недостаточно средств на балансе');
   });
 
+  it('объясняет по-русски отказ из-за остатка меньше рубля', async () => {
+    const service = buildService(liveEnv);
+    mockedAxios.post.mockRejectedValueOnce({
+      response: {
+        data: {
+          description:
+            'Refund unsuccessful: the remaining amount after a partial refund should be more than 1 ruble. You can make a full refund',
+        },
+      },
+    });
+
+    await expect(
+      service.createRefund({
+        yookassaPaymentId: 'pay_1',
+        amountInKopecks: 87,
+        description: 'Возврат',
+      }),
+    ).rejects.toThrow('Верните всю сумму или уменьшите возврат');
+  });
+
   it('требует настроенные ключи', async () => {
     const service = buildService({});
 
