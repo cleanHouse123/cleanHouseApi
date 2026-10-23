@@ -85,7 +85,10 @@ const matchesFrequency = (
       return moscowDaysBetween(schedule.startDate, dayStart) % 7 === 0;
 
     case ScheduleFrequency.CUSTOM:
-      return (schedule.daysOfWeek ?? []).includes(day.dayOfWeek);
+      // приводим к числу и здесь: день недели из базы приходил строкой
+      return (schedule.daysOfWeek ?? []).some(
+        (value) => Number(value) === day.dayOfWeek,
+      );
 
     default:
       return false;

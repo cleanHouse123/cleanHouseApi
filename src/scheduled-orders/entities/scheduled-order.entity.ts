@@ -61,8 +61,21 @@ export class ScheduledOrder {
   @Column({ type: 'varchar', length: 5, nullable: true })
   preferredTime?: string; // формат "HH:mm" по московскому времени
 
-  /** Дни недели по московскому времени: 0 — воскресенье */
-  @Column({ type: 'simple-array', nullable: true })
+  /**
+   * Дни недели по московскому времени: 0 — воскресенье.
+   *
+   * `simple-array` читается из базы строками, а сравнивается потом с числом
+   * дня недели — без приведения расписание на свои дни не срабатывало ни разу.
+   */
+  @Column({
+    type: 'simple-array',
+    nullable: true,
+    transformer: {
+      to: (value?: number[] | null) => value,
+      from: (value?: string[] | null) =>
+        value ? value.map((day) => Number(day)) : value,
+    },
+  })
   daysOfWeek?: number[];
 
   @Column({ type: 'timestamp' })

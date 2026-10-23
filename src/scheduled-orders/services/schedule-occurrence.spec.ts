@@ -95,6 +95,18 @@ describe('findDueOccurrence', () => {
     it('в неподходящий день ничего не создаёт', () => {
       expect(findDueOccurrence(tuesday, msk('2026-10-21T00:30:00'))).toBeNull();
     });
+
+    it('дни из базы приходят строками и всё равно понимаются', () => {
+      // simple-array отдаёт ['2'], а не [2]
+      const fromDatabase = schedule({
+        frequency: ScheduleFrequency.CUSTOM,
+        daysOfWeek: ['2'] as unknown as number[],
+      });
+
+      expect(findDueOccurrence(fromDatabase, msk('2026-10-20T00:30:00'))).toEqual(
+        msk('2026-10-20T10:00:00'),
+      );
+    });
   });
 
   describe('частоты', () => {
