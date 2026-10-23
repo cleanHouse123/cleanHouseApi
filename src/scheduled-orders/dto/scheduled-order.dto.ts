@@ -98,7 +98,8 @@ export class CreateScheduledOrderDto {
   frequency: ScheduleFrequency;
 
   @ApiProperty({
-    description: 'Предпочтительное время создания заказа',
+    description:
+      'Время выноса по московскому времени. По умолчанию 10:00',
     example: '10:00',
     required: false,
   })
@@ -111,7 +112,7 @@ export class CreateScheduledOrderDto {
 
   @ApiProperty({
     description:
-      'Дни недели для создания заказов (0 = воскресенье, 1 = понедельник)',
+      'Дни недели по московскому времени (0 = воскресенье, 1 = понедельник)',
     example: [1, 2, 3, 4, 5],
     required: false,
   })
@@ -209,7 +210,8 @@ export class ScheduledOrderResponseDto {
   frequency: ScheduleFrequency;
 
   @ApiProperty({
-    description: 'Предпочтительное время создания заказа',
+    description:
+      'Время выноса по московскому времени. По умолчанию 10:00',
     example: '10:00',
   })
   preferredTime?: string;

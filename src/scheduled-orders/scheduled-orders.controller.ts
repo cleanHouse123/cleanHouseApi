@@ -85,11 +85,13 @@ export class ScheduledOrdersController {
     description: 'Расписание найдено',
     type: ScheduledOrderResponseDto,
   })
+  @ApiResponse({ status: 403, description: 'Чужое расписание' })
   @ApiResponse({ status: 404, description: 'Расписание не найдено' })
   async getScheduleById(
     @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: AuthenticatedUser,
   ): Promise<ScheduledOrderResponseDto> {
-    return this.scheduledOrdersService.getScheduleById(id);
+    return this.scheduledOrdersService.getScheduleById(id, user.id);
   }
 
   @Patch(':id')
@@ -99,14 +101,17 @@ export class ScheduledOrdersController {
     description: 'Расписание обновлено',
     type: ScheduledOrderResponseDto,
   })
+  @ApiResponse({ status: 403, description: 'Чужое расписание' })
   @ApiResponse({ status: 404, description: 'Расписание не найдено' })
   async updateSchedule(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateScheduledOrderDto: UpdateScheduledOrderDto,
+    @GetUser() user: AuthenticatedUser,
   ): Promise<ScheduledOrderResponseDto> {
     return this.scheduledOrdersService.updateSchedule(
       id,
       updateScheduledOrderDto,
+      user.id,
     );
   }
 
@@ -117,11 +122,13 @@ export class ScheduledOrdersController {
     description: 'Расписание активировано',
     type: ScheduledOrderResponseDto,
   })
+  @ApiResponse({ status: 403, description: 'Чужое расписание' })
   @ApiResponse({ status: 404, description: 'Расписание не найдено' })
   async activateSchedule(
     @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: AuthenticatedUser,
   ): Promise<ScheduledOrderResponseDto> {
-    return this.scheduledOrdersService.activateSchedule(id);
+    return this.scheduledOrdersService.activateSchedule(id, user.id);
   }
 
   @Patch(':id/deactivate')
@@ -131,18 +138,25 @@ export class ScheduledOrdersController {
     description: 'Расписание деактивировано',
     type: ScheduledOrderResponseDto,
   })
+  @ApiResponse({ status: 403, description: 'Чужое расписание' })
   @ApiResponse({ status: 404, description: 'Расписание не найдено' })
   async deactivateSchedule(
     @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: AuthenticatedUser,
   ): Promise<ScheduledOrderResponseDto> {
-    return this.scheduledOrdersService.deactivateSchedule(id);
+    return this.scheduledOrdersService.deactivateSchedule(id, user.id);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Удалить расписание' })
   @ApiResponse({ status: 200, description: 'Расписание удалено' })
+  @ApiResponse({ status: 403, description: 'Чужое расписание' })
+  @ApiResponse({ status: 403, description: 'Чужое расписание' })
   @ApiResponse({ status: 404, description: 'Расписание не найдено' })
-  async deleteSchedule(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.scheduledOrdersService.deleteSchedule(id);
+  async deleteSchedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.scheduledOrdersService.deleteSchedule(id, user.id);
   }
 }

@@ -1,22 +1,14 @@
 import {
   Injectable,
   NotFoundException,
+  ForbiddenException,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import {
-  ScheduledOrder,
-  ScheduleFrequency,
-} from '../entities/scheduled-order.entity';
-import { Order, OrderStatus } from '../../order/entities/order.entity';
-import {
-  Payment,
-  PaymentStatus,
-  PaymentMethod,
-} from '../../order/entities/payment.entity';
+import { ScheduledOrder } from '../entities/scheduled-order.entity';
 import {
   CreateScheduledOrderDto,
   UpdateScheduledOrderDto,
@@ -24,7 +16,12 @@ import {
 } from '../dto/scheduled-order.dto';
 import { SubscriptionLimitsService } from '../../subscription/services/subscription-limits.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
-import { PriceService } from '../../price/price.service';
+import { OrderService } from '../../order/order.service';
+import { PaymentMethod } from '../../order/entities/payment.entity';
+import { findDueOccurrence } from './schedule-occurrence';
+
+/** Заказ по подписке всегда на 2 пакета — так же, как при ручном оформлении */
+const PACKAGES_PER_ORDER = 2;
 
 @Injectable()
 export class ScheduledOrdersService {
@@ -33,13 +30,9 @@ export class ScheduledOrdersService {
   constructor(
     @InjectRepository(ScheduledOrder)
     private scheduledOrderRepository: Repository<ScheduledOrder>,
-    @InjectRepository(Order)
-    private orderRepository: Repository<Order>,
-    @InjectRepository(Payment)
-    private paymentRepository: Repository<Payment>,
     private subscriptionLimitsService: SubscriptionLimitsService,
     private subscriptionService: SubscriptionService,
-    private priceService: PriceService,
+    private orderService: OrderService,
   ) {}
 
   /**
@@ -50,26 +43,8 @@ export class ScheduledOrdersService {
     dto: CreateScheduledOrderDto,
     customerId: string,
   ): Promise<ScheduledOrderResponseDto> {
-    // Проверяем, что у пользователя есть активная подписка
-    const activeSubscription =
-      await this.subscriptionService.getUserActiveSubscription(customerId);
+    await this.assertCanSchedule(customerId);
 
-    if (!activeSubscription) {
-      throw new BadRequestException(
-        'Заказы по расписанию доступны только для пользователей с активной подпиской',
-      );
-    }
-
-    // Проверяем лимиты (2 пакета = стандартный заказ по расписанию)
-    const limits =
-      await this.subscriptionLimitsService.checkOrderLimits(customerId, 2);
-    if (!limits.canCreateOrder) {
-      throw new BadRequestException(
-        'Превышен лимит заказов для вашей подписки',
-      );
-    }
-
-    // Создаем расписание
     const scheduledOrder = this.scheduledOrderRepository.create({
       customerId: customerId,
       address: dto.address,
@@ -111,15 +86,11 @@ export class ScheduledOrdersService {
   /**
    * Получает расписание по ID
    */
-  async getScheduleById(id: string): Promise<ScheduledOrderResponseDto> {
-    const schedule = await this.scheduledOrderRepository.findOne({
-      where: { id },
-      relations: ['customer'],
-    });
-
-    if (!schedule) {
-      throw new NotFoundException('Расписание не найдено');
-    }
+  async getScheduleById(
+    id: string,
+    customerId: string,
+  ): Promise<ScheduledOrderResponseDto> {
+    const schedule = await this.findOwnSchedule(id, customerId);
 
     return this.transformToResponseDto(schedule);
   }
@@ -130,96 +101,87 @@ export class ScheduledOrdersService {
   async updateSchedule(
     id: string,
     dto: UpdateScheduledOrderDto,
+    customerId: string,
   ): Promise<ScheduledOrderResponseDto> {
-    const schedule = await this.scheduledOrderRepository.findOne({
-      where: { id },
-    });
+    const schedule = await this.findOwnSchedule(id, customerId);
 
-    if (!schedule) {
-      throw new NotFoundException('Расписание не найдено');
-    }
-
-    // Если обновляем даты, конвертируем их
-    const updateData: Partial<ScheduledOrder> = {};
-    if (dto.address !== undefined) updateData.address = dto.address;
-    if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.notes !== undefined) updateData.notes = dto.notes;
-    if (dto.frequency !== undefined) updateData.frequency = dto.frequency;
+    if (dto.address !== undefined) schedule.address = dto.address;
+    if (dto.description !== undefined) schedule.description = dto.description;
+    if (dto.notes !== undefined) schedule.notes = dto.notes;
+    if (dto.frequency !== undefined) schedule.frequency = dto.frequency;
     if (dto.preferredTime !== undefined)
-      updateData.preferredTime = dto.preferredTime;
-    if (dto.daysOfWeek !== undefined) updateData.daysOfWeek = dto.daysOfWeek;
-    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
+      schedule.preferredTime = dto.preferredTime;
+    if (dto.daysOfWeek !== undefined) schedule.daysOfWeek = dto.daysOfWeek;
+    if (dto.isActive !== undefined) schedule.isActive = dto.isActive;
     if (dto.startDate) {
-      updateData.startDate = new Date(dto.startDate);
+      schedule.startDate = new Date(dto.startDate);
     }
-    if (dto.endDate) {
-      updateData.endDate = new Date(dto.endDate);
-    }
-
-    await this.scheduledOrderRepository.update(id, updateData);
-
-    const updatedSchedule = await this.scheduledOrderRepository.findOne({
-      where: { id },
-      relations: ['customer'],
-    });
-
-    if (!updatedSchedule) {
-      throw new NotFoundException('Расписание не найдено после обновления');
+    // пустое значение снимает дату окончания: расписание снова бессрочное
+    if (dto.endDate !== undefined) {
+      schedule.endDate = dto.endDate ? new Date(dto.endDate) : undefined;
     }
 
-    return this.transformToResponseDto(updatedSchedule);
+    const updated = await this.scheduledOrderRepository.save(schedule);
+
+    return this.transformToResponseDto(updated);
   }
 
   /**
-   * Активирует расписание
+   * Активирует расписание.
+   *
+   * Подписка проверяется заново: за время паузы она могла закончиться, а
+   * выключенное расписание — единственное, что мешало создавать заказы.
    */
-  async activateSchedule(id: string): Promise<ScheduledOrderResponseDto> {
-    return this.updateSchedule(id, { isActive: true });
+  async activateSchedule(
+    id: string,
+    customerId: string,
+  ): Promise<ScheduledOrderResponseDto> {
+    await this.assertCanSchedule(customerId);
+
+    return this.updateSchedule(id, { isActive: true }, customerId);
   }
 
   /**
    * Деактивирует расписание
    */
-  async deactivateSchedule(id: string): Promise<ScheduledOrderResponseDto> {
-    return this.updateSchedule(id, { isActive: false });
+  async deactivateSchedule(
+    id: string,
+    customerId: string,
+  ): Promise<ScheduledOrderResponseDto> {
+    return this.updateSchedule(id, { isActive: false }, customerId);
   }
 
   /**
    * Удаляет расписание
    */
-  async deleteSchedule(id: string): Promise<void> {
-    const schedule = await this.scheduledOrderRepository.findOne({
-      where: { id },
-    });
-
-    if (!schedule) {
-      throw new NotFoundException('Расписание не найдено');
-    }
+  async deleteSchedule(id: string, customerId: string): Promise<void> {
+    const schedule = await this.findOwnSchedule(id, customerId);
 
     await this.scheduledOrderRepository.remove(schedule);
     this.logger.log(`Удалено расписание ${id}`);
   }
 
   /**
-   * Cron job для автоматического создания заказов по расписанию
+   * Cron job для автоматического создания заказов по расписанию.
+   *
+   * Раз в полчаса: заказ создаётся в начале тех суток, на которые назначен
+   * вынос, поэтому попасть в выбранное время с точностью до минуты не нужно.
    */
-  // @Cron(CronExpression.EVERY_30_MINUTES)
-  // async handleDailyScheduledOrders() {
-  //   try {
-  //     await this.processScheduledOrders();
-  //     this.logger.log(`[CRON] ${new Date().toISOString()} - Обработка расписаний заказов завершена`);
-  //   } catch (error) {
-  //     this.logger.error(`[CRON] ${new Date().toISOString()} - Ошибка при обработке расписаний заказов:`, error);
-  //   }
-  // }
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async handleScheduledOrders(): Promise<void> {
+    try {
+      await this.processScheduledOrders();
+    } catch (error) {
+      this.logger.error('[CRON] Ошибка при обработке расписаний:', error);
+    }
+  }
 
   /**
    * Обрабатывает все активные расписания и создает заказы
    */
-  private async processScheduledOrders(): Promise<void> {
+  async processScheduledOrders(): Promise<void> {
     const activeSchedules = await this.scheduledOrderRepository.find({
       where: { isActive: true },
-      relations: ['customer'],
     });
 
     for (const schedule of activeSchedules) {
@@ -240,7 +202,12 @@ export class ScheduledOrdersService {
   private async createOrderFromSchedule(
     schedule: ScheduledOrder,
   ): Promise<void> {
-    // Проверяем активную подписку
+    const dueAt = findDueOccurrence(schedule, new Date());
+
+    if (!dueAt) {
+      return;
+    }
+
     const activeSubscription =
       await this.subscriptionService.getUserActiveSubscription(
         schedule.customerId,
@@ -255,11 +222,11 @@ export class ScheduledOrdersService {
       return;
     }
 
-    // Проверяем лимиты подписки (заказ из расписания — 2 пакета)
     const limits = await this.subscriptionLimitsService.checkOrderLimits(
       schedule.customerId,
-      2,
+      PACKAGES_PER_ORDER,
     );
+
     if (!limits.canCreateOrder) {
       this.logger.warn(
         `Лимиты пользователя ${schedule.customerId} исчерпаны, деактивируем расписание ${schedule.id}`,
@@ -269,215 +236,68 @@ export class ScheduledOrdersService {
       return;
     }
 
-    // Проверяем частоту создания заказов
-    if (this.shouldCreateOrder(schedule)) {
-      const orderPrice = await this.priceService.getOrderPrice({
-        userId: schedule.customerId,
-        numberPackages: 2,
-        address: schedule.address,
-        addressDetails: schedule.addressDetails,
-      });
+    // Заказ создаётся тем же путём, что и вручную: со списанием лимита,
+    // платежом по подписке, привязкой к адресу и уведомлением курьерам
+    const order = await this.orderService.create({
+      customerId: schedule.customerId,
+      address: schedule.address,
+      addressDetails: schedule.addressDetails,
+      description: schedule.description,
+      notes: schedule.notes,
+      paymentMethod: PaymentMethod.SUBSCRIPTION,
+      numberPackages: PACKAGES_PER_ORDER,
+      scheduledAt: dueAt.toISOString(),
+    });
 
-      // Создаем заказ со статусом PAID
-      const order = this.orderRepository.create({
-        customerId: schedule.customerId,
-        address: schedule.address,
-        addressDetails: schedule.addressDetails,
-        description: schedule.description,
-        notes: schedule.notes,
-        price: orderPrice,
-        scheduledAt: this.calculateNextOrderTime(schedule),
-        status: OrderStatus.PAID, // Сразу оплачен через подписку
-        numberPackages: 2, // По умолчанию 2 пакета для автоматических заказов
-      });
+    // запоминаем сам вынос, а не момент создания: по нему считается следующий
+    schedule.lastCreatedAt = dueAt;
+    await this.scheduledOrderRepository.save(schedule);
 
-      const savedOrder = await this.orderRepository.save(order);
-
-      // Создаем автоматический платеж для подписчика
-      const payment = this.paymentRepository.create({
-        orderId: savedOrder.id,
-        amount: 0, // Бесплатно для подписчиков
-        status: PaymentStatus.PAID,
-        method: PaymentMethod.SUBSCRIPTION,
-      });
-      await this.paymentRepository.save(payment);
-
-      // Обновляем счетчик лимитов
-      await this.subscriptionLimitsService.incrementUsedOrders(
-        schedule.customerId,
-        2,
-      );
-      // Обновляем время последнего создания
-      schedule.lastCreatedAt = new Date();
-      await this.scheduledOrderRepository.save(schedule);
-
-      this.logger.log(
-        `Создан заказ ${savedOrder.id} из расписания ${schedule.id} для пользователя ${schedule.customerId}`,
-      );
-    } else {
-      this.logger.log(
-        `[CRON] Заказ НЕ создан для расписания ${schedule.id} - не подходит по частоте`,
-      );
-    }
-  }
-
-  /**
-   * Определяет, нужно ли создавать заказ на основе частоты расписания
-   */
-  private shouldCreateOrder(schedule: ScheduledOrder): boolean {
-    const now = new Date();
-
-    // Проверяем, что расписание уже началось
-    if (now < schedule.startDate) {
-      return false;
-    }
-
-    // Проверяем, что расписание еще не закончилось
-    if (schedule.endDate && now > schedule.endDate) {
-      return false;
-    }
-
-    // Если заказ еще не создавался, создаем
-    if (!schedule.lastCreatedAt) {
-      return true;
-    }
-
-    switch (schedule.frequency) {
-      case ScheduleFrequency.DAILY:
-        return this.isDifferentDay(schedule.lastCreatedAt, now);
-
-      case ScheduleFrequency.EVERY_OTHER_DAY:
-        return this.daysDifference(schedule.lastCreatedAt, now) >= 2;
-
-      case ScheduleFrequency.WEEKLY:
-        return this.daysDifference(schedule.lastCreatedAt, now) >= 7;
-
-      case ScheduleFrequency.CUSTOM:
-        return this.shouldCreateCustomOrder(schedule, now);
-
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * Определяет, нужно ли создавать заказ для кастомного расписания
-   */
-  private shouldCreateCustomOrder(
-    schedule: ScheduledOrder,
-    now: Date,
-  ): boolean {
-    if (!schedule.daysOfWeek || schedule.daysOfWeek.length === 0) {
-      return false;
-    }
-
-    const currentDayOfWeek = now.getUTCDay(); // 0 = воскресенье, 1 = понедельник (UTC)
-
-    // Проверяем, что сегодня подходящий день недели
-    if (!schedule.daysOfWeek.includes(currentDayOfWeek)) {
-      return false;
-    }
-
-    // Проверяем, что с последнего создания прошло достаточно времени
-    return schedule.lastCreatedAt
-      ? this.isDifferentDay(schedule.lastCreatedAt, now)
-      : true;
-  }
-
-  /**
-   * Вычисляет время следующего заказа
-   */
-  private calculateNextOrderTime(schedule: ScheduledOrder): Date {
-    const now = new Date();
-    let nextTime = new Date(now);
-
-    switch (schedule.frequency) {
-      case ScheduleFrequency.DAILY:
-        nextTime.setUTCDate(nextTime.getUTCDate() + 1);
-        break;
-
-      case ScheduleFrequency.EVERY_OTHER_DAY:
-        nextTime.setUTCDate(nextTime.getUTCDate() + 2);
-        break;
-
-      case ScheduleFrequency.WEEKLY:
-        nextTime.setUTCDate(nextTime.getUTCDate() + 7);
-        break;
-
-      case ScheduleFrequency.CUSTOM:
-        // Для настраиваемого расписания находим следующий день недели
-        if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0) {
-          nextTime = this.getNextCustomDay(now, schedule.daysOfWeek);
-        } else {
-          nextTime.setUTCDate(nextTime.getUTCDate() + 1);
-        }
-        break;
-
-      default:
-        nextTime.setUTCDate(nextTime.getUTCDate() + 1);
-    }
-
-    // Устанавливаем предпочтительное время, если указано
-    if (schedule.preferredTime) {
-      const [hours, minutes] = schedule.preferredTime.split(':').map(Number);
-      nextTime.setUTCHours(hours, minutes, 0, 0);
-    } else {
-      // Если время не указано, планируем в 10:00
-      nextTime.setUTCHours(10, 0, 0, 0);
-    }
-
-    return nextTime;
-  }
-
-  /**
-   * Находит следующий день недели из списка дней
-   */
-  private getNextCustomDay(now: Date, daysOfWeek: number[]): Date {
-    const currentDay = now.getUTCDay(); // 0 = воскресенье, 1 = понедельник, ..., 6 = суббота (UTC)
-    const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
-
-    // Ищем следующий день в текущей неделе
-    for (const day of sortedDays) {
-      if (day > currentDay) {
-        const nextDate = new Date(now);
-        nextDate.setUTCDate(now.getUTCDate() + (day - currentDay));
-        return nextDate;
-      }
-    }
-
-    // Если не нашли в текущей неделе, берем первый день следующей недели
-    const firstDayNextWeek = new Date(now);
-    firstDayNextWeek.setUTCDate(
-      now.getUTCDate() + (7 - currentDay + sortedDays[0]),
+    this.logger.log(
+      `Создан заказ ${order.id} из расписания ${schedule.id} на ${dueAt.toISOString()}`,
     );
-    return firstDayNextWeek;
   }
 
-  /**
-   * Проверяет, что две даты относятся к разным дням
-   */
-  private isDifferentDay(date1: Date, date2: Date): boolean {
-    const d1 = new Date(date1);
-    const d2 = new Date(date2);
+  /** Расписание клиента или отказ: чужие расписания недоступны */
+  private async findOwnSchedule(
+    id: string,
+    customerId: string,
+  ): Promise<ScheduledOrder> {
+    const schedule = await this.scheduledOrderRepository.findOne({
+      where: { id },
+      relations: ['customer'],
+    });
 
-    d1.setUTCHours(0, 0, 0, 0);
-    d2.setUTCHours(0, 0, 0, 0);
+    if (!schedule) {
+      throw new NotFoundException('Расписание не найдено');
+    }
 
-    return d1.getTime() !== d2.getTime();
+    if (schedule.customerId !== customerId) {
+      throw new ForbiddenException('Это расписание принадлежит другому клиенту');
+    }
+
+    return schedule;
   }
 
-  /**
-   * Вычисляет разность в днях между двумя датами
-   */
-  private daysDifference(date1: Date, date2: Date): number {
-    const d1 = new Date(date1);
-    const d2 = new Date(date2);
+  /** Расписания доступны только подписчикам, у которых остался лимит */
+  private async assertCanSchedule(customerId: string): Promise<void> {
+    const activeSubscription =
+      await this.subscriptionService.getUserActiveSubscription(customerId);
 
-    d1.setUTCHours(0, 0, 0, 0);
-    d2.setUTCHours(0, 0, 0, 0);
+    if (!activeSubscription) {
+      throw new BadRequestException(
+        'Заказы по расписанию доступны только для пользователей с активной подпиской',
+      );
+    }
 
-    const diffTime = d2.getTime() - d1.getTime();
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const limits = await this.subscriptionLimitsService.checkOrderLimits(
+      customerId,
+      PACKAGES_PER_ORDER,
+    );
+
+    if (!limits.canCreateOrder) {
+      throw new BadRequestException('Превышен лимит заказов для вашей подписки');
+    }
   }
 
   /**
@@ -486,7 +306,7 @@ export class ScheduledOrdersService {
   private transformToResponseDto(
     schedule: ScheduledOrder,
   ): ScheduledOrderResponseDto {
-    const dto = {
+    return {
       id: schedule.id,
       customerId: schedule.customerId,
       customer: schedule.customer || null,
@@ -504,6 +324,5 @@ export class ScheduledOrdersService {
       createdAt: schedule.createdAt,
       updatedAt: schedule.updatedAt,
     };
-    return dto;
   }
 }

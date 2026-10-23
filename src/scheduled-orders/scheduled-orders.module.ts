@@ -6,17 +6,17 @@ import { ScheduledOrdersService } from './services/scheduled-orders.service';
 import { OverdueNotificationService } from './services/overdue-notification.service';
 import { ScheduledOrder } from './entities/scheduled-order.entity';
 import { Order } from '../order/entities/order.entity';
-import { Payment } from '../order/entities/payment.entity';
+import { OrderModule } from '../order/order.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
-import { PriceModule } from '../price/price.module';
 import { FcmModule } from '../fcm/fcm.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ScheduledOrder, Order, Payment]),
+    // Order нужен крону просрочки, заказы по расписанию создаёт OrderService
+    TypeOrmModule.forFeature([ScheduledOrder, Order]),
     ScheduleModule.forRoot(),
     SubscriptionModule,
-    PriceModule,
+    OrderModule,
     FcmModule,
   ],
   controllers: [ScheduledOrdersController],
