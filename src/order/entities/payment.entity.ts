@@ -15,6 +15,16 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
 }
 
+/** Решение по возврату денег при отмене оплаченного заказа */
+export enum RefundStatus {
+  /** Решено не возвращать: вина заказчика, пункт 5.7 Оферты */
+  NONE = 'none',
+  /** Возврат создан в YooKassa, ждём подтверждения */
+  PENDING = 'pending',
+  SUCCEEDED = 'succeeded',
+  CANCELED = 'canceled',
+}
+
 export enum PaymentMethod {
   CASH = 'cash',
   CARD = 'card',
@@ -60,6 +70,35 @@ export class Payment {
 
   @Column({ nullable: true })
   yookassaId?: string;
+
+  @Column({ type: 'enum', enum: RefundStatus, nullable: true })
+  refundStatus?: RefundStatus | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: {
+      to: (value?: number | null) => value ?? null,
+      from: (value?: string | null) =>
+        value == null ? null : parseFloat(value),
+    },
+  })
+  refundAmount?: number | null;
+
+  @Column({ nullable: true })
+  refundId?: string;
+
+  /** Причина решения: обязательна, когда возврат не делается */
+  @Column({ nullable: true })
+  refundReason?: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  refundDecidedAt?: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  refundDecidedBy?: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

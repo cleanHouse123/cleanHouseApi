@@ -18,6 +18,7 @@ import {
   Payment,
   PaymentStatus,
   PaymentMethod,
+  RefundStatus,
 } from './entities/payment.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -30,6 +31,11 @@ import { UserRole } from '../shared/types/user.role';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitsService } from '../subscription/services/subscription-limits.service';
 import { OrderPaymentService } from './services/order-payment.service';
+import { RefundService } from './services/refund.service';
+import {
+  CancelWithRefundDto,
+  RefundDecision,
+} from './dto/cancel-with-refund.dto';
 import { PriceService } from '../price/price.service';
 import { FcmService } from '../fcm/fcm.service';
 import { UserAddress } from '../address/entities/user-address';
@@ -62,6 +68,7 @@ export class OrderService {
     private telegramNotifyGroupService: TelegramNotifyGroupService,
     private dataSource: DataSource,
     private couponService: CouponService,
+    private refundService: RefundService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
@@ -1184,6 +1191,130 @@ export class OrderService {
     await this.orderRepository.save(order);
 
     return this.findOne(orderId);
+  }
+
+  /**
+   * Отмена оплаченного заказа вместе с решением по деньгам.
+   *
+   * Возврат делается ДО смены статуса: если YooKassa его отклонит, заказ
+   * останется оплаченным и администратор повторит попытку. Повтор безопасен —
+   * ключ идемпотентности в RefundService не даст вернуть деньги дважды.
+   */
+  async cancelWithRefund(
+    orderId: string,
+    dto: CancelWithRefundDto,
+    decidedBy: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.status === OrderStatus.CANCELED) {
+      throw new BadRequestException('Заказ уже отменён');
+    }
+
+    const payment = await this.paymentRepository.findOne({
+      where: { orderId, status: PaymentStatus.PAID },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Заказ не оплачивался деньгами: отменяем как обычно, решать нечего
+    if (!payment || !payment.yookassaId) {
+      return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+    }
+
+    const paidKopecks = Math.round(Number(payment.amount) * 100);
+
+    if (dto.refund === RefundDecision.NONE) {
+      if (!dto.reason?.trim()) {
+        throw new BadRequestException(
+          'Укажите причину, по которой деньги не возвращаются',
+        );
+      }
+
+      payment.refundStatus = RefundStatus.NONE;
+      payment.refundReason = dto.reason.trim();
+      payment.refundDecidedAt = new Date();
+      payment.refundDecidedBy = decidedBy;
+      await this.paymentRepository.save(payment);
+
+      return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+    }
+
+    const refundKopecks =
+      dto.refund === RefundDecision.FULL
+        ? paidKopecks
+        : Math.round((dto.amount ?? 0) * 100);
+
+    if (dto.refund === RefundDecision.PARTIAL) {
+      if (!dto.amount) {
+        throw new BadRequestException('Укажите сумму частичного возврата');
+      }
+      if (refundKopecks > paidKopecks) {
+        throw new BadRequestException(
+          'Сумма возврата больше оплаченной суммы заказа',
+        );
+      }
+    }
+
+    const refund = await this.refundService.createRefund({
+      yookassaPaymentId: payment.yookassaId,
+      amountInKopecks: refundKopecks,
+      description: `Возврат по заказу ${orderId}`,
+    });
+
+    payment.refundId = refund.id;
+    payment.refundAmount = refundKopecks / 100;
+    payment.refundStatus = refund.status as unknown as RefundStatus;
+    payment.refundReason = dto.reason?.trim();
+    payment.refundDecidedAt = new Date();
+    payment.refundDecidedBy = decidedBy;
+
+    // Полностью вернули — платёж больше не считается оплаченным
+    if (refund.status === 'succeeded' && refundKopecks === paidKopecks) {
+      payment.status = PaymentStatus.REFUNDED;
+    }
+
+    await this.paymentRepository.save(payment);
+
+    return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+  }
+
+  /**
+   * Оплаченные отменённые заказы, по которым решение о деньгах не принято.
+   * Страховка: сюда попадут заказы, отменённые в обход диалога или те,
+   * у которых возврат упал с ошибкой.
+   */
+  async findOrdersAwaitingRefund(): Promise<
+    Array<{
+      orderId: string;
+      paymentId: string;
+      amount: number;
+      customerName?: string;
+      canceledAt: Date;
+    }>
+  > {
+    const payments = await this.paymentRepository.find({
+      where: {
+        status: PaymentStatus.PAID,
+        refundStatus: IsNull(),
+        order: { status: OrderStatus.CANCELED },
+      },
+      relations: ['order', 'order.customer'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return payments.map((payment) => ({
+      orderId: payment.orderId,
+      paymentId: payment.id,
+      amount: Number(payment.amount),
+      customerName: payment.order?.customer?.name,
+      canceledAt: payment.order?.updatedAt ?? payment.createdAt,
+    }));
   }
 
   async updatePaymentStatus(

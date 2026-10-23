@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { RefundService } from './services/refund.service';
 import { OrderService } from './order.service';
 import { OrderController } from './order.controller';
 import { OrderPaymentPageController } from './controllers/order-payment-page.controller';
@@ -26,6 +27,7 @@ import { CouponModule } from '../coupon/coupon.module';
   ],
   controllers: [OrderController, OrderPaymentPageController],
   providers: [
+    RefundService,
     OrderService,
     OrderPaymentService,
     OrderPaymentGateway,
