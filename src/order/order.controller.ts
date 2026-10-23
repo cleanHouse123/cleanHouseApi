@@ -20,6 +20,11 @@ import {
 import { OrderService } from './order.service';
 import { FindOrdersQueryDto } from './dto/find-orders-query.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CancelWithRefundDto } from './dto/cancel-with-refund.dto';
+import {
+  GetUserMetadata,
+  UserMetadata,
+} from 'src/shared/decorators/get-user.decorator';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
 import { FindNearbyOrdersDto } from './dto/find-nearby-orders.dto';
@@ -348,7 +353,59 @@ export class OrderController {
     return this.orderService.completeOrder(id, body.courierId);
   }
 
+  @Patch(':id/cancel-by-customer')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Клиент отменяет свой заказ',
+    description:
+      'Отменить можно только свой заказ и только до выезда курьера. ' +
+      'Деньги за оплаченный заказ не возвращаются автоматически: заказ попадает ' +
+      'в очередь «Ожидают возврата», решение принимает оператор.',
+  })
+  @ApiResponse({ status: 200, type: OrderResponseDto })
+  @ApiResponse({ status: 400, description: 'Заказ нельзя отменить' })
+  async cancelByCustomer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<OrderResponseDto> {
+    return this.orderService.cancelByCustomer(id, user.userId);
+  }
+
+  @Post(':id/cancel-with-refund')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Отменить заказ и решить, что делать с оплатой',
+    description:
+      'Отмена оплаченного заказа всегда сопровождается решением: вернуть всё, ' +
+      'вернуть часть или не возвращать с указанием причины.',
+  })
+  @ApiResponse({ status: 200, type: OrderResponseDto })
+  @ApiResponse({ status: 400, description: 'Возврат невозможен' })
+  async cancelWithRefund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelWithRefundDto,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<OrderResponseDto> {
+    return this.orderService.cancelWithRefund(id, dto, user.userId);
+  }
+
+  @Get('refunds/awaiting')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Оплаченные отменённые заказы без решения по возврату',
+  })
+  async findOrdersAwaitingRefund() {
+    return this.orderService.findOrdersAwaitingRefund();
+  }
+
   @Patch(':id/cancel')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Курьер отменяет заказ' })
   @ApiResponse({
     status: 200,
