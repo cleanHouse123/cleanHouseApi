@@ -1251,18 +1251,26 @@ export class OrderService {
       throw new NotFoundException('Заказ не найден');
     }
 
-    if (order.status === OrderStatus.CANCELED) {
-      throw new BadRequestException('Заказ уже отменён');
-    }
-
     const payment = await this.paymentRepository.findOne({
       where: { orderId, status: PaymentStatus.PAID },
       order: { createdAt: 'DESC' },
     });
 
+    // Отменённый заказ ещё может ждать решения по деньгам: так бывает, когда
+    // отмена прошла в обход диалога и заказ попал в очередь «ожидают возврата».
+    // Само решение принимают один раз — повторно трогать платёж нельзя
+    if (order.status === OrderStatus.CANCELED) {
+      if (!payment || !payment.yookassaId) {
+        throw new BadRequestException('Заказ уже отменён');
+      }
+      if (payment.refundStatus) {
+        throw new BadRequestException('Решение по возврату уже принято');
+      }
+    }
+
     // Заказ не оплачивался деньгами: отменяем как обычно, решать нечего
     if (!payment || !payment.yookassaId) {
-      return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+      return this.finishCancellation(order);
     }
 
     // payment.amount хранится в копейках, как и order.price: колонка decimal
@@ -1282,7 +1290,7 @@ export class OrderService {
       payment.refundDecidedBy = decidedBy;
       await this.paymentRepository.save(payment);
 
-      return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+      return this.finishCancellation(order);
     }
 
     const refundKopecks =
@@ -1322,7 +1330,19 @@ export class OrderService {
 
     await this.paymentRepository.save(payment);
 
-    return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+    return this.finishCancellation(order);
+  }
+
+  /**
+   * Отмена после решения по деньгам. Заказ из очереди «ожидают возврата»
+   * уже отменён — повторный переход в CANCELED не прошёл бы валидацию.
+   */
+  private async finishCancellation(order: Order): Promise<OrderResponseDto> {
+    if (order.status === OrderStatus.CANCELED) {
+      return this.findOne(order.id);
+    }
+
+    return this.updateStatus(order.id, { status: OrderStatus.CANCELED });
   }
 
   /**
