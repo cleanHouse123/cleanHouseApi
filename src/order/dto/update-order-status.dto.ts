@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { OrderStatus } from '../entities/order.entity';
 
 export class UpdateOrderStatusDto {
@@ -19,4 +19,14 @@ export class UpdateOrderStatusDto {
   @IsOptional()
   @IsUUID()
   currierId?: string;
+
+  @ApiProperty({
+    description:
+      'Вернуть вынос в подписку вопреки сроку отмены. По умолчанию решает ' +
+      'правило: отмена менее чем за 3 часа до выноса его списывает',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  returnPickup?: boolean;
 }

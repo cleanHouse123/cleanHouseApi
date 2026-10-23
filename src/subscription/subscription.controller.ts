@@ -45,6 +45,7 @@ import {
   UserMetadata,
 } from '../shared/decorators/get-user.decorator';
 import { SubscriptionPriceDto } from './dto/subscription-price.dto';
+import { UserRole } from '../shared/types/user.role';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -205,9 +206,21 @@ export class SubscriptionController {
   @Delete(':id')
   @ApiOperation({ summary: 'Удалить подписку' })
   @ApiResponse({ status: 200, description: 'Подписка удалена' })
+  @ApiResponse({ status: 403, description: 'Чужая подписка' })
   @ApiResponse({ status: 404, description: 'Подписка не найдена' })
-  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.subscriptionService.remove(id);
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<void> {
+    // без владельца сервис никого не проверял: по одному id сносилась
+    // чужая оплаченная подписка вместе с историей платежей. Админу
+    // владельца не навязываем — он ведёт чужие подписки по работе
+    const isAdmin = user.roles?.includes(UserRole.ADMIN) ?? false;
+
+    return this.subscriptionService.remove(
+      id,
+      isAdmin ? undefined : user.userId,
+    );
   }
 
   // ==================== PAYMENT ENDPOINTS ====================
