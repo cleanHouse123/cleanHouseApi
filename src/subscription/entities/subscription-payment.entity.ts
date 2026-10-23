@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { RefundStatus } from '../../order/entities/payment.entity';
 
 export enum SubscriptionPaymentStatus {
   PENDING = 'pending',
@@ -48,6 +49,36 @@ export class SubscriptionPayment {
 
   @Column({ nullable: true })
   yookassaId?: string;
+
+  @Column({ type: 'enum', enum: RefundStatus, nullable: true })
+  refundStatus?: RefundStatus | null;
+
+  /** Возвращённая сумма в копейках, как и amount */
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: {
+      to: (value?: number | null) => value,
+      from: (value?: string | null) =>
+        value == null ? null : parseFloat(value),
+    },
+  })
+  refundAmount?: number | null;
+
+  @Column({ nullable: true })
+  refundId?: string;
+
+  /** Причина решения: обязательна, когда возврат не делается */
+  @Column({ nullable: true })
+  refundReason?: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  refundDecidedAt?: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  refundDecidedBy?: string | null;
 
   @Column({ nullable: true })
   paidAt?: Date;
