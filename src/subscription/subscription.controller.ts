@@ -45,6 +45,9 @@ import {
   UserMetadata,
 } from '../shared/decorators/get-user.decorator';
 import { SubscriptionPriceDto } from './dto/subscription-price.dto';
+import { UserRole } from '../shared/types/user.role';
+import { SubscriptionRefundService } from './services/subscription-refund.service';
+import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -55,6 +58,7 @@ export class SubscriptionController {
     private readonly subscriptionService: SubscriptionService,
     private readonly paymentService: PaymentService,
     private readonly paymentGateway: PaymentGateway,
+    private readonly subscriptionRefundService: SubscriptionRefundService,
   ) {}
 
   @Post()
@@ -202,12 +206,63 @@ export class SubscriptionController {
     );
   }
 
+  @Get('refunds/awaiting')
+  @ApiOperation({
+    summary: 'Отменённые оплаченные подписки без решения по возврату',
+  })
+  async findAwaitingRefund() {
+    return this.subscriptionRefundService.findAwaitingRefund();
+  }
+
+  @Get(':id/refund-preview')
+  @ApiOperation({ summary: 'Расчёт возврата по пункту 6.7 Оферты' })
+  async previewRefund(@Param('id', ParseUUIDPipe) id: string) {
+    return this.subscriptionRefundService.previewRefund(id);
+  }
+
+  @Patch(':id/cancel-by-customer')
+  @ApiOperation({ summary: 'Отказ клиента от своей подписки' })
+  @ApiResponse({ status: 403, description: 'Чужая подписка' })
+  async cancelByCustomer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ) {
+    return this.subscriptionRefundService.cancelByCustomer(id, user.userId);
+  }
+
+  @Post(':id/cancel-with-refund')
+  @ApiOperation({ summary: 'Отменить подписку с решением по возврату' })
+  @ApiResponse({ status: 400, description: 'Решение уже принято' })
+  async cancelWithRefund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelSubscriptionDto,
+    @GetUserMetadata() user: UserMetadata,
+  ) {
+    return this.subscriptionRefundService.cancelWithRefund(
+      id,
+      dto,
+      user.userId,
+    );
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Удалить подписку' })
   @ApiResponse({ status: 200, description: 'Подписка удалена' })
+  @ApiResponse({ status: 403, description: 'Чужая подписка' })
   @ApiResponse({ status: 404, description: 'Подписка не найдена' })
-  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.subscriptionService.remove(id);
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<void> {
+    // без владельца сервис никого не проверял: по одному id сносилась
+    // чужая оплаченная подписка вместе с историей платежей. Админу
+    // владельца не навязываем — он ведёт чужие подписки по работе
+    const isAdmin = user.roles?.includes(UserRole.ADMIN) ?? false;
+
+    return this.subscriptionService.remove(
+      id,
+      isAdmin ? undefined : user.userId,
+    );
   }
 
   // ==================== PAYMENT ENDPOINTS ====================

@@ -37,6 +37,7 @@ import {
   RefundDecision,
 } from './dto/cancel-with-refund.dto';
 import { PriceService } from '../price/price.service';
+import { shouldReturnPickup, PICKUP_RETURN_HOURS } from './pickup-return';
 import { FcmService } from '../fcm/fcm.service';
 import { UserAddress } from '../address/entities/user-address';
 import { AddressUsageFeature } from '../shared/types/address-features';
@@ -731,7 +732,8 @@ export class OrderService {
       }
     }
 
-    // Отмена оплаченного заказа по подписке — возвращаем единицы лимита (по числу пакетов)
+    // Отмена оплаченного заказа по подписке — вынос возвращается в лимит
+    // только при отмене заранее: поздняя отмена стоит выноса
     if (
       updateOrderStatusDto.status === OrderStatus.CANCELED &&
       previousStatus === OrderStatus.PAID
@@ -742,11 +744,24 @@ export class OrderService {
           method: PaymentMethod.SUBSCRIPTION,
         },
       });
+
       if (subscriptionPayment) {
-        await this.subscriptionLimitsService.decrementUsedOrders(
-          order.customerId,
-          order.numberPackages ?? 2,
-        );
+        // админ может вернуть вынос вопреки сроку: отмена по нашей вине
+        // не должна стоить клиенту выноса (пункт 6.7 Оферты)
+        const returnPickup =
+          updateOrderStatusDto.returnPickup ??
+          shouldReturnPickup(order.scheduledAt, new Date());
+
+        if (returnPickup) {
+          await this.subscriptionLimitsService.decrementUsedOrders(
+            order.customerId,
+            order.numberPackages ?? 2,
+          );
+        } else {
+          this.logger.log(
+            `Заказ ${order.id} отменён менее чем за ${PICKUP_RETURN_HOURS} ч до выноса — вынос списан`,
+          );
+        }
       }
     }
 
