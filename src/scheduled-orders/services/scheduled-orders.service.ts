@@ -342,6 +342,7 @@ export class ScheduledOrdersService {
       customerId: schedule.customerId,
       customer: schedule.customer || null,
       address: schedule.address,
+      addressId: schedule.addressId,
       addressDetails: schedule.addressDetails,
       description: schedule.description,
       notes: schedule.notes,
