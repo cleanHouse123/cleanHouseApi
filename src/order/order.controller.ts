@@ -353,6 +353,25 @@ export class OrderController {
     return this.orderService.completeOrder(id, body.courierId);
   }
 
+  @Patch(':id/cancel-by-customer')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Клиент отменяет свой заказ',
+    description:
+      'Отменить можно только свой заказ и только до выезда курьера. ' +
+      'Деньги за оплаченный заказ не возвращаются автоматически: заказ попадает ' +
+      'в очередь «Ожидают возврата», решение принимает оператор.',
+  })
+  @ApiResponse({ status: 200, type: OrderResponseDto })
+  @ApiResponse({ status: 400, description: 'Заказ нельзя отменить' })
+  async cancelByCustomer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ): Promise<OrderResponseDto> {
+    return this.orderService.cancelByCustomer(id, user.userId);
+  }
+
   @Post(':id/cancel-with-refund')
   @ApiBearerAuth('JWT')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -385,6 +404,8 @@ export class OrderController {
   }
 
   @Patch(':id/cancel')
+  @ApiBearerAuth('JWT')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Курьер отменяет заказ' })
   @ApiResponse({
     status: 200,

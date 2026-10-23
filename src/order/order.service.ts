@@ -1194,6 +1194,44 @@ export class OrderService {
   }
 
   /**
+   * Отмена заказа самим клиентом. Деньги не трогаем: по оферте заявление на
+   * возврат рассматривает оператор, а заказ попадает в очередь «Ожидают возврата».
+   */
+  async cancelByCustomer(
+    orderId: string,
+    customerId: string,
+  ): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.customerId !== customerId) {
+      throw new BadRequestException('Это не ваш заказ');
+    }
+
+    if (
+      order.status === OrderStatus.DONE ||
+      order.status === OrderStatus.CANCELED
+    ) {
+      throw new BadRequestException(
+        'Завершенный или отмененный заказ не может быть отменен',
+      );
+    }
+
+    if (order.status === OrderStatus.IN_PROGRESS) {
+      throw new BadRequestException(
+        'Курьер уже выехал. Отмену согласуйте со службой поддержки',
+      );
+    }
+
+    return this.updateStatus(orderId, { status: OrderStatus.CANCELED });
+  }
+
+  /**
    * Отмена оплаченного заказа вместе с решением по деньгам.
    *
    * Возврат делается ДО смены статуса: если YooKassa его отклонит, заказ
