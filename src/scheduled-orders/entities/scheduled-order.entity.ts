@@ -31,6 +31,10 @@ export class ScheduledOrder {
   @Column({ type: 'text' })
   address: string;
 
+  /** Сохранённый адрес клиента: заказ по расписанию привязывается к нему */
+  @Column({ type: 'uuid', nullable: true })
+  addressId?: string;
+
   @Column({ type: 'jsonb', nullable: true })
   addressDetails?: {
     building?: number;

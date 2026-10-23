@@ -6,7 +6,9 @@ import {
   MaxLength,
   IsEnum,
   IsArray,
+  IsBoolean,
   IsNumber,
+  IsUUID,
   Min,
   Max,
   Matches,
@@ -68,6 +70,23 @@ export class CreateScheduledOrderDto {
   })
   @IsOptional()
   addressDetails?: AddressDetailsDto;
+
+  @ApiProperty({
+    description: 'Сохранённый адрес клиента, к которому привязаны заказы',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  addressId?: string;
+
+  @ApiProperty({
+    description:
+      'Вынос на startDate уже заказан вручную — расписание начнётся со следующего',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  firstPickupAlreadyOrdered?: boolean;
 
   @ApiProperty({
     description: 'Описание заказа',
