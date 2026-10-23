@@ -190,6 +190,12 @@ export class ScheduledOrderResponseDto {
 
   @ApiProperty({
     required: false,
+    description: 'Сохранённый адрес клиента, к которому привязаны заказы',
+  })
+  addressId?: string;
+
+  @ApiProperty({
+    required: false,
     description: 'Детали адреса',
     example: {
       building: 10,
