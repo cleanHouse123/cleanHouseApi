@@ -55,8 +55,9 @@ export class ScheduledOrder {
   frequency: ScheduleFrequency;
 
   @Column({ type: 'varchar', length: 5, nullable: true })
-  preferredTime?: string; // формат "HH:mm" в UTC
+  preferredTime?: string; // формат "HH:mm" по московскому времени
 
+  /** Дни недели по московскому времени: 0 — воскресенье */
   @Column({ type: 'simple-array', nullable: true })
   daysOfWeek?: number[];
 
@@ -69,6 +70,7 @@ export class ScheduledOrder {
   @Column({ default: true })
   isActive: boolean;
 
+  /** Вынос, за который заказ уже создан, — не момент создания */
   @Column({ type: 'timestamp', nullable: true })
   lastCreatedAt?: Date;
 
