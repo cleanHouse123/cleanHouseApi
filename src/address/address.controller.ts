@@ -6,6 +6,7 @@ import {
   Post,
   Body,
   Param,
+  UseGuards,
 } from '@nestjs/common';
 import { AddressService } from './service/address.service';
 import {
@@ -18,6 +19,8 @@ import {
 import { AddressResponseDto } from './dto/address-response.dto';
 import { CreateLocationDto, LocationDto } from './dto/location.dto';
 import { Location } from './entities/location.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @ApiTags('address')
 @Controller('address')
@@ -42,6 +45,7 @@ export class AddressController {
     description: 'Локация поиска адрессов',
     type: LocationDto,
   })
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Post('locations')
   async createLocation(
     @Body() location: CreateLocationDto,
@@ -55,6 +59,7 @@ export class AddressController {
     description: 'Локация поиска адрессов',
     type: LocationDto,
   })
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Delete('locations/:id')
   async deleteLocation(@Param('id') id: string): Promise<void> {
     return this.addressService.deleteLocation(id);
@@ -127,6 +132,7 @@ export class AddressController {
     required: false,
     description: 'Количество дней (по умолчанию 30)',
   })
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Delete('cache/clean')
   async cleanOldCache(@Query('days') days?: number) {
     const result = await this.addressService.cleanOldCache(days);

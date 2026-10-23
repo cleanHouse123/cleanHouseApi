@@ -177,20 +177,4 @@ export class PaymentStatusController {
     }
   }
 
-  @Get('debug/all')
-  @ApiOperation({
-    summary: 'Получить все платежи (для отладки)',
-    description: 'Возвращает все платежи из подписок и заказов для отладки',
-  })
-  async getAllPayments() {
-    const subscriptionPayments =
-      await this.subscriptionPaymentService.getAllPaymentIds();
-    const orderPayments = await this.orderPaymentService.getAllPayments();
-
-    return {
-      subscriptionPayments: subscriptionPayments,
-      orderPayments: orderPayments.map((p) => p.id),
-      total: subscriptionPayments.length + orderPayments.length,
-    };
-  }
 }

@@ -36,6 +36,7 @@ import {
   PaymentCallbackDto,
 } from './dto/create-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { YookassaWebhookGuard } from '../shared/guards/yookassa-webhook.guard';
 import { SubscriptionStatus } from './entities/subscription.entity';
 import { PaymentService } from './services/payment.service';
 import { PaymentGateway } from './gateways/payment.gateway';
@@ -314,60 +315,9 @@ export class SubscriptionController {
     );
   }
 
-  @Post('payment/callback')
-  @ApiOperation({ summary: 'Обработка callback от платежной системы' })
-  @ApiResponse({
-    status: 200,
-    description: 'Callback обработан успешно',
-  })
-  @ApiResponse({ status: 400, description: 'Неверные данные' })
-  async handlePaymentCallback(@Body() paymentCallbackDto: PaymentCallbackDto) {
-    const payment = await this.paymentService.getPayment(
-      paymentCallbackDto.paymentId,
-    );
-
-    if (!payment) {
-      throw new NotFoundException('Платеж не найден');
-    }
-
-    // Обновляем статус платежа
-    await this.paymentService.updatePaymentStatus(
-      paymentCallbackDto.paymentId,
-      paymentCallbackDto.status,
-    );
-
-    if (paymentCallbackDto.status === 'success') {
-      try {
-        // Активируем подписку (с валидацией внутри updateStatus)
-        await this.subscriptionService.updateStatus(payment.subscriptionId, {
-          status: SubscriptionStatus.ACTIVE,
-        });
-
-        // Отправляем уведомление через WebSocket
-        this.paymentGateway.notifyPaymentSuccess(
-          paymentCallbackDto.paymentId,
-          payment.subscriptionId,
-        );
-      } catch (error) {
-        // Если не удалось активировать (подписка истекла/отменена), выбрасываем ошибку
-        throw new BadRequestException(
-          `Не удалось активировать подписку: ${error.message}`,
-        );
-      }
-    } else {
-      // Отправляем уведомление об ошибке
-      this.paymentGateway.notifyPaymentError(
-        paymentCallbackDto.paymentId,
-        payment.subscriptionId,
-        'Ошибка оплаты',
-      );
-    }
-
-    return { message: 'Callback обработан успешно' };
-  }
-
   @Post('payment/yookassa-webhook')
   @Public()
+  @UseGuards(YookassaWebhookGuard)
   @ApiOperation({ summary: 'Webhook для YooKassa платежей подписок' })
   @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
   async handleYookassaWebhook(@Body() webhookData: any) {
@@ -422,59 +372,6 @@ export class SubscriptionController {
       req.user.id,
     );
     return payment || { message: 'Платеж не найден' };
-  }
-
-  @Post('payment/simulate/:paymentId')
-  @Public()
-  @ApiOperation({ summary: 'Симуляция успешной оплаты (для тестирования)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Оплата симулирована успешно',
-  })
-  @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async simulatePayment(@Param('paymentId', ParseUUIDPipe) paymentId: string) {
-    try {
-      const payment =
-        await this.paymentService.simulateSuccessfulPayment(paymentId);
-
-      if (!payment) {
-        throw new NotFoundException('Платеж не найден или уже обработан');
-      }
-
-      // Активируем подписку (с валидацией внутри updateStatus)
-      try {
-        await this.subscriptionService.updateStatus(payment.subscriptionId, {
-          status: SubscriptionStatus.ACTIVE,
-        });
-      } catch (error) {
-        // Логируем предупреждение, если подписку нельзя активировать
-        console.warn(
-          `Не удалось активировать подписку ${payment.subscriptionId}: ${error.message}`,
-        );
-      }
-
-      // Отправляем уведомление через WebSocket
-      this.paymentGateway.notifyPaymentSuccess(
-        payment.subscriptionId,
-        payment.subscriptionId,
-      );
-
-      return {
-        message: 'Оплата симулирована успешно',
-        payment: {
-          id: payment.id,
-          subscriptionId: payment.subscriptionId,
-          amount: payment.amount,
-          status: payment.status,
-          createdAt: payment.createdAt,
-          updatedAt: payment.updatedAt,
-          paidAt: payment.paidAt,
-        },
-      };
-    } catch (error) {
-      console.error('Ошибка при симуляции платежа:', error);
-      throw error;
-    }
   }
 
   @Get('payment/:paymentId')
