@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Logger, Param } from '@nestjs/common';
+import { Controller, Post, Body, Logger, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../decorators/public.decorator';
+import { YookassaWebhookGuard } from '../guards/yookassa-webhook.guard';
 import { OrderPaymentService } from '../../order/services/order-payment.service';
 import { PaymentService } from '../../subscription/services/payment.service';
 import { OrderService } from '../../order/order.service';
@@ -49,39 +50,9 @@ export class WebhookController {
     };
   }
 
-  @Post('manual-success/:paymentId')
-  @Public()
-  @ApiOperation({
-    summary: 'Ручное обновление статуса платежа для тестирования',
-  })
-  async manualSuccess(@Param('paymentId') paymentId: string) {
-    this.logger.log(`=== MANUAL SUCCESS FOR PAYMENT: ${paymentId} ===`);
-
-    // Имитируем webhook от YooKassa
-    const mockWebhook = {
-      type: 'payment.succeeded',
-      event: 'payment.succeeded',
-      object: {
-        id: 'mock-yookassa-id',
-        status: 'succeeded',
-        metadata: {
-          paymentId,
-          subscriptionId: 'test-subscription-id',
-        },
-      },
-    };
-
-    try {
-      const result = await this.handleYookassaWebhook(mockWebhook);
-      return { message: 'Manual success processed', result };
-    } catch (error) {
-      this.logger.error('Manual success error:', error);
-      return { message: 'Manual success failed', error: error.message };
-    }
-  }
-
   @Post('yookassa')
   @Public()
+  @UseGuards(YookassaWebhookGuard)
   @ApiOperation({ summary: 'Универсальный webhook для всех YooKassa платежей' })
   @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
   async handleYookassaWebhook(@Body() webhookData: any) {
