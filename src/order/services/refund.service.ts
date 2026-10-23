@@ -12,6 +12,27 @@ export interface CreateRefundParams {
   description: string;
 }
 
+/**
+ * YooKassa отвечает по-английски, а читает это администратор. Переводим
+ * только то, на что он может повлиять, остальное пропускаем как есть.
+ */
+export const explainRefundError = (description?: string): string => {
+  if (!description) {
+    return 'YooKassa отклонила возврат. Попробуйте позже';
+  }
+
+  // частичный возврат должен оставлять больше рубля — на дешёвых тарифах
+  // в этот предел упирается почти любой возврат «почти всей» суммы
+  if (/remaining amount after a partial refund/i.test(description)) {
+    return (
+      'YooKassa не делает частичный возврат, после которого остаётся ' +
+      'меньше 1 ₽. Верните всю сумму или уменьшите возврат'
+    );
+  }
+
+  return description;
+};
+
 export interface RefundResult {
   id: string;
   status: 'pending' | 'succeeded' | 'canceled';
@@ -112,9 +133,7 @@ export class RefundService {
       this.logger.error(
         `Возврат по платежу ${params.yookassaPaymentId} не прошёл: ${description ?? String(error)}`,
       );
-      throw new BadRequestException(
-        description ?? 'YooKassa отклонила возврат. Попробуйте позже',
-      );
+      throw new BadRequestException(explainRefundError(description));
     }
   }
 }
