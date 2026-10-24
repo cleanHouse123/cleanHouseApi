@@ -34,6 +34,8 @@ import {
   OrderPaymentCallbackDto,
 } from './dto/create-order-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
+import { YookassaWebhookGuard } from '../shared/guards/yookassa-webhook.guard';
 import { OrderStatus } from './entities/order.entity';
 import { Public } from '../shared/decorators/public.decorator';
 import { OrderPaymentService } from './services/order-payment.service';
@@ -476,64 +478,9 @@ export class OrderController {
     };
   }
 
-  @Post('payment/callback')
-  @Public()
-  @ApiOperation({ summary: 'Callback для обработки платежа заказа' })
-  @ApiResponse({ status: 200, description: 'Callback обработан успешно' })
-  @ApiResponse({ status: 400, description: 'Неверные данные' })
-  async handlePaymentCallback(
-    @Body() paymentCallbackDto: OrderPaymentCallbackDto,
-  ) {
-    const payment = await this.orderPaymentService.getPayment(
-      paymentCallbackDto.paymentId,
-    );
-
-    if (!payment) {
-      throw new Error('Платеж не найден');
-    }
-
-    // Обновляем статус платежа
-    await this.orderPaymentService.updatePaymentStatus(
-      paymentCallbackDto.paymentId,
-      paymentCallbackDto.status,
-    );
-
-    if (paymentCallbackDto.status === 'success') {
-      // Проверяем текущий статус заказа перед обновлением
-      try {
-        const order = await this.orderService.findOne(payment.orderId);
-        if (order.status !== OrderStatus.PAID) {
-          // Обновляем статус заказа на "оплачен"
-          await this.orderService.updateStatus(payment.orderId, {
-            status: OrderStatus.PAID,
-          });
-        }
-      } catch (error) {
-        console.error(
-          `Ошибка обновления статуса заказа ${payment.orderId}:`,
-          error.message,
-        );
-      }
-
-      // Отправляем уведомление через WebSocket
-      this.orderPaymentGateway.notifyPaymentSuccess(
-        paymentCallbackDto.paymentId,
-        payment.orderId,
-      );
-    } else {
-      // Отправляем уведомление об ошибке
-      this.orderPaymentGateway.notifyPaymentError(
-        paymentCallbackDto.paymentId,
-        payment.orderId,
-        'Ошибка оплаты заказа',
-      );
-    }
-
-    return { message: 'Callback обработан успешно' };
-  }
-
   @Post('payment/yookassa-webhook')
   @Public()
+  @UseGuards(YookassaWebhookGuard)
   @ApiOperation({ summary: 'Webhook для YooKassa платежей заказов' })
   @ApiResponse({ status: 200, description: 'Webhook обработан успешно' })
   async handleYookassaWebhook(@Body() webhookData: any) {
@@ -606,66 +553,8 @@ export class OrderController {
     return paymentInfo || { message: 'Платеж не найден' };
   }
 
-  @Post('payment/return/:paymentId')
-  @Public()
-  @ApiOperation({ summary: 'Обработка возврата с фронтенда после оплаты' })
-  @ApiResponse({ status: 200, description: 'Возврат обработан успешно' })
-  async handlePaymentReturn(
-    @Param('paymentId', ParseUUIDPipe) paymentId: string,
-  ) {
-    try {
-      // Проверяем существование платежа
-      const payment = await this.orderPaymentService.getPayment(paymentId);
-
-      if (!payment) {
-        return { success: false, message: 'Платеж не найден' };
-      }
-
-      // Если платеж еще в статусе pending, помечаем как успешный
-      if (payment.status === 'pending') {
-        await this.orderPaymentService.simulateSuccessfulPayment(paymentId);
-
-        // Обновляем статус заказа
-        try {
-          const order = await this.orderService.findOne(payment.orderId);
-          if (order.status !== OrderStatus.PAID) {
-            await this.orderService.updateStatus(payment.orderId, {
-              status: OrderStatus.PAID,
-            });
-          }
-        } catch (error) {
-          console.log('Заказ не найден, но платеж обработан:', error.message);
-        }
-
-        // Отправляем WebSocket уведомление
-        this.orderPaymentGateway.notifyPaymentSuccess(
-          paymentId,
-          payment.orderId,
-        );
-      }
-
-      return {
-        success: true,
-        message: 'Платеж успешно обработан',
-        payment: {
-          id: paymentId,
-          status: 'paid',
-          orderId: payment.orderId,
-          amount: payment.amount,
-        },
-      };
-    } catch (error) {
-      console.error('Ошибка обработки возврата платежа:', error);
-      return {
-        success: false,
-        message: 'Ошибка обработки платежа',
-        error: error.message,
-      };
-    }
-  }
-
   @Post('payment/confirm/:paymentId')
-  @Public()
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Подтверждение платежа (для отложенных платежей)' })
   @ApiResponse({ status: 200, description: 'Платеж подтвержден' })
   async confirmPayment(
@@ -684,7 +573,7 @@ export class OrderController {
   }
 
   @Post('payment/cancel/:paymentId')
-  @Public()
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Отмена платежа' })
   @ApiResponse({ status: 200, description: 'Платеж отменен' })
   async cancelPayment(@Param('paymentId', ParseUUIDPipe) paymentId: string) {
@@ -694,63 +583,6 @@ export class OrderController {
       return canceledPayment;
     } catch (error) {
       return { message: 'Ошибка отмены платежа', error: error.message };
-    }
-  }
-
-  @Post('payment/simulate/:paymentId')
-  @Public()
-  @ApiOperation({
-    summary: 'Симуляция успешной оплаты заказа (для тестирования)',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Оплата заказа симулирована успешно',
-  })
-  @ApiResponse({ status: 404, description: 'Платеж не найден' })
-  async simulateOrderPayment(
-    @Param('paymentId', ParseUUIDPipe) paymentId: string,
-  ) {
-    try {
-      const payment =
-        await this.orderPaymentService.simulateSuccessfulPayment(paymentId);
-
-      if (!payment) {
-        throw new Error('Платеж не найден или уже обработан');
-      }
-
-      // Обновляем статус заказа (если он существует)
-      try {
-        const order = await this.orderService.findOne(payment.orderId);
-        if (order.status !== OrderStatus.PAID) {
-          await this.orderService.updateStatus(payment.orderId, {
-            status: OrderStatus.PAID,
-          });
-        }
-      } catch (error) {
-        console.log('Заказ не найден, но платеж обработан:', error.message);
-      }
-
-      // Отправляем уведомление через WebSocket
-      this.orderPaymentGateway.notifyPaymentSuccess(
-        payment.orderId,
-        payment.orderId,
-      );
-
-      return {
-        message: 'Оплата заказа симулирована успешно',
-        payment: {
-          id: payment.id,
-          orderId: payment.orderId,
-          amount: payment.amount,
-          status: payment.status,
-          createdAt: payment.createdAt,
-          updatedAt: payment.updatedAt,
-          paidAt: payment.paidAt,
-        },
-      };
-    } catch (error) {
-      console.error('Ошибка при симуляции платежа заказа:', error);
-      throw error;
     }
   }
 

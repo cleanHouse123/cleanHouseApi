@@ -12,6 +12,7 @@ import { WorkTimeService } from './work-time.service';
 import { CreateWorkTimeDto } from './dto/create-work-time.dto';
 import { UpdateWorkTimeDto } from './dto/update-work-time.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AdminGuard } from 'src/auth/guards/admin.guard';
 import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('work-time')
@@ -19,7 +20,7 @@ export class WorkTimeController {
   constructor(private readonly workTimeService: WorkTimeService) {}
 
   @ApiBearerAuth('JWT')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Post()
   create(@Body() createWorkTimeDto: CreateWorkTimeDto) {
     return this.workTimeService.create(createWorkTimeDto);
@@ -35,6 +36,7 @@ export class WorkTimeController {
     return this.workTimeService.findOne(+id);
   }
 
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -43,6 +45,7 @@ export class WorkTimeController {
     return this.workTimeService.update(+id, updateWorkTimeDto);
   }
 
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.workTimeService.remove(+id);

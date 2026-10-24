@@ -31,7 +31,8 @@
     "typeorm": "typeorm-ts-node-commonjs -d src/data-source.ts",
     "migration:run": "yarn typeorm migration:run",
     "migration:revert": "yarn typeorm migration:revert",
-    "migration:generate": "yarn typeorm migration:generate"
+    "migration:generate": "yarn typeorm migration:generate",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand"
   },
   "dependencies": {
     "@grammyjs/nestjs": "^0.3.4",
