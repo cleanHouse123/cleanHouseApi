@@ -49,13 +49,8 @@ describe('Подписки', () => {
     await testApp.close();
   });
 
-  /** Клиент с оплаченной подпиской */
-  const customerWithSubscription = async (): Promise<{
-    user: TestUser;
-    subscriptionId: string;
-  }> => {
-    const user = await createUser(testApp);
-
+  /** Оплаченная подписка для уже созданного клиента */
+  const buySubscriptionFor = async (user: TestUser): Promise<string> => {
     const created = await testApp
       .http()
       .post('/subscriptions/by-plan')
@@ -90,7 +85,17 @@ describe('Подписки', () => {
       })
       .expect(201);
 
-    return { user, subscriptionId };
+    return subscriptionId;
+  };
+
+  /** Клиент с оплаченной подпиской */
+  const customerWithSubscription = async (): Promise<{
+    user: TestUser;
+    subscriptionId: string;
+  }> => {
+    const user = await createUser(testApp);
+
+    return { user, subscriptionId: await buySubscriptionFor(user) };
   };
 
   /** Заказ по подписке на указанное время выноса */
@@ -183,6 +188,33 @@ describe('Подписки', () => {
       const subscription = await subscriptionOf(user, subscriptionId);
       expect(subscription.usedOrders).toBe(0);
     });
+
+    it('вынос возвращается в ту подписку, из которой был списан', async () => {
+      const { user, subscriptionId: oldSubscriptionId } =
+        await customerWithSubscription();
+      const order = await orderBySubscription(user, hoursFromNow(24));
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${oldSubscriptionId}/cancel-by-customer`)
+        .set(asUser(user))
+        .expect(200);
+
+      const newSubscriptionId = await buySubscriptionFor(user);
+
+      await testApp
+        .http()
+        .patch(`/orders/${order.body.id}/cancel-by-customer`)
+        .set(asUser(user))
+        .expect(200);
+
+      // иначе, отменив старый заказ, клиент получал бесплатный вынос
+      const newSubscription = await subscriptionOf(user, newSubscriptionId);
+      expect(newSubscription.usedOrders).toBe(0);
+
+      const oldSubscription = await subscriptionOf(user, oldSubscriptionId);
+      expect(oldSubscription.usedOrders).toBe(0);
+    });
   });
 
   describe('заморозка, пункт 6.4', () => {
@@ -216,7 +248,7 @@ describe('Подписки', () => {
         .send({ days: 3 })
         .expect(200);
 
-      await testApp
+      const refused = await testApp
         .http()
         .post('/orders')
         .set(asUser(user))
@@ -227,6 +259,37 @@ describe('Подписки', () => {
           numberPackages: 2,
         })
         .expect(400);
+
+      // не «превышен лимит, 0 заказов из 0»: подписка на паузе, а не кончилась
+      expect(refused.body.message).toContain('приостановлена');
+      expect(refused.body.message).not.toContain('лимит');
+    });
+
+    it('на паузе расписание не настроить, и причина названа', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 3 })
+        .expect(200);
+
+      const refused = await testApp
+        .http()
+        .post('/scheduled-orders')
+        .set(asUser(user))
+        .send({
+          address: ADDRESS,
+          frequency: 'daily',
+          preferredTime: '10:00',
+          numberPackages: 2,
+          paymentMethod: 'subscription',
+          startDate: new Date().toISOString(),
+        })
+        .expect(400);
+
+      expect(refused.body.message).toContain('приостановлена');
     });
 
     it('дважды подряд заморозить нельзя', async () => {

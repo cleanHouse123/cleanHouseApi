@@ -389,11 +389,19 @@ export class SubscriptionService {
    * решит, что подписки нет, и выключит расписания навсегда.
    */
   async isUserSubscriptionFrozen(userId: string): Promise<boolean> {
-    const frozen = await this.subscriptionRepository.findOne({
+    return Boolean(await this.findUserFrozenSubscription(userId));
+  }
+
+  /**
+   * Приостановленная подписка клиента — нужна, чтобы отказ звучал по делу:
+   * «подписка на паузе до 31 октября», а не «превышен лимит, 0 заказов из 0».
+   */
+  async findUserFrozenSubscription(
+    userId: string,
+  ): Promise<Subscription | null> {
+    return this.subscriptionRepository.findOne({
       where: { userId, status: SubscriptionStatus.FROZEN },
     });
-
-    return Boolean(frozen);
   }
 
   async getUserActiveSubscription(

@@ -20,6 +20,7 @@ import { SubscriptionService } from '../../subscription/subscription.service';
 import { OrderService } from '../../order/order.service';
 import { PaymentMethod } from '../../order/entities/payment.entity';
 import { findDueOccurrence } from './schedule-occurrence';
+import { formatMoscowDate } from '../../shared/utils/moscow-date.util';
 
 /** Заказ по подписке всегда на 2 пакета — так же, как при ручном оформлении */
 const PACKAGES_PER_ORDER = 2;
@@ -327,6 +328,18 @@ export class ScheduledOrdersService {
       await this.subscriptionService.getUserActiveSubscription(customerId);
 
     if (!activeSubscription) {
+      // пауза — не отсутствие подписки (пункт 6.4 Оферты)
+      const frozen =
+        await this.subscriptionService.findUserFrozenSubscription(customerId);
+
+      if (frozen) {
+        throw new BadRequestException(
+          frozen.frozenUntil
+            ? `Подписка приостановлена до ${formatMoscowDate(frozen.frozenUntil)}: расписание можно будет настроить, когда пауза закончится`
+            : 'Подписка приостановлена: расписание можно будет настроить, когда пауза закончится',
+        );
+      }
+
       throw new BadRequestException(
         'Заказы по расписанию доступны только для пользователей с активной подпиской',
       );
