@@ -47,10 +47,15 @@ import {
 } from '../shared/decorators/get-user.decorator';
 import { SubscriptionPriceDto } from './dto/subscription-price.dto';
 import { UserRole } from '../shared/types/user.role';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { SubscriptionRefundService } from './services/subscription-refund.service';
 import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 import { FreezeSubscriptionDto } from './dto/freeze-subscription.dto';
 import { SubscriptionFreezeService } from './services/subscription-freeze.service';
+
+/** Администратор ведёт чужие подписки по работе, остальные — только свои */
+const isAdmin = (user: UserMetadata): boolean =>
+  user.roles?.includes(UserRole.ADMIN) ?? false;
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -155,12 +160,21 @@ export class SubscriptionController {
     },
   })
   async findAll(
+    @GetUserMetadata() user: UserMetadata,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('status') status?: SubscriptionStatus,
     @Query('userId') userId?: string,
   ) {
-    return this.subscriptionService.findAll(page, limit, status, userId);
+    // без этого любой вошедший получал список всех подписок вместе с
+    // данными их владельцев
+    return this.subscriptionService.findAll(
+      page,
+      limit,
+      status,
+      userId,
+      isAdmin(user) ? undefined : user.userId,
+    );
   }
 
   @Get('user/:userId')
@@ -173,8 +187,12 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Активная подписка не найдена' })
   async getUserActiveSubscription(
     @Param('userId', ParseUUIDPipe) userId: string,
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<SubscriptionResponseDto | null> {
-    return this.subscriptionService.getUserActiveSubscription(userId);
+    return this.subscriptionService.getUserActiveSubscription(
+      userId,
+      isAdmin(user) ? undefined : user.userId,
+    );
   }
 
   @Get(':id')
@@ -187,11 +205,16 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Подписка не найдена' })
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<SubscriptionResponseDto> {
-    return this.subscriptionService.findOne(id);
+    return this.subscriptionService.findOne(
+      id,
+      isAdmin(user) ? undefined : user.userId,
+    );
   }
 
   @Patch(':id/status')
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Обновить статус подписки' })
   @ApiResponse({
     status: 200,
@@ -211,6 +234,7 @@ export class SubscriptionController {
   }
 
   @Get('refunds/awaiting')
+  @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Отменённые оплаченные подписки без решения по возврату',
   })
@@ -220,8 +244,15 @@ export class SubscriptionController {
 
   @Get(':id/refund-preview')
   @ApiOperation({ summary: 'Расчёт возврата по пункту 6.7 Оферты' })
-  async previewRefund(@Param('id', ParseUUIDPipe) id: string) {
-    return this.subscriptionRefundService.previewRefund(id);
+  @ApiResponse({ status: 403, description: 'Чужая подписка' })
+  async previewRefund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUserMetadata() user: UserMetadata,
+  ) {
+    return this.subscriptionRefundService.previewRefund(
+      id,
+      isAdmin(user) ? undefined : user.userId,
+    );
   }
 
   @Patch(':id/freeze')
@@ -248,6 +279,7 @@ export class SubscriptionController {
   }
 
   @Post(':id/cancel-with-refund')
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Отменить подписку с решением по возврату' })
   @ApiResponse({ status: 400, description: 'Решение уже принято' })
   async cancelWithRefund(

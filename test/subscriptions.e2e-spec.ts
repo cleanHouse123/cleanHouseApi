@@ -227,6 +227,120 @@ describe('Подписки', () => {
     });
   });
 
+  describe('доступ к подпискам', () => {
+    it('неоплаченную подписку нельзя активировать себе самому', async () => {
+      const user = await createUser(testApp);
+
+      const created = await testApp
+        .http()
+        .post('/subscriptions/by-plan')
+        .set(asUser(user))
+        .send({ planId })
+        .expect(201);
+
+      expect(created.body.status).toBe('pending');
+
+      // иначе подписка достаётся бесплатно: создал и активировал
+      await testApp
+        .http()
+        .patch(`/subscriptions/${created.body.id}/status`)
+        .set(asUser(user))
+        .send({ status: 'active' })
+        .expect(403);
+
+      const still = await subscriptionOf(user, created.body.id);
+      expect(still.status).toBe('pending');
+    });
+
+    it('возврат по чужой подписке не выпустить', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+      const stranger = await createUser(testApp);
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/cancel-by-customer`)
+        .set(asUser(user))
+        .expect(200);
+
+      await testApp
+        .http()
+        .post(`/subscriptions/${subscriptionId}/cancel-with-refund`)
+        .set(asUser(stranger))
+        .send({ decision: 'full' })
+        .expect(403);
+    });
+
+    it('очередь возвратов закрыта от клиентов', async () => {
+      const user = await createUser(testApp);
+
+      await testApp
+        .http()
+        .get('/subscriptions/refunds/awaiting')
+        .set(asUser(user))
+        .expect(403);
+
+      await testApp
+        .http()
+        .get('/subscriptions/refunds/awaiting')
+        .set(asUser(admin))
+        .expect(200);
+    });
+
+    it('чужая подписка и её суммы недоступны', async () => {
+      const { subscriptionId } = await customerWithSubscription();
+      const stranger = await createUser(testApp);
+
+      await testApp
+        .http()
+        .get(`/subscriptions/${subscriptionId}`)
+        .set(asUser(stranger))
+        .expect(403);
+
+      await testApp
+        .http()
+        .get(`/subscriptions/${subscriptionId}/refund-preview`)
+        .set(asUser(stranger))
+        .expect(403);
+    });
+
+    it('в общем списке клиент видит только свои подписки', async () => {
+      const { user } = await customerWithSubscription();
+      await customerWithSubscription();
+
+      const mine = await testApp
+        .http()
+        .get('/subscriptions')
+        .set(asUser(user))
+        .expect(200);
+
+      const owners = new Set(
+        (mine.body.subscriptions as { user: { id: string } }[]).map(
+          (item) => item.user.id,
+        ),
+      );
+
+      expect([...owners]).toEqual([user.id]);
+    });
+
+    it('администратору списки и статусы доступны', async () => {
+      const { subscriptionId } = await customerWithSubscription();
+
+      await testApp
+        .http()
+        .get(`/subscriptions/${subscriptionId}/refund-preview`)
+        .set(asUser(admin))
+        .expect(200);
+
+      const all = await testApp
+        .http()
+        .get('/subscriptions')
+        .set(asUser(admin))
+        .expect(200);
+
+      expect(all.body.total).toBeGreaterThan(1);
+    });
+  });
+
   describe('заморозка, пункт 6.4', () => {
     it('подписка встаёт на паузу и период продлевается', async () => {
       const { user, subscriptionId } = await customerWithSubscription();

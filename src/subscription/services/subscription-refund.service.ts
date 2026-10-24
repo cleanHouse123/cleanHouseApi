@@ -55,10 +55,19 @@ export class SubscriptionRefundService {
   ) {}
 
   /** Сколько вернули бы прямо сейчас — для диалога в админке */
+  /**
+   * `customerId` задан — проверяем владельца: суммы по чужой подписке
+   * посторонним не нужны. Администратор ведёт чужие подписки по работе.
+   */
   async previewRefund(
     subscriptionId: string,
+    customerId?: string,
   ): Promise<SubscriptionRefundBreakdown> {
     const subscription = await this.findSubscription(subscriptionId);
+
+    if (customerId && subscription.userId !== customerId) {
+      throw new ForbiddenException('Это подписка другого пользователя');
+    }
 
     return calculateSubscriptionRefund(subscription, new Date());
   }
