@@ -38,6 +38,10 @@ export class SubscriptionPlanResponseDto {
   @Expose()
   ordersLimit: number;
 
+  /** Цена пакета в копейках: удерживается из возврата, пункт 6.2 Оферты */
+  @Expose()
+  bagPriceInKopecks: number;
+
   @Expose()
   isReferralFreeEnabled: boolean;
 
@@ -63,6 +67,7 @@ export class SubscriptionPlanResponseDto {
     this.badgeColor = subscriptionPlan?.badgeColor || '';
     this.popular = subscriptionPlan?.popular || false;
     this.ordersLimit = subscriptionPlan?.ordersLimit || 0;
+    this.bagPriceInKopecks = subscriptionPlan?.bagPriceInKopecks || 0;
     this.isReferralFreeEnabled =
       subscriptionPlan?.isReferralFreeEnabled || false;
     this.minReferralsForFree = subscriptionPlan?.minReferralsForFree || 0;
