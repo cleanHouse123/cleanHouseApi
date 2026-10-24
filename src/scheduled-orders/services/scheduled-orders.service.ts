@@ -116,6 +116,13 @@ export class ScheduledOrdersService {
   ): Promise<ScheduledOrderResponseDto> {
     const schedule = await this.findOwnSchedule(id, customerId);
 
+    const cadenceChanged =
+      (dto.frequency !== undefined && dto.frequency !== schedule.frequency) ||
+      (dto.preferredTime !== undefined &&
+        dto.preferredTime !== schedule.preferredTime) ||
+      (dto.daysOfWeek !== undefined &&
+        String(dto.daysOfWeek) !== String(schedule.daysOfWeek));
+
     if (dto.address !== undefined) schedule.address = dto.address;
     if (dto.description !== undefined) schedule.description = dto.description;
     if (dto.notes !== undefined) schedule.notes = dto.notes;
@@ -130,6 +137,15 @@ export class ScheduledOrdersService {
     // пустое значение снимает дату окончания: расписание снова бессрочное
     if (dto.endDate !== undefined) {
       schedule.endDate = dto.endDate ? new Date(dto.endDate) : undefined;
+    }
+
+    // `lastCreatedAt` помнит время последнего заказанного выноса, и новый
+    // должен быть позже него. После смены частоты или времени это держало
+    // расписание выключенным до уже заказанного выноса: с недельного на
+    // ежедневное — почти неделю. Считаем заново от момента правки, а от
+    // второго заказа на тот же вынос спасает проверка в кроне
+    if (cadenceChanged) {
+      schedule.lastCreatedAt = undefined;
     }
 
     const updated = await this.scheduledOrderRepository.save(schedule);
@@ -188,16 +204,19 @@ export class ScheduledOrdersService {
   }
 
   /**
-   * Обрабатывает все активные расписания и создает заказы
+   * Обрабатывает все активные расписания и создает заказы.
+   *
+   * `now` передаётся только прогоном: иначе проверить движок можно лишь в
+   * те часы суток, когда время выноса ещё не прошло.
    */
-  async processScheduledOrders(): Promise<void> {
+  async processScheduledOrders(now: Date = new Date()): Promise<void> {
     const activeSchedules = await this.scheduledOrderRepository.find({
       where: { isActive: true },
     });
 
     for (const schedule of activeSchedules) {
       try {
-        await this.createOrderFromSchedule(schedule);
+        await this.createOrderFromSchedule(schedule, now);
       } catch (error) {
         this.logger.error(
           `[CRON] Ошибка при создании заказа из расписания ${schedule.id}:`,
@@ -212,8 +231,9 @@ export class ScheduledOrdersService {
    */
   private async createOrderFromSchedule(
     schedule: ScheduledOrder,
+    now: Date,
   ): Promise<void> {
-    const dueAt = findDueOccurrence(schedule, new Date());
+    const dueAt = findDueOccurrence(schedule, now);
 
     if (!dueAt) {
       return;
@@ -227,9 +247,11 @@ export class ScheduledOrdersService {
     if (!activeSubscription) {
       // Пауза — не конец подписки: расписание ждёт, а не выключается,
       // иначе клиент потеряет его из-за заморозки (пункт 6.4 Оферты)
-      if (await this.subscriptionService.isUserSubscriptionFrozen(
-        schedule.customerId,
-      )) {
+      if (
+        await this.subscriptionService.isUserSubscriptionFrozen(
+          schedule.customerId,
+        )
+      ) {
         this.logger.log(
           `Подписка пользователя ${schedule.customerId} на паузе, расписание ${schedule.id} ждёт`,
         );
@@ -254,6 +276,20 @@ export class ScheduledOrdersService {
         `Лимиты пользователя ${schedule.customerId} исчерпаны, деактивируем расписание ${schedule.id}`,
       );
       schedule.isActive = false;
+      await this.scheduledOrderRepository.save(schedule);
+      return;
+    }
+
+    // На этот вынос заказ уже есть: клиент оформил его сам или крон уже
+    // отработал, но не успел записать `lastCreatedAt`. Второй заказ на то
+    // же время клиенту не нужен, а лимит он бы потратил
+    if (
+      await this.orderService.hasOrderScheduledAt(schedule.customerId, dueAt)
+    ) {
+      this.logger.log(
+        `Вынос ${dueAt.toISOString()} у клиента ${schedule.customerId} уже заказан, расписание ${schedule.id} пропускает его`,
+      );
+      schedule.lastCreatedAt = dueAt;
       await this.scheduledOrderRepository.save(schedule);
       return;
     }
@@ -296,7 +332,9 @@ export class ScheduledOrdersService {
     }
 
     if (schedule.customerId !== customerId) {
-      throw new ForbiddenException('Это расписание принадлежит другому клиенту');
+      throw new ForbiddenException(
+        'Это расписание принадлежит другому клиенту',
+      );
     }
 
     return schedule;
@@ -351,7 +389,9 @@ export class ScheduledOrdersService {
     );
 
     if (!limits.canCreateOrder) {
-      throw new BadRequestException('Превышен лимит заказов для вашей подписки');
+      throw new BadRequestException(
+        'Превышен лимит заказов для вашей подписки',
+      );
     }
   }
 
