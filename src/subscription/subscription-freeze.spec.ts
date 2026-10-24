@@ -1,6 +1,7 @@
 import {
   checkFreeze,
   applyFreeze,
+  resumeEarly,
   MAX_FREEZE_DAYS,
   FREEZE_NOTICE_DAYS,
 } from './subscription-freeze';
@@ -104,6 +105,59 @@ describe('Заморозка подписки', () => {
       const result = applyFreeze(state({ freezeDaysUsed: 5 }), 4, now);
 
       expect(result.freezeDaysUsed).toBe(9);
+    });
+  });
+
+  describe('досрочный выход из паузы', () => {
+    const frozen = (days: number, overrides: Record<string, unknown> = {}) => ({
+      ...state({ freezeDaysUsed: days }),
+      endDate: new Date(
+        new Date('2026-11-24T12:00:00.000Z').getTime() + days * DAY,
+      ).toISOString(),
+      frozenUntil: inDays(days).toISOString(),
+      ...overrides,
+    });
+
+    it('недогулянные дни уходят из периода и возвращаются в остаток', () => {
+      const result = resumeEarly(frozen(7), inDays(3));
+
+      // три дня прошли, четыре остались
+      expect(result.freezeDaysUsed).toBe(3);
+      expect(result.endDate).toEqual(new Date('2026-11-27T12:00:00.000Z'));
+    });
+
+    it('выход в тот же день не отнимает ничего лишнего', () => {
+      const result = resumeEarly(frozen(7), now);
+
+      expect(result.freezeDaysUsed).toBe(0);
+      expect(result.endDate).toEqual(new Date('2026-11-24T12:00:00.000Z'));
+    });
+
+    it('пауза, снятая через секунду, не стоит дня', () => {
+      const result = resumeEarly(frozen(7), new Date(now.getTime() + 1000));
+
+      expect(result.freezeDaysUsed).toBe(0);
+    });
+
+    it('начатый день остаётся за клиентом', () => {
+      const result = resumeEarly(frozen(7), inDays(2.5));
+
+      // полных дней осталось четыре, половинка не отбирается
+      expect(result.freezeDaysUsed).toBe(3);
+    });
+
+    it('после конца паузы забирать нечего', () => {
+      const result = resumeEarly(frozen(7), inDays(9));
+
+      expect(result.freezeDaysUsed).toBe(7);
+      expect(result.endDate).toEqual(new Date('2026-12-01T12:00:00.000Z'));
+    });
+
+    it('без даты паузы период не меняется', () => {
+      const result = resumeEarly(frozen(7, { frozenUntil: null }), now);
+
+      expect(result.freezeDaysUsed).toBe(7);
+      expect(result.endDate).toEqual(new Date('2026-12-01T12:00:00.000Z'));
     });
   });
 });

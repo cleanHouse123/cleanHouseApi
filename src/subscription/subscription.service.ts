@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -12,6 +13,7 @@ import {
 } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/subscription.dto';
 import { UpdateSubscriptionStatusDto } from './dto/subscription.dto';
+import { resumeEarly } from './subscription-freeze';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import {
   SubscriptionResponseDto,
@@ -34,6 +36,8 @@ import { UsageFeaturesEnum } from 'src/shared/types/user-feutures';
 
 @Injectable()
 export class SubscriptionService {
+  private readonly logger = new Logger(SubscriptionService.name);
+
   constructor(
     @InjectRepository(Subscription)
     private subscriptionRepository: Repository<Subscription>,
@@ -340,6 +344,17 @@ export class SubscriptionService {
             'Невозможно активировать подписку: дата окончания уже прошла',
           );
         }
+
+        // Досрочный выход из паузы: период продлевали на весь выбранный
+        // срок, поэтому недогулянные дни забираем назад и возвращаем их
+        // в остаток из 14 дней за период (пункт 6.4 Оферты)
+        if (oldStatus === SubscriptionStatus.FROZEN) {
+          const resumed = resumeEarly(subscription, now);
+
+          subscription.endDate = resumed.endDate;
+          subscription.freezeDaysUsed = resumed.freezeDaysUsed;
+          subscription.frozenUntil = null;
+        }
       }
 
       subscription.status = newStatus;
@@ -389,11 +404,49 @@ export class SubscriptionService {
    * решит, что подписки нет, и выключит расписания навсегда.
    */
   async isUserSubscriptionFrozen(userId: string): Promise<boolean> {
-    const frozen = await this.subscriptionRepository.findOne({
-      where: { userId, status: SubscriptionStatus.FROZEN },
+    return Boolean(await this.findUserFrozenSubscription(userId));
+  }
+
+  /**
+   * Активирует подписку после успешной оплаты.
+   *
+   * Только ту, что оплаты и ждала: YooKassa доставляет уведомление повторно,
+   * пока не получит ответ 2xx, и прежде такая повторная доставка снимала
+   * паузу с уже оплаченной подписки — вместе с днями заморозки, которые
+   * клиент на неё потратил.
+   */
+  async activateAfterPayment(subscriptionId: string): Promise<void> {
+    const subscription = await this.subscriptionRepository.findOne({
+      where: { id: subscriptionId },
     });
 
-    return Boolean(frozen);
+    if (!subscription) {
+      throw new NotFoundException('Подписка не найдена');
+    }
+
+    if (subscription.status !== SubscriptionStatus.PENDING) {
+      this.logger.log(
+        `Подписка ${subscriptionId} уже в статусе ${subscription.status} — активация по оплате не нужна`,
+      );
+
+      return;
+    }
+
+    await this.updateStatus(subscriptionId, {
+      status: SubscriptionStatus.ACTIVE,
+    });
+  }
+
+  /**
+   * Приостановленная подписка клиента — нужна, чтобы отказ звучал по делу:
+   * «подписка на паузе до 31 октября», а не «превышен лимит, 0 заказов из 0».
+   */
+  async findUserFrozenSubscription(
+    userId: string,
+  ): Promise<Subscription | null> {
+    return this.subscriptionRepository.findOne({
+      where: { userId, status: SubscriptionStatus.FROZEN },
+    });
   }
 
   async getUserActiveSubscription(
@@ -550,6 +603,8 @@ export class SubscriptionService {
       canceledAt: subscription?.canceledAt || undefined,
       ordersLimit: subscription?.ordersLimit || 0,
       usedOrders: subscription?.usedOrders || 0,
+      frozenUntil: subscription?.frozenUntil ?? null,
+      freezeDaysUsed: subscription?.freezeDaysUsed || 0,
       createdAt: subscription?.createdAt || new Date(),
       updatedAt: subscription?.updatedAt || new Date(),
       paymentUrl,

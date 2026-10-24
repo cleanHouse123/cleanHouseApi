@@ -71,6 +71,16 @@ export class Payment {
   @Column({ nullable: true })
   yookassaId?: string;
 
+  /**
+   * Подписка, из которой списан вынос, — только у платежей по подписке.
+   *
+   * Без этой ссылки отмена заказа возвращала вынос в ту подписку, которая
+   * активна на момент отмены: отменив старый заказ, клиент получал
+   * бесплатный вынос по новой подписке.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  subscriptionId?: string | null;
+
   @Column({ type: 'enum', enum: RefundStatus, nullable: true })
   refundStatus?: RefundStatus | null;
 

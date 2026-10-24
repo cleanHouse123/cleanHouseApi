@@ -343,10 +343,11 @@ export class SubscriptionController {
 
       if (payment && payment.status === 'success') {
         try {
-          // Активируем подписку (с валидацией внутри updateStatus)
-          await this.subscriptionService.updateStatus(payment.subscriptionId, {
-            status: SubscriptionStatus.ACTIVE,
-          });
+          // активируем только подписку, которая ждала оплаты: повторная
+          // доставка уведомления не должна снимать паузу
+          await this.subscriptionService.activateAfterPayment(
+            payment.subscriptionId,
+          );
 
           // Отправляем уведомление через WebSocket
           this.paymentGateway.notifyPaymentSuccess(

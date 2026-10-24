@@ -200,11 +200,13 @@ export class SubscriptionLimitsService {
    * Увеличивает счетчик использованных заказов после создания заказа
    * @param userId ID пользователя
    * @param numberPackages Количество пакетов (по умолчанию 2)
+   * @returns ID подписки, из которой списан вынос, — его хранит платёж,
+   *   чтобы при отмене вернуть вынос именно в эту подписку
    */
   async incrementUsedOrders(
     userId: string,
     numberPackages: number = 2,
-  ): Promise<void> {
+  ): Promise<string | null> {
     const subscription = await this.subscriptionRepository.findOne({
       where: { userId, status: SubscriptionStatus.ACTIVE },
     });
@@ -231,19 +233,37 @@ export class SubscriptionLimitsService {
         );
       }
     }
+
+    return subscription?.id ?? null;
   }
 
   /**
-   * Уменьшает счетчик использованных заказов при отмене заказа
+   * Уменьшает счетчик использованных заказов при отмене заказа.
+   *
+   * `subscriptionId` — подписка, из которой вынос был списан: платёж по
+   * подписке её помнит. Возвращать вынос в подписку, активную на момент
+   * отмены, нельзя — отменив старый заказ, клиент получил бы бесплатный
+   * вынос по новой подписке. У платежей, созданных до появления этой
+   * ссылки, её нет: для них, как раньше, берём текущую подписку клиента —
+   * активную или на паузе.
+   *
    * @param userId ID пользователя
    */
   async decrementUsedOrders(
     userId: string,
     numberPackages: number = 2,
+    subscriptionId?: string | null,
   ): Promise<void> {
-    const subscription = await this.subscriptionRepository.findOne({
-      where: { userId, status: SubscriptionStatus.ACTIVE },
-    });
+    const subscription = subscriptionId
+      ? await this.subscriptionRepository.findOne({
+          where: { id: subscriptionId },
+        })
+      : await this.subscriptionRepository.findOne({
+          where: [
+            { userId, status: SubscriptionStatus.ACTIVE },
+            { userId, status: SubscriptionStatus.FROZEN },
+          ],
+        });
 
     if (subscription && subscription.ordersLimit !== -1 && subscription.usedOrders > 0) {
       const consumedOrders = this.calculateConsumedOrders(numberPackages);

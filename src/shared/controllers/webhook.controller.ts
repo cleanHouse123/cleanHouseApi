@@ -10,7 +10,6 @@ import { OrderPaymentGateway } from '../../order/gateways/order-payment.gateway'
 import { PaymentGateway } from '../../subscription/gateways/payment.gateway';
 import { OrderStatus } from '../../order/entities/order.entity';
 import { PaymentStatus } from '../../order/entities/payment.entity';
-import { SubscriptionStatus } from '../../subscription/entities/subscription.entity';
 import { SubscriptionPaymentStatus } from '../../subscription/entities/subscription-payment.entity';
 import { FcmService } from '../../fcm/fcm.service';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -424,10 +423,11 @@ export class WebhookController {
 
       if (payment && payment.status === SubscriptionPaymentStatus.SUCCESS) {
         try {
-          // Активируем подписку (с валидацией внутри updateStatus)
-          await this.subscriptionService.updateStatus(payment.subscriptionId, {
-            status: SubscriptionStatus.ACTIVE,
-          });
+          // активируем только подписку, которая ждала оплаты: повторная
+          // доставка уведомления не должна снимать паузу
+          await this.subscriptionService.activateAfterPayment(
+            payment.subscriptionId,
+          );
 
           // Отправляем уведомление через WebSocket (пока используем заглушку)
           this.logger.log(

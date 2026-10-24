@@ -38,6 +38,7 @@ import {
 } from './dto/cancel-with-refund.dto';
 import { PriceService } from '../price/price.service';
 import { shouldReturnPickup, PICKUP_RETURN_HOURS } from './pickup-return';
+import { formatMoscowDate } from '../shared/utils/moscow-date.util';
 import { FcmService } from '../fcm/fcm.service';
 import { UserAddress } from '../address/entities/user-address';
 import { AddressUsageFeature } from '../shared/types/address-features';
@@ -95,6 +96,20 @@ export class OrderService {
       !limits.canCreateOrder &&
       createOrderDto?.paymentMethod === PaymentMethod.SUBSCRIPTION
     ) {
+      // пауза — не исчерпанный лимит: иначе клиент видит «0 заказов из 0»
+      // и думает, что подписка кончилась (пункт 6.4 Оферты)
+      const frozen = await this.subscriptionService.findUserFrozenSubscription(
+        createOrderDto.customerId,
+      );
+
+      if (frozen) {
+        throw new BadRequestException(
+          frozen.frozenUntil
+            ? `Подписка приостановлена до ${formatMoscowDate(frozen.frozenUntil)}: выносы по ней станут доступны, когда пауза закончится`
+            : 'Подписка приостановлена: выносы по ней станут доступны, когда пауза закончится',
+        );
+      }
+
       const reason = limits.isExpired
         ? `Подписка завершена по причине: ${limits.expiryReason === 'time' ? 'истечение времени' : 'исчерпание лимитов'}`
         : 'Превышен лимит заказов для вашей подписки';
@@ -294,11 +309,14 @@ export class OrderService {
     // в методе updateStatus при переходе статуса на PAID
 
     // Считаем лимит подписки только для заказов, оплаченных по подписке
+    let chargedSubscriptionId: string | null = null;
+
     if (paymentMethod === PaymentMethod.SUBSCRIPTION) {
-      await this.subscriptionLimitsService.incrementUsedOrders(
-        createOrderDto.customerId,
-        numberPackages,
-      );
+      chargedSubscriptionId =
+        await this.subscriptionLimitsService.incrementUsedOrders(
+          createOrderDto.customerId,
+          numberPackages,
+        );
     }
 
     // Если заказ оплачен через подписку, создаем автоматический платеж
@@ -311,6 +329,8 @@ export class OrderService {
         amount: 0, // Бесплатно для подписчиков
         status: PaymentStatus.PAID,
         method: PaymentMethod.SUBSCRIPTION,
+        // чтобы отмена вернула вынос в ту же подписку
+        subscriptionId: chargedSubscriptionId,
       });
       await this.paymentRepository.save(payment);
 
@@ -756,6 +776,7 @@ export class OrderService {
           await this.subscriptionLimitsService.decrementUsedOrders(
             order.customerId,
             order.numberPackages ?? 2,
+            subscriptionPayment.subscriptionId,
           );
         } else {
           this.logger.log(

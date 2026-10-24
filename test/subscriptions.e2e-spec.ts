@@ -49,13 +49,8 @@ describe('Подписки', () => {
     await testApp.close();
   });
 
-  /** Клиент с оплаченной подпиской */
-  const customerWithSubscription = async (): Promise<{
-    user: TestUser;
-    subscriptionId: string;
-  }> => {
-    const user = await createUser(testApp);
-
+  /** Оплаченная подписка для уже созданного клиента */
+  const buySubscriptionFor = async (user: TestUser): Promise<string> => {
     const created = await testApp
       .http()
       .post('/subscriptions/by-plan')
@@ -90,7 +85,27 @@ describe('Подписки', () => {
       })
       .expect(201);
 
-    return { user, subscriptionId };
+    return subscriptionId;
+  };
+
+  /** Клиент с оплаченной подпиской */
+  const customerWithSubscription = async (): Promise<{
+    user: TestUser;
+    subscriptionId: string;
+  }> => {
+    const user = await createUser(testApp);
+
+    return { user, subscriptionId: await buySubscriptionFor(user) };
+  };
+
+  /** Платёж подписки, который YooKassa уже подтверждала */
+  const paidPaymentIdOf = async (subscriptionId: string): Promise<string> => {
+    const payments = await testApp.dataSource.query(
+      `SELECT id FROM subscription_payments WHERE "subscriptionId" = $1 ORDER BY "createdAt" DESC LIMIT 1`,
+      [subscriptionId],
+    );
+
+    return payments[0].id;
   };
 
   /** Заказ по подписке на указанное время выноса */
@@ -183,6 +198,33 @@ describe('Подписки', () => {
       const subscription = await subscriptionOf(user, subscriptionId);
       expect(subscription.usedOrders).toBe(0);
     });
+
+    it('вынос возвращается в ту подписку, из которой был списан', async () => {
+      const { user, subscriptionId: oldSubscriptionId } =
+        await customerWithSubscription();
+      const order = await orderBySubscription(user, hoursFromNow(24));
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${oldSubscriptionId}/cancel-by-customer`)
+        .set(asUser(user))
+        .expect(200);
+
+      const newSubscriptionId = await buySubscriptionFor(user);
+
+      await testApp
+        .http()
+        .patch(`/orders/${order.body.id}/cancel-by-customer`)
+        .set(asUser(user))
+        .expect(200);
+
+      // иначе, отменив старый заказ, клиент получал бесплатный вынос
+      const newSubscription = await subscriptionOf(user, newSubscriptionId);
+      expect(newSubscription.usedOrders).toBe(0);
+
+      const oldSubscription = await subscriptionOf(user, oldSubscriptionId);
+      expect(oldSubscription.usedOrders).toBe(0);
+    });
   });
 
   describe('заморозка, пункт 6.4', () => {
@@ -204,6 +246,10 @@ describe('Подписки', () => {
         new Date(after.endDate).getTime() - new Date(before.endDate).getTime();
 
       expect(Math.round(shift / (24 * 60 * 60 * 1000))).toBe(7);
+
+      // клиенту нужно показать, до какого числа пауза и сколько дней ушло
+      expect(after.frozenUntil).toBeTruthy();
+      expect(after.freezeDaysUsed).toBe(7);
     });
 
     it('на паузе заказ по подписке не оформить', async () => {
@@ -216,7 +262,7 @@ describe('Подписки', () => {
         .send({ days: 3 })
         .expect(200);
 
-      await testApp
+      const refused = await testApp
         .http()
         .post('/orders')
         .set(asUser(user))
@@ -227,6 +273,105 @@ describe('Подписки', () => {
           numberPackages: 2,
         })
         .expect(400);
+
+      // не «превышен лимит, 0 заказов из 0»: подписка на паузе, а не кончилась
+      expect(refused.body.message).toContain('приостановлена');
+      expect(refused.body.message).not.toContain('лимит');
+    });
+
+    it('повторный вебхук оплаты паузу не снимает', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      const frozen = await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 7 })
+        .expect(200);
+
+      const paymentId = await paidPaymentIdOf(subscriptionId);
+
+      // YooKassa повторяет уведомление, пока не получит 2xx
+      await testApp
+        .http()
+        .post('/subscriptions/payment/yookassa-webhook')
+        .send({
+          event: 'payment.succeeded',
+          object: {
+            id: `yk-${paymentId}`,
+            status: 'succeeded',
+            metadata: { subscriptionId, paymentId },
+          },
+        })
+        .expect(201);
+
+      const subscription = await subscriptionOf(user, subscriptionId);
+
+      expect(subscription.status).toBe('frozen');
+      expect(subscription.endDate).toBe(frozen.body.endDate);
+    });
+
+    it('досрочный выход из паузы возвращает недогулянные дни', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      const beforeFreeze = await subscriptionOf(user, subscriptionId);
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 7 })
+        .expect(200);
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/status`)
+        .set(asUser(admin))
+        .send({ status: 'active' })
+        .expect(200);
+
+      const subscription = await subscriptionOf(user, subscriptionId);
+
+      // пауза снята в тот же день — период не удлинился
+      expect(subscription.status).toBe('active');
+      expect(new Date(subscription.endDate).getTime()).toBe(
+        new Date(beforeFreeze.endDate).getTime(),
+      );
+
+      // и все 14 дней снова доступны
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 14 })
+        .expect(200);
+    });
+
+    it('на паузе расписание не настроить, и причина названа', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 3 })
+        .expect(200);
+
+      const refused = await testApp
+        .http()
+        .post('/scheduled-orders')
+        .set(asUser(user))
+        .send({
+          address: ADDRESS,
+          frequency: 'daily',
+          preferredTime: '10:00',
+          numberPackages: 2,
+          paymentMethod: 'subscription',
+          startDate: new Date().toISOString(),
+        })
+        .expect(400);
+
+      expect(refused.body.message).toContain('приостановлена');
     });
 
     it('дважды подряд заморозить нельзя', async () => {

@@ -1,12 +1,8 @@
 import { ScheduleFrequency } from '../entities/scheduled-order.entity';
+import { MOSCOW_OFFSET_MINUTES } from '../../shared/utils/moscow-date.util';
 
-/**
- * Расписание живёт по московскому времени: клиент выбирает «вторник, 10:00»
- * и ждёт вынос во вторник утром, а не в понедельник ночью по UTC. В России
- * нет перехода на летнее время с 2014 года, поэтому хватает фиксированного
- * сдвига — тянуть часовые пояса ради этого не нужно.
- */
-export const MOSCOW_OFFSET_MINUTES = 180;
+/** Расписание живёт по московскому времени */
+export { MOSCOW_OFFSET_MINUTES };
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
