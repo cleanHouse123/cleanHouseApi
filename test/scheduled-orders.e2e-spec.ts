@@ -6,6 +6,7 @@ import {
   TestUser,
 } from './harness';
 import { UserRole } from '../src/shared/types/user.role';
+import { ScheduledOrdersService } from '../src/scheduled-orders/services/scheduled-orders.service';
 
 /**
  * Расписания: заводятся подписчиком, закрыты от чужих, а движок создаёт
@@ -135,6 +136,138 @@ describe('Расписания заказов', () => {
 
     // из базы simple-array читается строками: по ним крон не срабатывал
     expect(custom.daysOfWeek).toEqual([2, 4]);
+  });
+
+  /** Московский полдень следующих суток: всегда в будущем и всегда внутри дня */
+  const nextMoscowNoon = (): Date => {
+    const moscow = new Date(Date.now() + 180 * 60 * 1000);
+
+    return new Date(
+      Date.UTC(
+        moscow.getUTCFullYear(),
+        moscow.getUTCMonth(),
+        moscow.getUTCDate() + 1,
+        12,
+        0,
+      ) -
+        180 * 60 * 1000,
+    );
+  };
+
+  const liveOrdersAt = async (user: TestUser, scheduledAt: Date) => {
+    const mine = await testApp
+      .http()
+      .get(`/orders/customer/${user.id}`)
+      .set(asUser(user))
+      .expect(200);
+
+    return (
+      mine.body as { status: string; scheduledAt: string }[]
+    ).filter(
+      (order) =>
+        order.status !== 'canceled' &&
+        new Date(order.scheduledAt).getTime() === scheduledAt.getTime(),
+    );
+  };
+
+  it('движок создаёт заказ на подошедший вынос', async () => {
+    const user = await subscriber();
+    const pickup = nextMoscowNoon();
+
+    expect((await createSchedule(user, { preferredTime: '12:00' })).status).toBe(
+      201,
+    );
+
+    await testApp.app
+      .get(ScheduledOrdersService)
+      .processScheduledOrders(new Date(pickup.getTime() - 60 * 60 * 1000));
+
+    const created = await liveOrdersAt(user, pickup);
+
+    expect(created).toHaveLength(1);
+    expect(created[0].status).toBe('paid');
+  });
+
+  it('второй заказ на тот же вынос не создаётся', async () => {
+    const user = await subscriber();
+    const pickup = nextMoscowNoon();
+    const hourBefore = new Date(pickup.getTime() - 60 * 60 * 1000);
+
+    expect((await createSchedule(user, { preferredTime: '12:00' })).status).toBe(
+      201,
+    );
+
+    const engine = testApp.app.get(ScheduledOrdersService);
+
+    // клиент успел оформить этот вынос сам
+    await testApp
+      .http()
+      .post('/orders')
+      .set(asUser(user))
+      .send({
+        customerId: user.id,
+        address: ADDRESS,
+        paymentMethod: 'subscription',
+        numberPackages: 2,
+        scheduledAt: pickup.toISOString(),
+      })
+      .expect(201);
+
+    await engine.processScheduledOrders(hourBefore);
+    // а крон ходит раз в полчаса
+    await engine.processScheduledOrders(hourBefore);
+
+    expect(await liveOrdersAt(user, pickup)).toHaveLength(1);
+  });
+
+  it('смена частоты включает расписание сразу, а не после заказанного выноса', async () => {
+    const user = await subscriber();
+    const pickup = nextMoscowNoon();
+
+    const created = await createSchedule(user, {
+      frequency: 'weekly',
+      preferredTime: '08:00',
+      firstPickupAlreadyOrdered: true,
+    });
+
+    expect(created.body.lastCreatedAt).toBeTruthy();
+
+    const changed = await testApp
+      .http()
+      .patch(`/scheduled-orders/${created.body.id}`)
+      .set(asUser(user))
+      .send({ frequency: 'daily', preferredTime: '12:00' })
+      .expect(200);
+
+    expect(changed.body.lastCreatedAt).toBeFalsy();
+
+    await testApp.app
+      .get(ScheduledOrdersService)
+      .processScheduledOrders(new Date(pickup.getTime() - 60 * 60 * 1000));
+
+    expect(await liveOrdersAt(user, pickup)).toHaveLength(1);
+  });
+
+  it('включение расписания историю заказов не забывает', async () => {
+    const user = await subscriber();
+
+    const created = await createSchedule(user, {
+      firstPickupAlreadyOrdered: true,
+    });
+
+    await testApp
+      .http()
+      .patch(`/scheduled-orders/${created.body.id}/deactivate`)
+      .set(asUser(user))
+      .expect(200);
+
+    const activated = await testApp
+      .http()
+      .patch(`/scheduled-orders/${created.body.id}/activate`)
+      .set(asUser(user))
+      .expect(200);
+
+    expect(activated.body.lastCreatedAt).toBeTruthy();
   });
 
   it('вынос, уже заказанный вручную, не повторяется', async () => {

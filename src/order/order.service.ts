@@ -841,6 +841,29 @@ export class OrderService {
     return orders.map((order) => this.transformToResponseDto(order));
   }
 
+  /**
+   * Есть ли у клиента живой заказ ровно на это время выноса.
+   *
+   * Нужно расписаниям: крон ходит раз в полчаса, и до этой проверки от
+   * второго заказа на тот же вынос спасала только запись `lastCreatedAt`.
+   * Отменённый заказ не в счёт — на его место можно заказать заново.
+   */
+  async hasOrderScheduledAt(
+    customerId: string,
+    scheduledAt: Date,
+  ): Promise<boolean> {
+    const existing = await this.orderRepository.findOne({
+      where: {
+        customerId,
+        scheduledAt,
+        status: Not(OrderStatus.CANCELED),
+      },
+      select: { id: true },
+    });
+
+    return Boolean(existing);
+  }
+
   async getOrdersByCurrier(currierId: string): Promise<OrderResponseDto[]> {
     const orders = await this.orderRepository.find({
       where: { currierId },
