@@ -10,6 +10,7 @@ import { AuditService } from './services/audit.service';
 import { PriceValidationService } from './services/price-validation.service';
 import { SubscriptionPlansService } from './services/subscription-plans.service';
 import { SubscriptionRefundService } from './services/subscription-refund.service';
+import { SubscriptionFreezeService } from './services/subscription-freeze.service';
 import { RefundModule } from '../order/services/refund.module';
 import { PaymentGateway } from './gateways/payment.gateway';
 import { SharedConfigService } from '../shared/services/config.service';
@@ -52,6 +53,7 @@ import { CouponModule } from '../coupon/coupon.module';
   ],
   providers: [
     SubscriptionRefundService,
+    SubscriptionFreezeService,
     SubscriptionService,
     PaymentService,
     AuditService,
@@ -64,6 +66,7 @@ import { CouponModule } from '../coupon/coupon.module';
   ],
   exports: [
     SubscriptionRefundService,
+    SubscriptionFreezeService,
     SubscriptionService,
     PaymentService,
     AuditService,

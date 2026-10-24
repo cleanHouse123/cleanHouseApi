@@ -201,6 +201,9 @@ export class SubscriptionService {
         endDate: endDate,
         status: subscriptionStatus,
         ordersLimit: plan.ordersLimit,
+        // фиксируем цену пакета: тариф потом может измениться, а удержание
+        // по пункту 6.2 считается по условиям на момент покупки
+        bagPriceInKopecks: plan.bagPriceInKopecks ?? 0,
         usedOrders: 0,
       });
 
@@ -377,6 +380,20 @@ export class SubscriptionService {
 
       return this.transformToResponseDto(updatedSubscription);
     });
+  }
+
+  /**
+   * Приостановлена ли подписка клиента, пункт 6.4 Оферты.
+   *
+   * Отличить паузу от отсутствия подписки важно: иначе крон расписаний
+   * решит, что подписки нет, и выключит расписания навсегда.
+   */
+  async isUserSubscriptionFrozen(userId: string): Promise<boolean> {
+    const frozen = await this.subscriptionRepository.findOne({
+      where: { userId, status: SubscriptionStatus.FROZEN },
+    });
+
+    return Boolean(frozen);
   }
 
   async getUserActiveSubscription(
