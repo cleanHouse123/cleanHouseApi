@@ -2,6 +2,7 @@ import {
   startTestApp,
   createUser,
   asUser,
+  payForOrder,
   TestApp,
   TestUser,
 } from './harness';
@@ -33,7 +34,7 @@ describe('Заказы и возвраты', () => {
     await testApp.close();
   });
 
-  /** Заказ, доведённый до оплаченного состояния */
+  /** Заказ, доведённый до оплаченного состояния настоящим путём */
   const createPaidOrder = async (user: TestUser, scheduledAt?: string) => {
     const created = await testApp
       .http()
@@ -48,12 +49,7 @@ describe('Заказы и возвраты', () => {
       })
       .expect(201);
 
-    await testApp
-      .http()
-      .patch(`/orders/${created.body.id}/status`)
-      .set(asUser(admin))
-      .send({ status: 'paid' })
-      .expect(200);
+    await payForOrder(testApp, user, created.body.id, created.body.price);
 
     return created.body;
   };

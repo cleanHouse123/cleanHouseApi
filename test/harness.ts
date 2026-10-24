@@ -23,6 +23,9 @@ process.env.TYPEORM_SYNCHRONIZE = 'true';
 // регистрация через email выдаёт роль администратора и на бою закрыта;
 // в изолированной тестовой базе она нужна, чтобы заводить участников
 process.env.ALLOW_ADMIN_REGISTRATION = 'true';
+// вебхук приходит не с адресов YooKassa, а из supertest: тесты идут тем же
+// путём, что и настоящая оплата, поэтому проверку адреса снимаем здесь
+process.env.YOOKASSA_WEBHOOK_ENFORCE_IP = 'false';
 // телеграм-бот поднимается вместе с приложением и требует токен формата
 // "<id>:<ключ>"; наружу он в тестах не ходит
 process.env.TELEGRAM_BOT_TOKEN =
@@ -104,6 +107,38 @@ export const createUser = async (
     .expect(200);
 
   return { id, email, token: login.body.accessToken };
+};
+
+/**
+ * Доводит заказ до оплаченного тем же путём, что и настоящая оплата:
+ * платёж создаётся, затем приходит webhook `payment.succeeded`.
+ * Симуляций оплаты в API больше нет — они были чёрным ходом.
+ */
+export const payForOrder = async (
+  testApp: TestApp,
+  user: TestUser,
+  orderId: string,
+  amountInKopecks: number,
+): Promise<void> => {
+  const payment = await testApp
+    .http()
+    .post('/orders/payment/create')
+    .set(asUser(user))
+    .send({ orderId, amount: amountInKopecks })
+    .expect(201);
+
+  await testApp
+    .http()
+    .post('/orders/payment/yookassa-webhook')
+    .send({
+      event: 'payment.succeeded',
+      object: {
+        id: `yk-${payment.body.paymentId}`,
+        status: 'succeeded',
+        metadata: { orderId, paymentId: payment.body.paymentId },
+      },
+    })
+    .expect(201);
 };
 
 /** Заголовок авторизации для supertest */
