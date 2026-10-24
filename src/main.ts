@@ -2,6 +2,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
+import { StripSecretsInterceptor } from './shared/interceptors/strip-secrets.interceptor';
 
 async function bootstrap() {
   process.env.TZ = 'UTC';
@@ -41,7 +42,11 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
+    // последний рубеж: хеши паролей и токенов не должны уйти ни одним ответом
+    new StripSecretsInterceptor(),
+  );
 
   const port = process.env.PORT ?? 3000;
   console.log(`[bootstrap] Starting HTTP listener on port ${port}`);

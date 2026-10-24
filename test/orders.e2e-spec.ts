@@ -67,6 +67,32 @@ describe('Заказы и возвраты', () => {
     expect(fetched.body.price).toBeGreaterThan(0);
   });
 
+  it('ответ по заказу не уносит хеши пароля и токена', async () => {
+    const order = await createPaidOrder(customer);
+
+    const own = await testApp
+      .http()
+      .get(`/orders/${order.id}`)
+      .set(asUser(customer))
+      .expect(200);
+
+    const list = await testApp
+      .http()
+      .get(`/orders/customer/${customer.id}`)
+      .set(asUser(customer))
+      .expect(200);
+
+    for (const body of [order, own.body, list.body]) {
+      const serialized = JSON.stringify(body);
+
+      expect(serialized).not.toContain('hash_password');
+      expect(serialized).not.toContain('refreshTokenHash');
+    }
+
+    // при этом нужное про заказчика остаётся
+    expect(own.body.customer.id).toBe(customer.id);
+  });
+
   it('полный возврат уходит на оплаченную сумму в копейках', async () => {
     const order = await createPaidOrder(customer);
 
