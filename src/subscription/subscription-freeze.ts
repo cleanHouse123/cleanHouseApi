@@ -16,7 +16,8 @@ export const MAX_FREEZE_DAYS = 14;
 /** За сколько дней до ближайшего выноса нужно предупредить */
 export const FREEZE_NOTICE_DAYS = 2;
 
-const DAY = 24 * 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
 
 export interface FreezeState {
   /** Сколько дней заморозки уже израсходовано за период */
@@ -98,3 +99,35 @@ export const applyFreeze = (
   endDate: new Date(new Date(subscription.endDate).getTime() + days * DAY),
   freezeDaysUsed: subscription.freezeDaysUsed + days,
 });
+
+export interface ResumedPeriod {
+  /** Конец периода без неиспользованных дней паузы */
+  endDate: Date;
+  freezeDaysUsed: number;
+}
+
+/**
+ * Границы подписки, если пауза снята досрочно.
+ *
+ * Период продлевали на весь выбранный срок, поэтому недогулянные дни нужно
+ * забрать назад — и вернуть их в остаток из 14 дней за период. Неполные дни
+ * считаем в пользу клиента: день, начатый на паузе, остаётся за ним.
+ */
+export const resumeEarly = (
+  subscription: FreezeState & { frozenUntil?: Date | string | null },
+  now: Date,
+): ResumedPeriod => {
+  const left = subscription.frozenUntil
+    ? new Date(subscription.frozenUntil).getTime() - now.getTime()
+    : 0;
+  // запас на доли секунды между записью паузы и выходом из неё: иначе
+  // пауза, снятая тут же, стоила бы клиенту целого дня
+  const unusedDays = Math.max(0, Math.floor((left + MINUTE) / DAY));
+
+  return {
+    endDate: new Date(
+      new Date(subscription.endDate).getTime() - unusedDays * DAY,
+    ),
+    freezeDaysUsed: Math.max(0, subscription.freezeDaysUsed - unusedDays),
+  };
+};

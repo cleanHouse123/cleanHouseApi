@@ -104,6 +104,21 @@ export class SubscriptionResponseDto {
   usedOrders: number;
 
   @ApiProperty({
+    description: 'До какого момента подписка на паузе, пункт 6.4 Оферты',
+    example: '2026-10-31T18:47:05.982Z',
+    required: false,
+  })
+  @Expose()
+  frozenUntil?: Date | null;
+
+  @ApiProperty({
+    description: 'Сколько дней заморозки израсходовано за период (из 14)',
+    example: 7,
+  })
+  @Expose()
+  freezeDaysUsed: number;
+
+  @ApiProperty({
     description: 'Дата создания',
     example: '2024-01-15T10:00:00Z',
   })
