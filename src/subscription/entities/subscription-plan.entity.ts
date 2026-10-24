@@ -26,6 +26,14 @@ export class SubscriptionPlan {
   @Column('integer')
   priceInKopecks: number;
 
+  /**
+   * Стоимость одного мусорного пакета в копейках. При возврате по подписке
+   * из суммы удерживается стоимость использованных пакетов — пункт 6.2
+   * Оферты. 0 — не удерживать.
+   */
+  @Column({ type: 'integer', default: 0 })
+  bagPriceInKopecks: number;
+
   @Column()
   duration: string;
 

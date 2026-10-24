@@ -73,6 +73,48 @@ describe('calculateSubscriptionRefund', () => {
     expect(result.refundAmount).toBe(100_000);
   });
 
+  describe('удержание за пакеты, пункт 6.2', () => {
+    it('по пакету за каждый состоявшийся вынос', () => {
+      const result = calculateSubscriptionRefund(
+        subscription({ usedOrders: 3, bagPriceInKopecks: 500 }),
+        now,
+      );
+
+      // 1000 ₽ − 300 ₽ за выносы − 15 ₽ за три пакета
+      expect(result.bagsDeduction).toBe(1_500);
+      expect(result.refundAmount).toBe(68_500);
+    });
+
+    it('нулевая цена пакета ничего не удерживает', () => {
+      const result = calculateSubscriptionRefund(
+        subscription({ usedOrders: 3, bagPriceInKopecks: 0 }),
+        now,
+      );
+
+      expect(result.bagsDeduction).toBe(0);
+      expect(result.refundAmount).toBe(70_000);
+    });
+
+    it('без выносов пакеты не удерживаются', () => {
+      const result = calculateSubscriptionRefund(
+        subscription({ usedOrders: 0, bagPriceInKopecks: 500 }),
+        now,
+      );
+
+      expect(result.bagsDeduction).toBe(0);
+      expect(result.refundAmount).toBe(100_000);
+    });
+
+    it('удержание не уводит возврат в минус', () => {
+      const result = calculateSubscriptionRefund(
+        subscription({ usedOrders: 9, bagPriceInKopecks: 50_000 }),
+        now,
+      );
+
+      expect(result.refundAmount).toBe(0);
+    });
+  });
+
   describe('безлимитный тариф', () => {
     const unlimited = (overrides: Record<string, unknown> = {}) =>
       subscription({ ordersLimit: -1, ...overrides });

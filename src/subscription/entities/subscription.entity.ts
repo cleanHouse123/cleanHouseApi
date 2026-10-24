@@ -18,6 +18,8 @@ export enum SubscriptionType {
 export enum SubscriptionStatus {
   PENDING = 'pending',
   ACTIVE = 'active',
+  /** Приостановлена клиентом, пункт 6.4 Оферты. Оживает сама */
+  FROZEN = 'frozen',
   EXPIRED = 'expired',
   CANCELED = 'canceled',
 }
@@ -33,6 +35,18 @@ export class Subscription {
 
   @Column({ type: 'integer', default: -1 }) // -1 = безлимит
   ordersLimit: number;
+
+  /** Цена пакета на момент покупки: тариф потом может измениться */
+  @Column({ type: 'integer', default: 0 })
+  bagPriceInKopecks: number;
+
+  /** До какого момента подписка на паузе, пункт 6.4 Оферты */
+  @Column({ type: 'timestamptz', nullable: true })
+  frozenUntil?: Date | null;
+
+  /** Сколько дней заморозки израсходовано за период */
+  @Column({ type: 'integer', default: 0 })
+  freezeDaysUsed: number;
 
   @Column({ type: 'integer', default: 0 })
   usedOrders: number;

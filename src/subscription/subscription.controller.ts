@@ -49,6 +49,8 @@ import { SubscriptionPriceDto } from './dto/subscription-price.dto';
 import { UserRole } from '../shared/types/user.role';
 import { SubscriptionRefundService } from './services/subscription-refund.service';
 import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
+import { FreezeSubscriptionDto } from './dto/freeze-subscription.dto';
+import { SubscriptionFreezeService } from './services/subscription-freeze.service';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -60,6 +62,7 @@ export class SubscriptionController {
     private readonly paymentService: PaymentService,
     private readonly paymentGateway: PaymentGateway,
     private readonly subscriptionRefundService: SubscriptionRefundService,
+    private readonly subscriptionFreezeService: SubscriptionFreezeService,
   ) {}
 
   @Post()
@@ -219,6 +222,19 @@ export class SubscriptionController {
   @ApiOperation({ summary: 'Расчёт возврата по пункту 6.7 Оферты' })
   async previewRefund(@Param('id', ParseUUIDPipe) id: string) {
     return this.subscriptionRefundService.previewRefund(id);
+  }
+
+  @Patch(':id/freeze')
+  @ApiOperation({ summary: 'Приостановить подписку, пункт 6.4 Оферты' })
+  @ApiResponse({ status: 200, description: 'Подписка приостановлена' })
+  @ApiResponse({ status: 400, description: 'Срок исчерпан или поздно' })
+  @ApiResponse({ status: 403, description: 'Чужая подписка' })
+  async freeze(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: FreezeSubscriptionDto,
+    @GetUserMetadata() user: UserMetadata,
+  ) {
+    return this.subscriptionFreezeService.freeze(id, dto.days, user.userId);
   }
 
   @Patch(':id/cancel-by-customer')

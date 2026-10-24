@@ -52,6 +52,16 @@ export class CreateSubscriptionPlanDto {
   ordersLimit?: number;
 
   /**
+   * Стоимость одного мусорного пакета в копейках. Удерживается из возврата
+   * за использованные пакеты, пункт 6.2 Оферты. 0 — не удерживать
+   */
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  bagPriceInKopecks?: number;
+
+  /**
    * Разрешено ли получать этот план бесплатно по реферальной программе
    */
   @Type(() => Boolean)

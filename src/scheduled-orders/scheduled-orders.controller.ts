@@ -16,6 +16,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ScheduledOrdersService } from './services/scheduled-orders.service';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import {
   CreateScheduledOrderDto,
   UpdateScheduledOrderDto,
@@ -63,6 +64,22 @@ export class ScheduledOrdersController {
       createScheduledOrderDto,
       user.id,
     );
+  }
+
+  @Post('run')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Прогнать расписания сейчас, не дожидаясь крона',
+    description:
+      'Создаёт заказы по тем расписаниям, которым подошло время. ' +
+      'Нужен, чтобы проверить движок и вручную догнать пропущенное, ' +
+      'если крон стоял',
+  })
+  @ApiResponse({ status: 201, description: 'Расписания обработаны' })
+  async runNow(): Promise<{ message: string }> {
+    await this.scheduledOrdersService.processScheduledOrders();
+
+    return { message: 'Расписания обработаны' };
   }
 
   @Get('my-schedules')

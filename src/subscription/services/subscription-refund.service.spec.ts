@@ -55,6 +55,10 @@ describe('SubscriptionRefundService', () => {
         amountInKopecks: 70_000,
       }),
     };
+    // отказ от подписки гасит расписания клиента
+    const scheduledOrderRepository = {
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
 
     const service = Object.create(
       SubscriptionRefundService.prototype,
@@ -62,11 +66,19 @@ describe('SubscriptionRefundService', () => {
     Object.assign(service, {
       subscriptionRepository,
       paymentRepository,
+      scheduledOrderRepository,
       refundService,
       logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
     });
 
-    return { service, subscription, payment, refundService, paymentRepository };
+    return {
+      service,
+      subscription,
+      payment,
+      refundService,
+      paymentRepository,
+      scheduledOrderRepository,
+    };
   };
 
   describe('отказ клиента', () => {
@@ -77,6 +89,17 @@ describe('SubscriptionRefundService', () => {
 
       expect(result.status).toBe(SubscriptionStatus.CANCELED);
       expect(subscription.status).toBe(SubscriptionStatus.CANCELED);
+    });
+
+    it('гасит расписания клиента', async () => {
+      const { service, scheduledOrderRepository } = build();
+
+      await service.cancelByCustomer('sub-1', 'user-1');
+
+      expect(scheduledOrderRepository.update).toHaveBeenCalledWith(
+        { customerId: 'user-1', isActive: true },
+        { isActive: false },
+      );
     });
 
     it('чужую подписку отменить нельзя', async () => {

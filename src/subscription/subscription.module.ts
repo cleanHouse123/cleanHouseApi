@@ -10,10 +10,12 @@ import { AuditService } from './services/audit.service';
 import { PriceValidationService } from './services/price-validation.service';
 import { SubscriptionPlansService } from './services/subscription-plans.service';
 import { SubscriptionRefundService } from './services/subscription-refund.service';
+import { SubscriptionFreezeService } from './services/subscription-freeze.service';
 import { RefundModule } from '../order/services/refund.module';
 import { PaymentGateway } from './gateways/payment.gateway';
 import { SharedConfigService } from '../shared/services/config.service';
 import { Subscription } from './entities/subscription.entity';
+import { ScheduledOrder } from '../scheduled-orders/entities/scheduled-order.entity';
 import { SubscriptionPayment } from './entities/subscription-payment.entity';
 import { PaymentAudit } from './entities/payment-audit.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
@@ -30,6 +32,7 @@ import { CouponModule } from '../coupon/coupon.module';
   imports: [
     RefundModule,
     TypeOrmModule.forFeature([
+      ScheduledOrder,
       Subscription,
       SubscriptionPayment,
       PaymentAudit,
@@ -50,6 +53,7 @@ import { CouponModule } from '../coupon/coupon.module';
   ],
   providers: [
     SubscriptionRefundService,
+    SubscriptionFreezeService,
     SubscriptionService,
     PaymentService,
     AuditService,
@@ -62,6 +66,7 @@ import { CouponModule } from '../coupon/coupon.module';
   ],
   exports: [
     SubscriptionRefundService,
+    SubscriptionFreezeService,
     SubscriptionService,
     PaymentService,
     AuditService,

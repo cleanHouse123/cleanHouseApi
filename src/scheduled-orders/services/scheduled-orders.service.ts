@@ -224,6 +224,17 @@ export class ScheduledOrdersService {
       );
 
     if (!activeSubscription) {
+      // Пауза — не конец подписки: расписание ждёт, а не выключается,
+      // иначе клиент потеряет его из-за заморозки (пункт 6.4 Оферты)
+      if (await this.subscriptionService.isUserSubscriptionFrozen(
+        schedule.customerId,
+      )) {
+        this.logger.log(
+          `Подписка пользователя ${schedule.customerId} на паузе, расписание ${schedule.id} ждёт`,
+        );
+        return;
+      }
+
       this.logger.warn(
         `Подписка пользователя ${schedule.customerId} истекла, деактивируем расписание ${schedule.id}`,
       );

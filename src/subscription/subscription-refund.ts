@@ -10,10 +10,12 @@
  * безлимитного делить не на что, поэтому считаем пропорционально неиспользованным
  * дням — ближе всего к смыслу пункта, где возвращают за неполученное.
  *
- * Удержания из того же пункта — фактические расходы за поздние отмены (8.2) и
- * стоимость использованных пакетов (6.2) — здесь не считаются: ни тех, ни
- * других данных в базе нет. Администратор вычитает их вручную, выбрав
- * частичный возврат.
+ * Из возврата удерживается стоимость использованных пакетов — пункт 6.2
+ * Оферты, по одному пакету на состоявшийся вынос. Цена пакета берётся из
+ * тарифа на момент покупки; ноль означает «не удерживать».
+ *
+ * Фактические расходы за поздние отмены (8.2) по-прежнему не считаются:
+ * этих данных в базе нет, администратор вычитает их вручную.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -26,6 +28,8 @@ export interface SubscriptionRefundInput {
   usedOrders: number;
   startDate: Date | string;
   endDate: Date | string;
+  /** Цена одного пакета в копейках, 0 — не удерживать */
+  bagPriceInKopecks?: number;
 }
 
 export interface SubscriptionRefundBreakdown {
@@ -40,6 +44,8 @@ export interface SubscriptionRefundBreakdown {
   usedAmount?: number;
   totalDays?: number;
   remainingDays?: number;
+  /** Удержано за использованные пакеты, пункт 6.2 Оферты */
+  bagsDeduction: number;
   /** Сколько предлагается вернуть, в копейках */
   refundAmount: number;
 }
@@ -57,6 +63,12 @@ export const calculateSubscriptionRefund = (
   const price = Math.round(Number(subscription.price));
   const { ordersLimit, usedOrders } = subscription;
 
+  // по одному пакету на состоявшийся вынос
+  const bagsDeduction = Math.max(
+    0,
+    Math.round((subscription.bagPriceInKopecks ?? 0) * Math.max(0, usedOrders)),
+  );
+
   if (ordersLimit > 0) {
     const pricePerPickup = Math.round(price / ordersLimit);
     const usedAmount = Math.round((price * usedOrders) / ordersLimit);
@@ -68,7 +80,8 @@ export const calculateSubscriptionRefund = (
       ordersLimit,
       pricePerPickup,
       usedAmount,
-      refundAmount: clamp(price - usedAmount, price),
+      bagsDeduction,
+      refundAmount: clamp(price - usedAmount - bagsDeduction, price),
     };
   }
 
@@ -85,6 +98,10 @@ export const calculateSubscriptionRefund = (
     ordersLimit,
     totalDays,
     remainingDays,
-    refundAmount: clamp((price * remainingDays) / totalDays, price),
+    bagsDeduction,
+    refundAmount: clamp(
+      (price * remainingDays) / totalDays - bagsDeduction,
+      price,
+    ),
   };
 };

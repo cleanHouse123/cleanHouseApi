@@ -185,6 +185,106 @@ describe('Подписки', () => {
     });
   });
 
+  describe('заморозка, пункт 6.4', () => {
+    it('подписка встаёт на паузу и период продлевается', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+      const before = await subscriptionOf(user, subscriptionId);
+
+      const frozen = await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 7 })
+        .expect(200);
+
+      expect(frozen.body.status).toBe('frozen');
+
+      const after = await subscriptionOf(user, subscriptionId);
+      const shift =
+        new Date(after.endDate).getTime() - new Date(before.endDate).getTime();
+
+      expect(Math.round(shift / (24 * 60 * 60 * 1000))).toBe(7);
+    });
+
+    it('на паузе заказ по подписке не оформить', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 3 })
+        .expect(200);
+
+      await testApp
+        .http()
+        .post('/orders')
+        .set(asUser(user))
+        .send({
+          customerId: user.id,
+          address: ADDRESS,
+          paymentMethod: 'subscription',
+          numberPackages: 2,
+        })
+        .expect(400);
+    });
+
+    it('дважды подряд заморозить нельзя', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 3 })
+        .expect(200);
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 3 })
+        .expect(400);
+    });
+
+    it('больше четырнадцати дней не принимается', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 15 })
+        .expect(400);
+    });
+
+    it('ближайший вынос раньше двух дней мешает заморозке', async () => {
+      const { user, subscriptionId } = await customerWithSubscription();
+      await orderBySubscription(user, hoursFromNow(24));
+
+      const result = await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(user))
+        .send({ days: 3 });
+
+      expect(result.status).toBe(400);
+      expect(result.body.message).toContain('2 дня');
+    });
+
+    it('чужую подписку заморозить нельзя', async () => {
+      const { subscriptionId } = await customerWithSubscription();
+      const stranger = await createUser(testApp);
+
+      await testApp
+        .http()
+        .patch(`/subscriptions/${subscriptionId}/freeze`)
+        .set(asUser(stranger))
+        .send({ days: 3 })
+        .expect(403);
+    });
+  });
+
   describe('отказ от подписки и возврат по 6.7', () => {
     it('отказ не удаляет подписку и ставит её в очередь', async () => {
       const { user, subscriptionId } = await customerWithSubscription();
