@@ -14,6 +14,7 @@ import { RefundModule } from '../order/services/refund.module';
 import { PaymentGateway } from './gateways/payment.gateway';
 import { SharedConfigService } from '../shared/services/config.service';
 import { Subscription } from './entities/subscription.entity';
+import { ScheduledOrder } from '../scheduled-orders/entities/scheduled-order.entity';
 import { SubscriptionPayment } from './entities/subscription-payment.entity';
 import { PaymentAudit } from './entities/payment-audit.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
@@ -30,6 +31,7 @@ import { CouponModule } from '../coupon/coupon.module';
   imports: [
     RefundModule,
     TypeOrmModule.forFeature([
+      ScheduledOrder,
       Subscription,
       SubscriptionPayment,
       PaymentAudit,

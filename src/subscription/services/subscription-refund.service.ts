@@ -16,6 +16,7 @@ import {
   SubscriptionPaymentStatus,
 } from '../entities/subscription-payment.entity';
 import { RefundStatus } from '../../order/entities/payment.entity';
+import { ScheduledOrder } from '../../scheduled-orders/entities/scheduled-order.entity';
 import { RefundService } from '../../order/services/refund.service';
 import { RefundDecision } from '../../order/dto/cancel-with-refund.dto';
 import { CancelSubscriptionDto } from '../dto/cancel-subscription.dto';
@@ -48,6 +49,8 @@ export class SubscriptionRefundService {
     private subscriptionRepository: Repository<Subscription>,
     @InjectRepository(SubscriptionPayment)
     private paymentRepository: Repository<SubscriptionPayment>,
+    @InjectRepository(ScheduledOrder)
+    private scheduledOrderRepository: Repository<ScheduledOrder>,
     private refundService: RefundService,
   ) {}
 
@@ -78,9 +81,7 @@ export class SubscriptionRefundService {
       throw new BadRequestException('Подписка уже отменена');
     }
 
-    subscription.status = SubscriptionStatus.CANCELED;
-
-    return this.subscriptionRepository.save(subscription);
+    return this.finishCancellation(subscription);
   }
 
   /**
@@ -227,8 +228,27 @@ export class SubscriptionRefundService {
     }
 
     subscription.status = SubscriptionStatus.CANCELED;
+    await this.deactivateSchedules(subscription.userId);
 
     return this.subscriptionRepository.save(subscription);
+  }
+
+  /**
+   * Без подписки расписания всё равно не создают заказов — крон выключает
+   * их при первом же проходе. Выключаем сразу, чтобы клиент не видел
+   * активными те, что уже ничего не сделают.
+   */
+  private async deactivateSchedules(customerId: string): Promise<void> {
+    const { affected } = await this.scheduledOrderRepository.update(
+      { customerId, isActive: true },
+      { isActive: false },
+    );
+
+    if (affected) {
+      this.logger.log(
+        `Отказ от подписки: выключено расписаний — ${affected}`,
+      );
+    }
   }
 
   private async findSubscription(id: string): Promise<Subscription> {

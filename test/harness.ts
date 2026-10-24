@@ -95,9 +95,10 @@ export const createUser = async (
 
   const id = response.body.user.id;
 
-  if (!roles.includes(UserRole.CUSTOMER) || roles.length > 1) {
-    await testApp.dataSource.getRepository(User).update({ id }, { roles });
-  }
+  // Регистрация через email выдаёт роль администратора — на бою она поэтому
+  // и закрыта. Роли проставляем всегда, иначе «клиент» в тестах оказывается
+  // админом и проверки прав ничего не значат
+  await testApp.dataSource.getRepository(User).update({ id }, { roles });
 
   // роли попадают в токен при входе, поэтому логинимся после их выдачи
   const login = await testApp

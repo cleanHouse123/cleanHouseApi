@@ -38,18 +38,6 @@ export class WebhookController {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  @Post('test')
-  @Public()
-  @ApiOperation({ summary: 'Тестовый webhook endpoint' })
-  async testWebhook(@Body() data: any) {
-    this.logger.log('=== TEST WEBHOOK RECEIVED ===');
-    this.logger.log('Test data:', JSON.stringify(data, null, 2));
-    return {
-      message: 'Test webhook received successfully',
-      timestamp: new Date(),
-    };
-  }
-
   @Post('yookassa')
   @Public()
   @UseGuards(YookassaWebhookGuard)

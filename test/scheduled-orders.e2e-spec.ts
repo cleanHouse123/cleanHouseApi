@@ -47,7 +47,7 @@ describe('Расписания заказов', () => {
     await testApp.close();
   });
 
-  const subscriber = async (): Promise<TestUser> => {
+  const subscriber = async (): Promise<TestUser & { subscriptionId: string }> => {
     const user = await createUser(testApp);
 
     const subscription = await testApp
@@ -85,7 +85,7 @@ describe('Расписания заказов', () => {
       })
       .expect(201);
 
-    return user;
+    return { ...user, subscriptionId: subscription.body.id };
   };
 
   const createSchedule = async (user: TestUser, body: object = {}) =>
@@ -150,6 +150,47 @@ describe('Расписания заказов', () => {
     expect(new Date(created.body.lastCreatedAt as string)).toEqual(
       new Date(startDate),
     );
+  });
+
+  it('отказ от подписки гасит расписания клиента', async () => {
+    const user = await subscriber();
+    await createSchedule(user);
+
+    await testApp
+      .http()
+      .patch(`/subscriptions/${user.subscriptionId}/cancel-by-customer`)
+      .set(asUser(user))
+      .expect(200);
+
+    const schedules = await testApp
+      .http()
+      .get('/scheduled-orders/my-schedules')
+      .set(asUser(user))
+      .expect(200);
+
+    // без подписки они всё равно ничего не создадут — гасим сразу,
+    // чтобы клиент не видел активными мёртвые расписания
+    expect(schedules.body.every((item: { isActive: boolean }) => !item.isActive)).toBe(
+      true,
+    );
+  });
+
+  it('администратор может прогнать расписания вручную', async () => {
+    await testApp
+      .http()
+      .post('/scheduled-orders/run')
+      .set(asUser(admin))
+      .expect(201);
+  });
+
+  it('обычному клиенту ручной прогон недоступен', async () => {
+    const user = await createUser(testApp);
+
+    await testApp
+      .http()
+      .post('/scheduled-orders/run')
+      .set(asUser(user))
+      .expect(403);
   });
 
   describe('чужое расписание закрыто', () => {
