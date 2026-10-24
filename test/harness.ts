@@ -1,10 +1,16 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  ClassSerializerInterceptor,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { UserRole } from '../src/shared/types/user.role';
 import { User } from '../src/user/entities/user.entity';
+import { StripSecretsInterceptor } from '../src/shared/interceptors/strip-secrets.interceptor';
 
 // Значения задаём здесь, а не в .env: прогон не должен зависеть от того,
 // что лежит у разработчика локально. ConfigModule читает путь к файлу в
@@ -57,6 +63,12 @@ export const startTestApp = async (): Promise<TestApp> => {
 
   const app = moduleRef.createNestApplication();
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  // те же глобальные перехватчики, что и в main.ts: иначе прогон не увидит,
+  // что ответ уносит лишнее
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
+    new StripSecretsInterceptor(),
+  );
   await app.init();
 
   const dataSource = app.get(DataSource);
