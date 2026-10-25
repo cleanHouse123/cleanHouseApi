@@ -45,6 +45,17 @@ import { RolesGuard } from '../shared/guards/roles.guard';
 import { Roles } from '../shared/decorators/roles.decorator';
 import { UserRole } from '../shared/types/user.role';
 
+/**
+ * Курьер — это тот, кто пришёл с токеном. Раньше идентификатор брался из
+ * тела запроса, и любой вошедший мог взять, начать, завершить или отменить
+ * чужой заказ, подставив чужой id: он виден в ответе по заказу.
+ *
+ * Администратору оставляем возможность указать курьера явно: он ведёт чужие
+ * заказы по работе.
+ */
+const actingCourierId = (user: UserMetadata, fromBody?: string): string =>
+  user.roles?.includes(UserRole.ADMIN) && fromBody ? fromBody : user.userId;
+
 @ApiTags('orders')
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
@@ -302,12 +313,17 @@ export class OrderController {
   @ApiResponse({ status: 404, description: 'Заказ не найден' })
   async takeOrder(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { courierId: string },
+    @Body() body: { courierId?: string },
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<OrderResponseDto> {
-    return this.orderService.takeOrder(id, body.courierId);
+    return this.orderService.takeOrder(
+      id,
+      actingCourierId(user, body?.courierId),
+    );
   }
 
   @Patch(':id/reassign')
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Переназначить заказ другому курьеру' })
   @ApiResponse({
     status: 200,
@@ -334,9 +350,13 @@ export class OrderController {
   @ApiResponse({ status: 404, description: 'Заказ не найден' })
   async startOrder(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { courierId: string },
+    @Body() body: { courierId?: string },
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<OrderResponseDto> {
-    return this.orderService.startOrder(id, body.courierId);
+    return this.orderService.startOrder(
+      id,
+      actingCourierId(user, body?.courierId),
+    );
   }
 
   @Patch(':id/complete')
@@ -350,9 +370,13 @@ export class OrderController {
   @ApiResponse({ status: 404, description: 'Заказ не найден' })
   async completeOrder(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { courierId: string },
+    @Body() body: { courierId?: string },
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<OrderResponseDto> {
-    return this.orderService.completeOrder(id, body.courierId);
+    return this.orderService.completeOrder(
+      id,
+      actingCourierId(user, body?.courierId),
+    );
   }
 
   @Patch(':id/cancel-by-customer')
@@ -418,9 +442,15 @@ export class OrderController {
   @ApiResponse({ status: 404, description: 'Заказ не найден' })
   async cancelOrder(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { courierId: string; reason?: string },
+    @Body() body: { courierId?: string; reason?: string },
+    @GetUserMetadata() user: UserMetadata,
   ): Promise<OrderResponseDto> {
-    return this.orderService.cancelOrder(id, body?.courierId, body?.reason);
+    return this.orderService.cancelOrder(
+      id,
+      actingCourierId(user, body?.courierId),
+      body?.reason,
+      user.roles?.includes(UserRole.ADMIN) ?? false,
+    );
   }
 
   // Эндпоинты для оплаты заказов
