@@ -48,6 +48,24 @@ import { v4 as uuidv4 } from 'uuid';
 import { CouponService } from '../coupon/coupon.service';
 import { CouponScope } from '../coupon/entities/coupon.entity';
 
+/** Радиус Земли в метрах */
+const EARTH_RADIUS_METERS = 6371000;
+
+/**
+ * Расстояние от заказа до точки ($1 — долгота, $2 — широта) в метрах.
+ *
+ * `least/greatest` удерживают аргумент `acos` в пределах [-1, 1]: без этого
+ * округление даёт NaN для точки, совпадающей с заказом.
+ */
+const DISTANCE_IN_METERS = `
+        ${EARTH_RADIUS_METERS} * acos(
+          least(1, greatest(-1,
+            cos(radians($2)) * cos(radians((o.coordinates->>'lat')::float))
+              * cos(radians((o.coordinates->>'lon')::float) - radians($1))
+            + sin(radians($2)) * sin(radians((o.coordinates->>'lat')::float))
+          ))
+        )`;
+
 @Injectable()
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
@@ -504,15 +522,14 @@ export class OrderService {
       customerSearch,
     } = findNearbyOrdersDto;
 
-    // Строим SQL запрос с использованием PostGIS и параметризованных запросов
-    // Вычисляем расстояние для всех заказов, но не фильтруем по maxDistance
+    // Расстояние считаем формулой гаверсинуса прямо в SQL. Раньше здесь были
+    // функции PostGIS, а расширения на базе нет: эндпоинт отвечал 500 при
+    // любых параметрах, то есть «заказы рядом» в приложении курьера не
+    // работали никогда. Точности в метрах для поиска ближайших хватает
     let query = `
       SELECT 
         o.*,
-        ST_Distance(
-          ST_SetSRID(ST_MakePoint((o.coordinates->>'lon')::float, (o.coordinates->>'lat')::float), 4326)::geography,
-          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-        ) as distance
+        ${DISTANCE_IN_METERS} as distance
       FROM "order" o
       LEFT JOIN "user" customer ON o."customerId" = customer.id
       WHERE o.coordinates IS NOT NULL
