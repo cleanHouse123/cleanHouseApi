@@ -106,6 +106,14 @@ export class Order {
   @Column({ type: 'timestamptz', nullable: true })
   overdueNotifiedAt?: Date;
 
+  /**
+   * Когда курьерам ушёл push об оплате. YooKassa повторяет уведомление, и
+   * без этой отметки курьер получал пуш на каждую доставку по одному и
+   * тому же заказу.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  couriersNotifiedAt?: Date;
+
   @OneToMany(() => Payment, (payment) => payment.order, {
     cascade: true,
   })
