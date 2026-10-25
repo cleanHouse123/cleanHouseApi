@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -1103,9 +1104,12 @@ export class OrderService {
       throw new BadRequestException('Пользователь не является курьером');
     }
 
-    // Переназначаем
+    // Переназначаем. Связь `currier` загружена вместе с заказом, и одной
+    // смены `currierId` мало: TypeORM запишет обратно прежнего курьера из
+    // объекта связи, вернув при этом 200 — переназначение молча не работало
     const oldCourierId = order.currierId;
     order.currierId = newCourierId;
+    order.currier = newCourier;
     order.assignedAt = new Date();
 
     // Если был IN_PROGRESS, возвращаем в ASSIGNED
@@ -1222,10 +1226,17 @@ export class OrderService {
     return this.findOne(orderId);
   }
 
+  /**
+   * Отмена заказа курьером.
+   *
+   * `isAdmin` — администратору доступен и заказ без курьера: иначе отменить
+   * ничейный заказ мог любой вошедший, подставив произвольный courierId.
+   */
   async cancelOrder(
     orderId: string,
     courierId: string,
     reason?: string,
+    isAdmin = false,
   ): Promise<OrderResponseDto> {
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
@@ -1259,8 +1270,14 @@ export class OrderService {
       }
     }
 
-    if (order.currierId && order.currierId !== courierId) {
-      throw new BadRequestException('Заказ назначен другому курьеру');
+    if (order.currierId && order.currierId !== courierId && !isAdmin) {
+      throw new ForbiddenException('Заказ назначен другому курьеру');
+    }
+
+    if (!order.currierId && !isAdmin) {
+      throw new ForbiddenException(
+        'Ничейный заказ отменяет администратор, а не курьер',
+      );
     }
 
     order.status = OrderStatus.CANCELED;
