@@ -457,10 +457,13 @@ export class UserService {
       );
     }
 
+    // без пароля курьер не войдёт в приложение: сам он
+    // зарегистрироваться не может, учётную запись заводит администратор
     const currierData = {
       name: createCurrierDto.name,
       email: createCurrierDto.email,
       phone: createCurrierDto.phone,
+      hash_password: await bcrypt.hash(createCurrierDto.password, 10),
       roles: [UserRole.CURRIER],
       isPhoneVerified: false,
       isEmailVerified: false,
