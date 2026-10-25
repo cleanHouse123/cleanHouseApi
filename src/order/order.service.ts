@@ -1543,9 +1543,28 @@ export class OrderService {
   }
 
   /**
-   * Отправляет push-уведомления всем курьерам о том, что заказ оплачен и готов к работе
+   * Сообщает курьерам, что заказ оплачен и его можно брать.
+   *
+   * Шлём один раз на заказ: YooKassa повторяет уведомление об оплате, и
+   * обработчик вебхука специально звал это и на повторной доставке — курьер
+   * получал два одинаковых пуша на один заказ.
    */
-  private async notifyCouriersAboutPaidOrder(order: Order): Promise<void> {
+  async notifyCouriersAboutPaidOrder(order: Order): Promise<void> {
+    if (order.couriersNotifiedAt) {
+      this.logger.log(
+        `[OrderService] О заказе ${order.id} курьерам уже сообщили, повтор не шлём`,
+      );
+      return;
+    }
+
+    // метку ставим до отправки: повторная доставка вебхука приходит сразу,
+    // и ждать результата рассылки нельзя — иначе пуш уйдёт дважды
+    order.couriersNotifiedAt = new Date();
+    await this.orderRepository.update(
+      { id: order.id },
+      { couriersNotifiedAt: order.couriersNotifiedAt },
+    );
+
     try {
       const couriers = await this.userRepository.find({
         where: {

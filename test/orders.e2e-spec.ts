@@ -93,6 +93,63 @@ describe('Заказы и возвраты', () => {
     expect(own.body.customer.id).toBe(customer.id);
   });
 
+  it('о повторной доставке вебхука курьерам не сообщают дважды', async () => {
+    const created = await testApp
+      .http()
+      .post('/orders')
+      .set(asUser(customer))
+      .send({
+        customerId: customer.id,
+        address: ADDRESS,
+        paymentMethod: 'online',
+        numberPackages: 2,
+      })
+      .expect(201);
+
+    const payment = await testApp
+      .http()
+      .post('/orders/payment/create')
+      .set(asUser(customer))
+      .send({ orderId: created.body.id, amount: created.body.price })
+      .expect(201);
+
+    // прод получает оплату на общий вебхук — именно он уведомляет курьеров
+    const webhook = () =>
+      testApp
+        .http()
+        .post('/webhooks/yookassa')
+        .send({
+          event: 'payment.succeeded',
+          object: {
+            id: `yk-${payment.body.paymentId}`,
+            status: 'succeeded',
+            metadata: {
+              orderId: created.body.id,
+              paymentId: payment.body.paymentId,
+            },
+          },
+        });
+
+    await webhook().expect(201);
+
+    const notifiedAt = async () =>
+      (
+        await testApp.dataSource.query(
+          'SELECT "couriersNotifiedAt" FROM "order" WHERE id = $1',
+          [created.body.id],
+        )
+      )[0].couriersNotifiedAt;
+
+    const first = await notifiedAt();
+    expect(first).toBeTruthy();
+
+    // YooKassa повторяет уведомление, пока не получит 2xx
+    await webhook().expect(201);
+
+    // отметка не обновилась — значит второй раз не рассылали
+    expect(await notifiedAt()).toEqual(first);
+  });
+
   it('полный возврат уходит на оплаченную сумму в копейках', async () => {
     const order = await createPaidOrder(customer);
 
